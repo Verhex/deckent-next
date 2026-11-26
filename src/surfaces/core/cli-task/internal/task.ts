@@ -2,10 +2,10 @@ import { directoryPermissionCard } from '#surfaces/core/cli-human/index.js';
 import { withGitDeliveryPermission } from '#surfaces/core/delivery-port/index.js';
 import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
 import { inspectTask, phaseWord } from './task-inspect.js';
-import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
+import { groupedTaskActions, pickTaskTarget, taskDecisionStatus, taskFromDecisionReceipt, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
+import { isCodedError, ErrorRegistry, emit, loadConfig, patchBody, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runQuerySchema } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
@@ -64,7 +64,7 @@ async function fillDelivered(values: Map<string, string>, context: TaskCommandCo
   values.set('--task', delivered[0]!.id);
   if (!values.has('--delivery-command-id')) values.set('--delivery-command-id', delivered[0]!.resultBrief!.runDelivery!.commandId!);
 }
-async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: TaskCommandContext, json: boolean, usage: (flag?: string) => Error) {
+async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: TaskCommandContext, json: boolean, usage: (flag?: string) => Error): Promise<void | ExitCode> {
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
   const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
   if (!scopeId || !runId || !taskId || !commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) {
@@ -75,10 +75,10 @@ async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<strin
   const locale = commandLocale(context, values.get('--lang'));
   const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, taskId,
     action, expectedRevision: Number(revision) }), { env: context.env ?? process.env });
-  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
-    const task = data?.lifecycle.run.tasks.find(value => value.id === taskId);
-    return task?.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : task?.phase ?? '';
-  } }); return;
+  const task = taskFromDecisionReceipt(result?.lifecycle.run, taskId);
+  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}),
+    render: () => task?.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : task?.phase ?? taskDecisionStatus(taskId, locale) });
+  if (!task) return 1;
 }
 
 async function evaluateTask(values: ReadonlyMap<string, string>, context: TaskCommandContext, identity: AttemptIdentity, json: boolean, usage: (flag?: string) => Error) {
@@ -115,7 +115,7 @@ async function menuIo(context: TaskCommandContext, locale: Locale): Promise<Task
   return { locale, root, options, print: text => out.write(`${text}\n`),
     ask: request => askCliCard(request, { locale, env: options.env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
       ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }),
-    show: async (view, target) => taskCommand(['task', view, '--scope', target.scopeId, '--run', target.runId, '--task', target.taskId, '--lang', locale], context),
+    show: async (view, target) => { await taskCommand(['task', view, '--scope', target.scopeId, '--run', target.runId, '--task', target.taskId, '--lang', locale], context); },
     deliveryPort: terminalDeliveryPort(root, context, options) };
 }
 /**
@@ -123,7 +123,7 @@ async function menuIo(context: TaskCommandContext, locale: Locale): Promise<Task
  * a terminal gets the task menu (`--scope`/`--run`/`--task` preselect); a pipe, agent, CI or `--json` caller is never asked and gets the actions in
  * their four groups with the missing argument named (CLI_ARGUMENT_MISSING, exit 2).
  */
-async function bareTask(argv: readonly string[], context: TaskCommandContext, locale: Locale): Promise<void> {
+async function bareTask(argv: readonly string[], context: TaskCommandContext, locale: Locale): Promise<void | ExitCode> {
   const values = new Map<string, string>(); let json = false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -136,7 +136,7 @@ async function bareTask(argv: readonly string[], context: TaskCommandContext, lo
   if (cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: ['deckent', argv[0]].join(' '), usage: [
     t('cli.help.bare.missing', { argument: `<${t('cli.help.placeholder.action', {}, locale)}>` }, locale), groupedTaskActions(locale), t('cli.help.bare.details', { command: 'task' }, locale)].join('\n') } });
   const scopeId = values.get('--scope'), typed = values.get('--run');
-  await taskMenu(context, await menuIo(context, locale), { scopeId, runId: scopeId && typed ? await resolveRun(context, scopeId, typed) : typed, taskId: values.get('--task') });
+  return taskMenu(context, await menuIo(context, locale), { scopeId, runId: scopeId && typed ? await resolveRun(context, scopeId, typed) : typed, taskId: values.get('--task') });
 }
 
 /**
@@ -174,11 +174,11 @@ async function requireChangeScope(context: TaskCommandContext, locale: Locale, a
     listScopes: () => scopeLister(context, root, options)().catch(() => []) });
 }
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
-export async function taskCommand(argv: readonly string[], context: TaskCommandContext): Promise<void> {
+export async function taskCommand(argv: readonly string[], context: TaskCommandContext): Promise<void | ExitCode> {
   const action = argv[1];
   if (action?.startsWith('integration-queue-')) { await queueCommand(argv, context); return; }
   const languageAt = argv.indexOf('--lang'), earlyLocale = commandLocale(context, languageAt >= 0 ? argv[languageAt + 1] : undefined);
-  if (action === undefined || action.startsWith('-')) { await bareTask(argv, context, earlyLocale); return; }
+  if (action === undefined || action.startsWith('-')) return bareTask(argv, context, earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
   if (!hasCliAction('task', action)) throw usage();
   const flags = action === 'patch-preview' ? ['--stat', '--diff'] : action === 'inspect' ? ['--verbose'] : [];
@@ -202,7 +202,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
   const scopeId = values.get('--scope'), runId = values.get('--run');
   let taskId = values.get('--task');
-  if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
+  if (action === 'accept' || action === 'reject') return decideTask(action, values, context, json, usage);
   // BeUser M-25/DR2-07: `integration-adopt --scope --run [--task] --target` finds the delivered task, its attempt and delivery command itself.
   const lightAdopt = (action === 'integration-adopt' || (action === 'integration-rollback' && !values.has('--adoption-command-id'))) && !attemptId && !layoutRevision && !generation;
   if (lightAdopt && scopeId && runId) { await fillDelivered(values, context); taskId = values.get('--task'); } // L1c: a light rollback is the files' one

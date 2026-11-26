@@ -54,8 +54,12 @@ describe('models.connect surface parity', () => {
     await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'openai-api', '--model', 'gpt-6-luna'], context);
     const printed = /(deckent models connect .*--command-id \S+)/u.exec(out.join(''))?.[1];
     expect(printed).toContain(`--command-id ${seen[0]!.commandId}`); expect(out.join('')).toContain('ap-1');
-    await modelsCommand(printed!.split(' ').slice(1), context);
+    const textExit = await cliMain(printed!.split(' ').slice(1), context);
     expect(seen).toHaveLength(2); expect(seen[1]).toEqual(seen[0]);
+    out.length = 0;
+    const jsonExit = await cliMain([...printed!.split(' ').slice(1), '--json'], context);
+    expect(JSON.parse(out.join(''))).toEqual(pending);
+    expect([textExit, jsonExit]).toEqual([1, 1]);
     // F4: a Turkish environment still prints a runnable resume command (argv tokens, never the in-sentence "… komutu" phrase).
     vi.stubEnv('DECKENT_LANGUAGE', 'tr');
     try {

@@ -22,9 +22,9 @@ it.each(['en', 'tr'] as const)('renders %s pool/slots/next action and emits the 
   expect(await main(['init', 'pool', '--scope', 's', '--preview', '--lang', language], context)).toBe(0);
   expect(output).toContain('customer'); expect(output).toContain('4'); expect(output).toContain('6'); expect(output).toContain('/do');
   expect(output).toContain('deckent init pool --scope s --apply'); expect(calls).toEqual([['/fixture-project', 's', false]]);
-  for (const status of ['created', 'current', 'conflict', 'unavailable'] as const) {
+  for (const [status, exit] of [['created', 0], ['current', 0], ['conflict', 1], ['unavailable', 1]] as const) {
     result = { ...result, status }; output = '';
-    expect(await main(['init', 'pool', '--scope', 's', '--apply', '--json'], context)).toBe(0);
+    expect.soft(await main(['init', 'pool', '--scope', 's', '--apply', '--json'], context), status).toBe(exit);
     expect(JSON.parse(output)).toEqual(result); expect(calls.at(-1)).toEqual(['/fixture-project', 's', true]);
   }
 });

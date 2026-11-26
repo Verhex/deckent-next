@@ -100,7 +100,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     expect(pickedJourney.output).toContain('onboarding (recommended)'); expect(pickedJourney.output).toContain('BEUSER_MODEL_UNAVAILABLE');
     const cancelledJourney = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--lang', 'en'], elsewhere, env,
       [{ when: card, send: '\u001b' }]);
-    expect(cancelledJourney.code, cancelledJourney.output).toBe(0); expect(cancelledJourney.output).toContain('cancelled');
+    expect(cancelledJourney.code, cancelledJourney.output).toBe(1); expect(cancelledJourney.output).toContain('cancelled');
     expect(noModel.code).toBe(1); expect(noModel.output).toContain('BEUSER_MODEL_UNAVAILABLE'); expect(noModel.output).toContain(`cd ${root} && deckent, then /provider`);
     expect(badJourney.code).toBe(1); expect(badJourney.output).toContain('BEUSER_INPUT_INVALID');
     expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined(); expect(await readdir(elsewhere)).toEqual([]);
@@ -271,20 +271,20 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     // The assembled CLI passes the installed-profile/Run/pool checks. This fixture has no execution Docker config,
     // so it stops before any realm, model or external effect and reports that separate prerequisite truthfully.
     const walked = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--scope', 'scope', '--journey', 'journey', '--candidate', candidate, '--json'], root, env);
-    expect(walked.code, walked.output).toBe(0);
+    expect.soft(walked.code, walked.output).toBe(1);
     expect(lastJson(walked.output)).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'EXECUTION_NOT_CONFIGURED' }] });
     // The model card (Enter = the recommended connected model), then the setup card: Esc applies nothing; this source checkout is no staged build;
     // 'y' swaps the controller's BeUser registry (its pool kept) and walks to a retained report.
     const before = await readFile(configPath, 'utf8');
     const refusedCard = await oneCommand('onboarding', ['--candidate', candidate], [{ when: card, send: '\r' },
       { when: card, send: '\r' }, { when: card, send: '\u001b' }]);
-    expect(refusedCard.code, refusedCard.output).toBe(0); expect(refusedCard.output).toContain('fixture-channel / fixture-model (recommended)');
+    expect(refusedCard.code, refusedCard.output).toBe(1); expect(refusedCard.output).toContain('fixture-channel / fixture-model (recommended)');
     expect(refusedCard.output).toContain('Start BeUser walk'); expect(refusedCard.output).toContain('nothing was applied'); expect(await readFile(configPath, 'utf8')).toBe(before);
     const fromPackage = await oneCommand('onboarding', [], [{ when: card, send: '\r' }, { when: card, send: '\r' }]);
     expect(fromPackage.code).toBe(1); expect(fromPackage.output).toContain('BEUSER_CANDIDATE_MISMATCH'); expect(await readFile(configPath, 'utf8')).toBe(before);
     const one = await oneCommand('onboarding', ['--candidate', candidate, '--json'], [{ when: card, send: '\r' },
       { when: card, send: '\r' }, { when: card, send: 'y' }]);
-    expect(one.code, one.output).toBe(0); expect(one.output).toContain(source.sourceCommit); expect(one.output).toContain('Walker 1: fixture-channel');
+    expect.soft(one.code, one.output).toBe(1); expect(one.output).toContain(source.sourceCommit); expect(one.output).toContain('Walker 1: fixture-channel');
     const oneReport = lastJson(one.output);
     // The earlier walk's unresolved Attempt still holds the pool's one slot: a typed unknown in a retained report, never a second walk.
     expect(oneReport).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'onboarding', reason: 'RUN_POOL_FULL' }] });
@@ -308,13 +308,13 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     await writeFile(configPath, JSON.stringify(multiConfig)); clearConfigCache();
     const multiBefore = await readFile(configPath, 'utf8'), answer = (send: string) => ({ when: card, send });
     const over = await oneCommand('onboarding', ['--candidate', candidate], [answer('\r'), answer('\u001b')]);
-    expect(over.code, over.output).toBe(0); expect(over.output).toContain('Selected 5; choose 1–4'); expect(over.output).not.toContain('Judge for this journey');
+    expect(over.code, over.output).toBe(1); expect(over.output).toContain('Selected 5; choose 1–4'); expect(over.output).not.toContain('Judge for this journey');
     const empty = await oneCommand('onboarding', ['--candidate', candidate], ['1', '2', '3', '4', '5', '\r', '\u001b'].map(answer));
-    expect(empty.code, empty.output).toBe(0); expect(empty.output).toContain('Selected 0; choose 1–4'); expect(empty.output).not.toContain('Judge for this journey');
+    expect(empty.code, empty.output).toBe(1); expect(empty.output).toContain('Selected 0; choose 1–4'); expect(empty.output).not.toContain('Judge for this journey');
     // Keep first two walkers; choose third model as a distinct judge; Esc applies nothing, including pool capacity.
     const chooseTwo = ['3', '4', '5', '\r'].map(answer);
     const twoCancelled = await oneCommand('onboarding', ['--candidate', candidate], [...chooseTwo, answer('3'), answer('\u001b[6~'), answer('\u001b')]);
-    expect(twoCancelled.code, twoCancelled.output).toBe(0); expect(twoCancelled.output).toContain('Walker 2: fixture-extra-1');
+    expect(twoCancelled.code, twoCancelled.output).toBe(1); expect(twoCancelled.output).toContain('Walker 2: fixture-extra-1');
     expect(twoCancelled.output).toContain('Judge: fixture-extra-2'); expect(twoCancelled.output).toContain('independence: unknown');
     expect(twoCancelled.output).toContain('1/1 → 2/2'); expect(twoCancelled.output).toContain('at most 6 USD'); expect(await readFile(configPath, 'utf8')).toBe(multiBefore);
     const runCount = () => { const db = new DatabaseSync(storage.path, { readOnly: true });
@@ -340,7 +340,8 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       principals: [{ issuer: admitted.c.principal.issuer, subject: admitted.c.principal.subject }], resource: { kind: 'pool', ids: ['pool'] } });
     await writeFile(capacityPolicyPath, JSON.stringify(capacityPolicy), { mode: 0o600 }); clearConfigCache();
     const two = await oneCommand('onboarding', ['--candidate', candidate, '--json'], [...chooseTwo, answer('3'), answer('\u001b[6~'), answer('y')]);
-    expect(two.code, two.output).toBe(0); expect(lastJson(two.output)).toMatchObject({ counts: { selected: 2 } });
+    expect(two.code, two.output).toBe(1); expect(lastJson(two.output)).toMatchObject({ counts: { selected: 2, walked: 0 },
+      unknown: expect.arrayContaining([expect.objectContaining({ reason: 'EXECUTION_NOT_CONFIGURED' })]) });
     const twoAdmission = JSON.parse(await readFile(configPath, 'utf8')).admission;
     expect(twoAdmission).toMatchObject({ executionSlots: 2, inFlightSlots: 2 });
     expect(twoAdmission.registry.profiles).toHaveLength(2);
@@ -363,13 +364,16 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     clearConfigCache();
     const freshWalk = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--journey', 'onboarding', '--candidate', candidate, '--lang', 'en'], elsewhere, freshEnv,
       [answer('\r'), answer('\r'), answer('\u001b[6~'), answer('y')]);
-    expect(freshWalk.code, freshWalk.output).toBe(0); expect(freshWalk.output).toContain('Judge: fixture-extra-1'); expect(freshWalk.output).toContain('independence: reduced');
+    expect(freshWalk.code, freshWalk.output).toBe(1); expect(freshWalk.output).toContain('Judge: fixture-extra-1'); expect(freshWalk.output).toContain('independence: reduced');
     expect(freshWalk.output).toContain('new pool → 2/2'); expect(freshWalk.output).toContain('Walker ayse-onboarding-walker-1');
-    expect(freshWalk.output).toContain('Judge for ayse-onboarding-walker-2'); expect(freshWalk.output).toContain(`Walked revision ${source.sourceCommit}`);
+    expect(freshWalk.output).toContain('Judge for ayse-onboarding-walker-2'); expect(freshWalk.output).not.toContain('Walked revision');
     expect(freshWalk.output).toContain(`cd ${freshRoot} && deckent beuser report`);
     expect(JSON.parse(await readFile(freshConfigPath, 'utf8')).admission).toMatchObject({ poolId: 'beuser-controller', executionSlots: 2, inFlightSlots: 2 });
     const monitor = await inspectConfiguredBeuserMonitor(freshOptions);
     expect(monitor).toMatchObject({ journey: 'onboarding', walkers: [{ walker: { channelId: 'fixture-channel' } }, { walker: { channelId: 'fixture-extra-1' } }] });
+    expect(monitor!.report).toMatchObject({ counts: { selected: 2, walked: 0 }, unknown: [
+      expect.objectContaining({ reason: 'EXECUTION_NOT_CONFIGURED' }), expect.objectContaining({ reason: 'EXECUTION_NOT_CONFIGURED' }),
+    ] });
     expect(monitor!.report).toEqual(await readConfiguredBeuserReport(freshRoot, 'scope', monitor!.runId, freshOptions));
     expect(monitor!.walkers.every(row => row.limits?.revision && row.judge.channelId === 'fixture-extra-1')).toBe(true);
     if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ sourceHead: 'c09b78681d349ec941b10c2633d0a6b2f8ff17e7', evidenceClass: 'author-compiled-cli-fixture', oldVersion, busy, badCandidates, freshController, over, empty, twoCancelled, deniedCapacity, two, freshWalk, missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,

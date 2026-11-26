@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { displayId, listRunIds, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
 import { awaitingDeliveryTargets, deliveryTargetKey, type TerminalDeliveryPort } from '#surfaces/core/delivery-port/index.js';
@@ -86,24 +86,33 @@ export async function pickTaskTarget(context: TaskCommandContext, io: TaskMenuIo
   return taskId ? { scopeId, runId, taskId } : null;
 }
 
+export function taskFromDecisionReceipt(run: RunView | undefined, taskId: string): TaskView | undefined {
+  return run?.tasks.find(task => task.id === taskId);
+}
+
+export function taskDecisionStatus(taskId: string, locale: Locale, task?: TaskView): string {
+  return t('cli.task.menu.decide.done', { task: taskId, phase: task ? phaseWord(task.phase, locale) : '-' }, locale);
+}
+
 /** Accept or reject with the revision read just before the card and a system command id; a Run that changed meanwhile is read again and asked again (bounded). */
-async function decide(kind: 'accept' | 'reject', target: TaskTarget, context: TaskCommandContext, io: TaskMenuIo): Promise<void> {
+async function decide(kind: 'accept' | 'reject', target: TaskTarget, context: TaskCommandContext, io: TaskMenuIo): Promise<void | ExitCode> {
   const { locale, ask, print } = io;
   if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   for (let round = 0; ; round++) {
     const run = await readRun(context, io, target.scopeId, target.runId), task = run?.tasks.find(value => value.id === target.taskId);
-    if (!run || !task || !decisionOpen(run, task, kind)) { print(t('cli.task.menu.decide.closed', { task: target.taskId, phase: task ? phaseWord(task.phase, locale) : '-' }, locale)); return; }
+    if (!run || !task || !decisionOpen(run, task, kind)) { print(t('cli.task.menu.decide.closed', { task: target.taskId, phase: task ? phaseWord(task.phase, locale) : '-' }, locale)); return 1; }
     const answer = await ask({ title: kind === 'accept' ? t('cli.task.menu.decide.acceptTitle', { task: task.id }, locale) : t('cli.task.menu.decide.rejectTitle', { task: task.id }, locale), body: [
       t('cli.task.menu.decide.body', { run: target.runId.slice(0, 12), revision: run.revision, title: title(task) }, locale),
       ...(round ? [t('cli.task.menu.decide.reread', {}, locale)] : []), ...(kind === 'accept' ? [t('cli.task.menu.decide.acceptNote', {}, locale)] : []),
     ], options: [{ id: 'yes', label: t('cli.task.menu.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.task.menu.no', {}, locale), role: 'no' }] });
-    if (answer !== 'yes') { print(t('cli.task.menu.left', {}, locale)); return; }
+    if (answer !== 'yes') { print(t('cli.task.menu.left', {}, locale)); return 1; }
     try {
       const result = await context.applyRunLifecycle(io.root, runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId: `cli-decide-${randomUUID()}`, scopeId: target.scopeId,
         runId: target.runId, taskId: target.taskId, action: kind, expectedRevision: run.revision }), io.options);
-      const after = result?.lifecycle.run.tasks.find(value => value.id === target.taskId);
+      const after = taskFromDecisionReceipt(result?.lifecycle.run, target.taskId);
       print(after?.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale)
-        : t('cli.task.menu.decide.done', { task: target.taskId, phase: after ? phaseWord(after.phase, locale) : '-' }, locale));
+        : taskDecisionStatus(target.taskId, locale, after));
+      if (!after) return 1;
       return;
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
@@ -117,9 +126,10 @@ async function decide(kind: 'accept' | 'reject', target: TaskTarget, context: Ta
  * Bare `deckent task` on a person's terminal: pick the task, then a menu of only its valid actions, repeated until the person leaves.
  * Reads run the family's own handlers; decisions and delivery go through the same applications as `/runs` and `/deliver`.
  */
-export async function taskMenu(context: TaskCommandContext, io: TaskMenuIo, given: Readonly<{ scopeId?: string | undefined; runId?: string | undefined; taskId?: string | undefined }>): Promise<void> {
+export async function taskMenu(context: TaskCommandContext, io: TaskMenuIo, given: Readonly<{ scopeId?: string | undefined; runId?: string | undefined; taskId?: string | undefined }>): Promise<void | ExitCode> {
   const target = await pickTaskTarget(context, io, given);
   if (!target) return;
+  let exit: ExitCode | undefined;
   for (;;) {
     const run = await readRun(context, io, target.scopeId, target.runId), task = run?.tasks.find(value => value.id === target.taskId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: target.runId } });
@@ -128,12 +138,15 @@ export async function taskMenu(context: TaskCommandContext, io: TaskMenuIo, give
     const choice = await io.ask({ title: t('cli.task.menu.title', { task: task.id, phase: phaseWord(task.phase, io.locale) }, io.locale),
       body: [title(task), t('cli.task.menu.runLine', { run: target.runId.slice(0, 12), scope: target.scopeId }, io.locale)].filter(Boolean),
       options: [...actions, 'exit' as const].map(action => ({ id: action, label: actionLabel(action, io.locale), ...(action === 'exit' ? { key: 'q' } : {}) })) });
-    if (choice === null || choice === 'exit' || !actions.includes(choice as TaskMenuAction)) return;
+    if (choice === null || choice === 'exit' || !actions.includes(choice as TaskMenuAction)) return exit;
     if (choice === 'inspect' || choice === 'transcript') await io.show(choice, target);
     else if (choice === 'diff') await io.show('patch-preview', target);
-    else if (choice === 'accept' || choice === 'reject') await decide(choice, target, context, io);
-    else await deliverTask(io.deliveryPort!, awaitingDeliveryTargets([run], task.id).find(value => value.taskId === target.taskId) ?? { key: deliveryTargetKey(target), ...target, title: title(task) || task.id },
-      { locale: io.locale, ask: io.ask, print: io.print, diff: () => io.show('patch-preview', target) });
+    else {
+      const result = choice === 'accept' || choice === 'reject' ? await decide(choice, target, context, io)
+        : await deliverTask(io.deliveryPort!, awaitingDeliveryTargets([run], task.id).find(value => value.taskId === target.taskId) ?? { key: deliveryTargetKey(target), ...target, title: title(task) || task.id },
+          { locale: io.locale, ask: io.ask, print: io.print, diff: () => io.show('patch-preview', target) });
+      exit = result ?? exit;
+    }
   }
 }
 

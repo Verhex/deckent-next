@@ -1,5 +1,5 @@
 import { ownerBaselineFamilyKnown, type InstallerOwnerBaselineResult } from '#engine/index.js';
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale, type OutputSink } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ExitCode, type Locale, type OutputSink } from '#platform/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -16,7 +16,7 @@ export function parseBaseline(text: string | undefined): readonly string[] {
 /** Same installer custody as PRE-9; applying always previews the exact cells on a person's terminal. */
 export async function ownerBaselineCommand(context: InstallationCommandContext, input: { readonly root: string; readonly scopeId: string; readonly families: readonly string[];
   readonly apply: boolean; readonly expect?: string; readonly person?: Person; readonly json: boolean; readonly locale: Locale;
-  readonly sinks: { readonly stdout?: OutputSink; readonly stderr?: OutputSink } }): Promise<void> {
+  readonly sinks: { readonly stdout?: OutputSink; readonly stderr?: OutputSink } }): Promise<void | ExitCode> {
   const handler = context.openOwnerBaselineInstallation;
   if (!handler || input.expect !== undefined && !input.apply) throw ErrorRegistry.createError('CLI_USAGE');
   if (input.apply && cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'policyPermissionModes' } });
@@ -27,12 +27,17 @@ export async function ownerBaselineCommand(context: InstallationCommandContext, 
     ...view.removed.map(id => `- ${terminalSafeText(id)}`), ...view.conflicts.map(terminalSafeText), t('cli.init.ownerBaseline.notice', {}, input.locale)];
   const show = (view: InstallerOwnerBaselineResult): void => { emit(view, { ...input.sinks, json: input.json, render: value => lines(value).join('\n') }); };
   const preview = await handler(input.root, input.scopeId, { ...call, apply: false });
-  if (!input.apply || preview.status !== 'preview') return show(preview);
-  if (input.expect !== undefined && input.expect !== preview.expect) return show({ ...preview, status: 'conflict', reason: 'revision-changed' });
+  if (!input.apply) return show(preview);
+  if (preview.status !== 'preview') { show(preview); return preview.status === 'current' ? undefined : 1; }
+  if (input.expect !== undefined && input.expect !== preview.expect) {
+    show({ ...preview, status: 'conflict', reason: 'revision-changed' }); return 1;
+  }
   const ttlMs = (await loadConfig(input.root, { env: context.env ?? process.env, heal: false })).approvals.sessionTtlMs;
   const answer = await askCliCard({ title: t('cli.init.ownerBaseline.title', {}, input.locale), body: lines(preview),
     options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, input.locale), role: 'yes' }, { id: 'no', label: t('cli.init.policyModes.cardNo', {}, input.locale), role: 'no' }] },
   { locale: input.locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
-  if (answer !== 'apply') return show(preview);
-  show(await handler(input.root, input.scopeId, { ...call, apply: true, expect: preview.expect! }));
+  if (answer !== 'apply') { show(preview); return 1; }
+  const result = await handler(input.root, input.scopeId, { ...call, apply: true, expect: preview.expect! });
+  show(result);
+  if (result.status !== 'applied' && result.status !== 'current') return 1;
 }

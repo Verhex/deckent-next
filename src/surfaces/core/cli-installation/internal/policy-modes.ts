@@ -1,5 +1,6 @@
-import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale, type OutputSink } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ExitCode, type Locale, type OutputSink } from '#platform/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
+import type { InstallerPermissionModesResult } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
 type Person = { readonly issuer: string; readonly subject: string };
@@ -7,7 +8,7 @@ type ModeState = { readonly mode: string; readonly wanted: boolean; readonly bef
   readonly blockedBy: string | null };
 /** The installer's permission-mode result as the surface words it (the engine's `InstallerPermissionModesResult`; the surface owns no rule). */
 interface PolicyModesView {
-  readonly status: string; readonly reason?: string | null; readonly revision?: string | null; readonly basis?: string | null;
+  readonly status: InstallerPermissionModesResult['status'] | 'cancelled'; readonly reason?: string | null; readonly revision?: string | null; readonly basis?: string | null;
   readonly principal?: Person; readonly person?: Person | null; readonly people?: readonly Person[];
   readonly modes?: readonly ModeState[]; readonly added?: readonly { readonly id: string }[]; readonly removed?: readonly string[]; readonly conflicts?: readonly string[];
 }
@@ -30,7 +31,7 @@ export function parseModes(value: string | undefined): readonly string[] {
  */
 export async function policyModesCommand(context: InstallationCommandContext, input: { readonly root: string; readonly scopeId: string; readonly modes: readonly string[];
   readonly modesText: string; readonly apply: boolean; readonly expect?: string; readonly person?: Person; readonly json: boolean; readonly locale: Locale;
-  readonly sinks: { readonly stdout?: OutputSink; readonly stderr?: OutputSink } }): Promise<void> {
+  readonly sinks: { readonly stdout?: OutputSink; readonly stderr?: OutputSink } }): Promise<void | ExitCode> {
   const handler = context.openPermissionModesInstallation;
   if (!handler || (input.expect !== undefined && !input.apply)) throw ErrorRegistry.createError('CLI_USAGE');
   const { root, scopeId, locale } = input, call = { modes: input.modes, ...(input.person ? { person: input.person } : {}) };
@@ -41,15 +42,18 @@ export async function policyModesCommand(context: InstallationCommandContext, in
   if (cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'policyPermissionModes' } });
   const preview = await handler(root, scopeId, { ...call, apply: false });
   if (preview.status !== 'preview' || (input.expect !== undefined && input.expect !== preview.revision)) {
-    return show(preview.status === 'preview' ? { ...preview, status: 'conflict', reason: 'revision-changed' } : preview);
+    show(preview.status === 'preview' ? { ...preview, status: 'conflict', reason: 'revision-changed' } : preview);
+    return preview.status === 'current' ? undefined : 1;
   }
   const ttlMs = (await loadConfig(root, { ...(context.env ? { env: context.env } : {}), heal: false })).approvals.sessionTtlMs;
   const who = whoText(preview);
   const answer = await askCliCard({ title: t('cli.init.policyModes.cardTitle', { who, scope: terminalSafeText(scopeId) }, locale), body: modeLines(preview, locale),
     options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), role: 'no' }] },
   { locale, ...(context.env ? { env: context.env } : {}), signal: AbortSignal.timeout(ttlMs) });
-  if (answer !== 'apply') return show({ ...preview, status: 'cancelled' });
-  show(await handler(root, scopeId, { ...call, apply: true, expect: preview.revision! }));
+  if (answer !== 'apply') { show({ ...preview, status: 'cancelled' }); return 1; }
+  const result = await handler(root, scopeId, { ...call, apply: true, expect: preview.revision! });
+  show(result);
+  if (result.status !== 'applied' && result.status !== 'current') return 1;
 }
 
 const whoText = (view: PolicyModesView) => terminalSafeText(view.principal ? `${view.principal.issuer}/${view.principal.subject}` : '-');

@@ -1,5 +1,6 @@
 import { mkdtemp, mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { PassThrough, Writable } from 'node:stream';
 import { join } from 'node:path';
 import { tmpdir, userInfo } from 'node:os';
@@ -15,8 +16,9 @@ import * as platform from '#platform/index.js';
 import { walkConfiguredBeuser, readConfiguredBeuserReport, admitConfiguredBeuserWalk, setupConfiguredBeuser } from '#composition/core/beuser/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { recordedExecutionSupervisor, validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
-import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
-import { sha256, clearConfigCache, ErrorRegistry, inspectProductFile } from '#platform/index.js';
+import { beuserCommand, formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
+import * as human from '#surfaces/core/cli-human/index.js';
+import { sha256, clearConfigCache, ErrorRegistry, inspectProductFile, serializeJsonDocument } from '#platform/index.js';
 import { BeuserContractError, BeuserTransferError } from '#engine/index.js';
 import { BeuserSurfaceError } from '#adapters/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -118,7 +120,68 @@ async function reportFixture(mode: 'pty' | 'argv' = 'pty', startState?: object) 
   } catch (error) { await rm(base, { recursive: true, force: true }); throw error; }
 }
 
+async function checkFirstReservationRefusals() {
+  for (const reason of ['RUN_POOL_HELD', 'RUN_CAPACITY_OR_ORDER']) {
+    const f = await reportFixture();
+    try {
+      const { issuer, subject } = adapters.readLocalOsIdentity();
+      const { store, path: ledger } = await openConfiguredAttemptStore(f.root, f.options);
+      try {
+        if (reason === 'RUN_POOL_HELD') {
+          await store.applyPoolHold({ command: { scopeId: 'scope', commandId: 'hold', poolId: 'pool', action: 'hold', reason: 'fixture' },
+            actor: { issuer, subject }, atMs: 0 }, () => {});
+        } else {
+          const path = join(f.root, '.deckent', 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8'));
+          policy.grants.push({ id: 'fixture-exclude-persona', effect: 'deny', actions: ['execute'], scopes: ['scope'],
+            principals: [{ issuer, subject }], resource: { kind: 'task', ids: ['persona'] } });
+          await writeFile(path, JSON.stringify(policy));
+        }
+        const realm = vi.spyOn(adapters, 'createBeuserRealm'), walkBeuser = vi.fn(walkConfiguredBeuser), output: string[] = [];
+        const ask = vi.spyOn(human, 'askCliCard').mockResolvedValueOnce('continue').mockResolvedValueOnce('0').mockResolvedValueOnce('apply');
+        const preview = { status: 'preview', controller: { root: f.root, scopeId: 'scope' }, digest: 'fixture', ceiling: 1,
+          models: [{ channelId: 'fixture', modelId: 'fixture', recommended: true }],
+          candidate: { root: f.candidate, version: 'fixture', revision: 'fixture' },
+          limits: { maxSteps: 1, maxWallMs: 1, maxCalls: 1, maxTokens: 1, maxCost: 0, currency: 'USD' },
+          slots: { before: null, after: { executionSlots: 1, inFlightSlots: 1 } } };
+        const cli = { root: f.root, env: f.options.env, stdin: { isTTY: true } as never, stdout: { isTTY: true, write(value: string) { output.push(value); } },
+          setupBeuser: vi.fn().mockResolvedValueOnce(preview).mockResolvedValueOnce(preview).mockResolvedValueOnce({ status: 'applied' }),
+          walkBeuser, readBeuserReport: readConfiguredBeuserReport };
+        const run = async (...argv: string[]) => {
+          output.length = 0;
+          const exit = await beuserCommand(['beuser', ...argv, '--json'], cli);
+          return { exit: exit ?? 0, report: JSON.parse(output.join('')) };
+        };
+        const config = await loadComposedConfig(f.root, { ...f.options, heal: false });
+        const reports = join(config.productLayout.root, 'crashes', 'beuser-reports');
+        const latestName = sha256(JSON.stringify(['scope', issuer, subject]));
+        for (const scope of [['--scope', 'scope'], []]) {
+          const walk = await run('walk', '--journey', 'journey', '--candidate', f.candidate, ...scope);
+          await expect(walkBeuser.mock.results.at(-1)?.value).resolves.toMatchObject({ failureStage: 'reservation' });
+          expect(walk.report).toMatchObject({ counts: { walked: 0 }, reliability: { attempted: 0 },
+            unwalked: [{ branch: 'persona', reason: 'not-reserved' }] });
+          expect(walk.report.unknown).toEqual([{ branch: 'journey', reason }]);
+          const latest = await readFile(join(reports, `${latestName}.json`), 'utf8');
+          const { runId } = JSON.parse(latest);
+          const pointer = { schemaVersion: 1, scopeId: 'scope', runId };
+          expect(latest).toBe(serializeJsonDocument(pointer));
+          const reportName = sha256(JSON.stringify(['scope', runId]));
+          const storedReport = await readFile(join(reports, `${reportName}.json`), 'utf8');
+          expect(storedReport).toBe(serializeJsonDocument({ ...pointer, report: walk.report }));
+          expect(await run('report', '--scope', 'scope')).toEqual({ exit: 0, report: walk.report });
+          expect.soft(walk.exit, `${reason} (${scope.length ? 'scoped' : 'one command'})`).toBe(1);
+        }
+        const db = new DatabaseSync(ledger, { readOnly: true });
+        try { expect(db.prepare('SELECT count(*) AS count FROM attempts').get()).toEqual({ count: 0 }); }
+        finally { db.close(); }
+        expect(realm).not.toHaveBeenCalled();
+        expect(ask).toHaveBeenCalledTimes(3);
+      } finally { store.close(); }
+    } finally { await f.dispose(); }
+  }
+}
+
 it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal before handle publication through composition, private custody and reports', async () => {
+  await checkFirstReservationRefusals();
   const f = await reportFixture();
   try {
     const createRealm = adapters.createBeuserRealm;
@@ -128,7 +191,11 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
       return createRealm(input);
     });
     const surface = vi.spyOn(await adapters.loadBeuserTerminal(), 'createBeuserSurface'), runtime = vi.spyOn(adapters.DockerBeuserRealmRuntime.prototype, 'create');
-    const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+    const output: string[] = [];
+    const cli = { root: f.root, env: f.options.env, stdout: { write(value: string) { output.push(value); } },
+      walkBeuser: walkConfiguredBeuser, readBeuserReport: readConfiguredBeuserReport };
+    const exit = await beuserCommand(['beuser', 'walk', '--scope', 'scope', '--journey', 'journey', '--candidate', f.candidate, '--json'], cli);
+    const report = JSON.parse(output.join(''));
     expect(report).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'BEUSER_CANDIDATE_MISMATCH' },
       { branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }] });
     const { terminal, custody } = await f.records();
@@ -136,6 +203,7 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
     expect(terminal.binding).toEqual(custody.binding);
     expect(custody.lease).toMatchObject({ handle: null, observation: { state: 'quarantined', evidenceRefs: [] } });
     expect(surface).not.toHaveBeenCalled();
+    expect.soft(exit ?? 0).toBe(1);
     const config = await loadComposedConfig(f.root, { ...f.options, heal: false });
     const stored = { layout: config.productLayout, store: await adapters.openSqliteAttemptStore(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite,
       { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile }) };
@@ -151,6 +219,57 @@ it.skipIf(process.platform !== 'linux')('retains a real verifyPackage refusal be
       expect((await f.records()).custody).toEqual(custody);
     } finally { stored.store.close(); }
     expect(await readConfiguredBeuserReport(f.root, 'scope', undefined, f.options)).toEqual(report);
+    const { scopeId, runId } = terminal.binding.identity;
+    const crashes = join(config.productLayout.root, 'crashes'), reports = join(crashes, 'beuser-reports');
+    const { issuer, subject } = adapters.readLocalOsIdentity();
+    const latest = adapters.beuserPrivateRecord(reports, sha256(JSON.stringify([scopeId, issuer, subject])), config.artifacts.maxBytes);
+    const previous = await latest.read();
+    expect(previous).toMatchObject({ kind: 'ready', value: { runId } });
+    const monitor = adapters.beuserPrivateRecord(crashes, `beuser-monitor-${sha256(JSON.stringify([scopeId, issuer, subject]))}`, config.artifacts.maxBytes);
+    const held = await monitor.read();
+    if (held.kind !== 'ready') throw new Error('Expected the walk monitor');
+    const olderRun = 'previous-walk', olderReport = { ...report, elapsedMs: null };
+    await adapters.beuserPrivateRecord(reports, sha256(JSON.stringify([scopeId, olderRun])), config.artifacts.maxBytes)
+      .write({ schemaVersion: 1, scopeId, runId: olderRun, report: olderReport });
+    await latest.write({ schemaVersion: 1, scopeId, runId: olderRun });
+    await monitor.write({ ...(held.value as object), runId: 'started-without-a-report' });
+    expect(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(olderReport);
+    const laterRun = 'started-without-a-report', laterName = sha256(JSON.stringify([scopeId, laterRun]));
+    const policyPath = join(config.productLayout.root, 'policy.json'), policy = await readFile(policyPath, 'utf8');
+    const deny = async (ids: string[]) => {
+      const document = JSON.parse(policy);
+      document.grants.push({ id: 'deny-report', effect: 'deny', principals: 'all', scopes: [scopeId], actions: ['inspect'],
+        resource: { kind: 'run', ids } });
+      await writeFile(policyPath, JSON.stringify(document));
+    };
+    output.length = 0;
+    await deny([laterRun]);
+    const privateRecord = vi.spyOn(adapters, 'beuserPrivateRecord');
+    try {
+      await expect.soft(beuserCommand(['beuser', 'report', '--scope', scopeId, '--json'], cli)).resolves.toBeUndefined();
+      expect.soft(output.join('').trim()).toBe(JSON.stringify(olderReport));
+      await expect(readConfiguredBeuserReport(f.root, scopeId, laterRun, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(privateRecord).not.toHaveBeenCalledWith(reports, laterName, expect.anything());
+      await deny([laterRun, olderRun]);
+      await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      expect(privateRecord).not.toHaveBeenCalledWith(reports, laterName, expect.anything());
+    } finally {
+      privateRecord.mockRestore();
+      await writeFile(policyPath, policy);
+    }
+    const authorize = vi.spyOn(engine.RunPolicyAuthorization.prototype, 'authorize')
+      .mockRejectedValueOnce(new engine.PolicyAuthorizationError('POLICY_UNAVAILABLE'));
+    try {
+      await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+      expect(authorize).toHaveBeenCalledExactlyOnceWith('inspect', { scopeId, runId: laterRun }, expect.anything());
+    } finally { authorize.mockRestore(); }
+    await adapters.beuserPrivateRecord(reports, laterName, config.artifacts.maxBytes).write({ schemaVersion: 1, scopeId, runId: laterRun, report: null });
+    await expect(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).rejects.toMatchObject({ code: 'INVENTORY_QUERY_INVALID' });
+    await monitor.write(held.value);
+    expect(await readConfiguredBeuserReport(f.root, scopeId, runId, f.options)).toEqual(report);
+    expect.soft(await readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).toEqual(report);
+    await latest.remove();
+    await expect.soft(readConfiguredBeuserReport(f.root, scopeId, undefined, f.options)).resolves.toEqual(report);
     for (const language of ['tr', 'en'] as const) {
       const text = formatBeuserReport(report, { locale: language, json: false });
       expect(text).toContain('BEUSER_CANDIDATE_MISMATCH'); expect(text).not.toContain(f.root); expect(text).not.toContain(f.candidate);
@@ -179,7 +298,7 @@ it.skipIf(process.platform !== 'linux')('carries real driver look/argv failures 
           } });
           return { input: sink, output, cancel: async () => {} };
         } }));
-      const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+      const { report } = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
       expect(report).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: scenario.code },
         { branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }] });
       expect(commands).toEqual(scenario.state === 'forged' ? [] : [scenario.mode === 'argv' ? 'argv' : 'read']);
@@ -273,7 +392,7 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
             receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content } }] } } } } };
         }), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
-      const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+      const { report } = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
       if (finish) {
         const { terminal } = await f.records(), evaluate = model.mock.results[0]!.value.evaluate;
         expect(keys).toEqual([]); expect(readback).toHaveBeenCalledOnce(); expect(evaluate).toHaveBeenCalledOnce();

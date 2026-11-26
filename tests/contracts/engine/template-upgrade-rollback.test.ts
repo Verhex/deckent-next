@@ -591,7 +591,7 @@ it.skipIf(process.platform !== 'linux')('119-F1a-2: a proven absent step2 failur
   for (const locale of ['en', 'tr']) {
     let printed = '';
     expect(await main(['init', 'policy', '--scope', 's', '--upgrade', '--apply', '--lang', locale], { root: f.root, env: homeEnv(f.root),
-      upgradePolicyTemplateInstallation: async () => ({ ...absent, executionStatus: 'unknown' as const }), stdout: { write(value: string) { printed += value; } } })).toBe(0);
+      upgradePolicyTemplateInstallation: async () => ({ ...absent, executionStatus: 'unknown' as const }), stdout: { write(value: string) { printed += value; } } })).toBe(1);
     expect(printed).toContain(locale === 'en' ? 'The state of the AI execution permission could not be verified' : 'Yapay zekâ yürütme izninin durumu doğrulanamadı');
     expect(printed).toContain(key21); expect(printed).toContain('deckent policy status --scope s');
     expect(printed).not.toContain(t('cli.init.policyUpgrade.unavailable', {}, locale));

@@ -80,6 +80,13 @@ it('a person gives a new model its tier and roles on one card; the writer gets t
     for (const word of words) expect(body).toContain(word);
     expect(calls[1]).toEqual(['assign', expect.objectContaining({ scopeId: 'scope', channelId: 'anthropic-api', modelId: 'claude-next-1', tier: 'frontier', roles: ['brain', 'worker'], expect: DIGEST })]);
     expect(out.text()).toContain(lang === 'en' ? 'now has tier frontier, roles brain, worker' : 'artık kademe üst düzey, roller brain, worker');
+    const pending = capture();
+    card.answers = ['apply'];
+    expect(await modelsCommand([...SET, '--lang', lang], { root: f.root, env: f.env, stdin: tty(), stdout: pending.sink, stderr: pending.sink, ...handlers(calls),
+      assignModelRole: async () => ({ status: 'approval-pending', approvalId: 'role-ap-1', expiresAt: 60_000, summary: 'Assign model role', commandId: 'assign-1',
+        row: { channelId: 'anthropic-api', modelId: 'claude-next-1', version: 1, tier: 'frontier', roles: ['brain', 'worker'] } }),
+    } as never)).toBe(1);
+    expect(pending.text()).toContain('role-ap-1');
   }
 });
 

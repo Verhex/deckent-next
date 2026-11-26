@@ -13,16 +13,15 @@ import { evaluateConfiguredBeuserTask } from './evaluate.js';
 import { validateBeuserSupervisorProfile, pinBeuserProfile, beuserProfileLimits } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
 import { BEUSER_PACKAGE_ROOT } from './setup.js';
-import { withConfiguredBeuserWalkCustody } from './custody.js';
-import { beuserMonitorName } from './monitor.js';
+import { beuserMonitorName, withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
 export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
-  options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal): Promise<BeuserReport> {
+  options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal) {
   return withConfiguredBeuserWalkCustody(root, input.scopeId, options, () => walk(root, input, options, signal));
 }
 async function walk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
-  options: ConfigLoadOptions, signal: AbortSignal): Promise<BeuserReport> {
+  options: ConfigLoadOptions, signal: AbortSignal): Promise<{ report: BeuserReport; failureStage: 'reservation' | undefined }> {
   const started = performance.now();
   const { c, selected, runId, principal, profiles, definitions, candidateRoot } = await admitConfiguredBeuserWalk(root, input, options, signal);
   await beuserPrivateRecord(await prepareProductDirectory(c.layout, 'crashes'), beuserMonitorName(input.scopeId, c.principal), c.config.artifacts.maxBytes)
@@ -32,6 +31,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [], findings: NonNullable<BeuserReport['findings']> = [];
   const cleanup: NonNullable<BeuserReport['cleanup']> = [];
   let walked = 0, completed = 0, attempted = 0;
+  let reserving = false;
   const tokenBasis = { providerCount: 0, estimated: 0 };
   const intervals: { start: number; end: number }[] = [];
   try {
@@ -39,8 +39,10 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
       const run = await store.loadRun(input.scopeId, runId);
       if (!run || !run.progress.some(task => task.phase === 'pending')) break;
       if (signal.aborted) break;
+      reserving = true;
       const reservation = await reserveConfiguredRunTasks(root, { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId, runId, expectedRevision: run.revision }, options,
         taskId => definitions.find(d => d.binding.identity.taskId === taskId)!.binding.identity.attemptId);
+      reserving = false;
       const executions = await Promise.all(reservation.reservation.identities.map(async identity => {
         const profile = profiles.get(identity.taskId)!, data = beuserJourneyProfileSchema.parse(profile.parameters),
           limits = beuserProfileLimits(data);
@@ -95,7 +97,7 @@ async function walk(root: string, input: { readonly scopeId: string; readonly jo
   const directory = join(await prepareProductDirectory(c.layout, 'crashes'), 'beuser-reports');
   await beuserPrivateRecord(directory, sha256(JSON.stringify([input.scopeId, runId])), c.config.artifacts.maxBytes).write({ schemaVersion: 1, scopeId: input.scopeId, runId, report });
   await beuserPrivateRecord(directory, sha256(JSON.stringify([input.scopeId, c.principal.issuer, c.principal.subject])), c.config.artifacts.maxBytes).write({ schemaVersion: 1, scopeId: input.scopeId, runId });
-  return report;
+  return { report, failureStage: reserving ? 'reservation' : undefined };
 }
 
 /** Real admission only: seals the same Run and profiles used by walk, without starting a realm or invoking a model. */

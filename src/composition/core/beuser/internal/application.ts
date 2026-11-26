@@ -8,7 +8,7 @@ import { FileArtifactStore, loadBeuserTerminal, beuserTerminalFixture, BeuserSur
   readBeuserInstallationSummary, createBeuserArrange, type BeuserSurface, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { verifiedPrincipal, BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
-  DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
+  DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, beuserMonitorRecord, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
 import { isCodedError, persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
@@ -21,6 +21,7 @@ import { decodeBeuserEvaluatorOutput } from './model-contract.js';
 import { beuserEvaluatorEvidence } from './evaluator-input.js';
 import { configuredBeuserModels } from './models.js';
 import { beuserJourneyLaunch } from './launch.js';
+import { beuserMonitorName } from './custody.js';
 
 export { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
 export type { BeuserJourneyProfile } from '#composition/core/supervisors/index.js';
@@ -230,19 +231,34 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       if (isCodedError(error, 'MANAGED_FILE_MISSING')) throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
       throw error;
     }), directory = (name: string) => beuserPrivateRecord(join(crashes, 'beuser-reports'), name, c.config.artifacts.maxBytes);
+    const authorization = new RunPolicyAuthorization(contextPolicySource(c));
+    const readReport = async (id: string, skipDenied = false) => {
+      try { await authorization.authorize('inspect', { scopeId, runId: id }, c.principal); }
+      catch (error) {
+        if (skipDenied && isCodedError(error, 'POLICY_DENIED')) return null;
+        throw error;
+      }
+      const read = await directory(sha256(JSON.stringify([scopeId, id]))).read();
+      if (read.kind === 'absent') return null;
+      if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
+      const { report } = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.literal(id), report: beuserReportSchema }).parse(read.value);
+      if (report.segments.some(segment => segment.verdict && (segment.verdict.binding.identity.scopeId !== scopeId || segment.verdict.binding.identity.runId !== id))) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
+      return report;
+    };
     if (runId === undefined) {
       const latest = await directory(sha256(JSON.stringify([scopeId, c.principal.issuer, c.principal.subject]))).read();
-      if (latest.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
-      if (latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-      runId = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: persistedString(z.string().min(1)) }).parse(latest.value).runId;
+      if (latest.kind !== 'absent' && latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
+      runId = latest.kind === 'ready' ? z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: persistedString(z.string().min(1)) }).parse(latest.value).runId : undefined;
+      // The scoped report is durable before the latest locator. The monitor names the same person's most recent launch.
+      const monitor = await beuserPrivateRecord(crashes, beuserMonitorName(scopeId, c.principal), c.config.artifacts.maxBytes).read();
+      const candidate = monitor.kind === 'ready' ? beuserMonitorRecord.safeParse(monitor.value).data?.runId : undefined;
+      if (candidate && candidate !== runId) {
+        const recovered = await readReport(candidate, runId !== undefined);
+        if (recovered) return recovered;
+      }
     }
-    await new RunPolicyAuthorization(contextPolicySource(c)).authorize('inspect', { scopeId, runId }, c.principal);
-    const read = await directory(sha256(JSON.stringify([scopeId, runId]))).read();
-    if (read.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
-    if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    const envelope = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.literal(runId), report: beuserReportSchema }).parse(read.value);
-    const report = envelope.report;
-    if (report.segments.some(segment => segment.verdict && (segment.verdict.binding.identity.scopeId !== scopeId || segment.verdict.binding.identity.runId !== runId))) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
+    const report = runId === undefined ? null : await readReport(runId);
+    if (!report) throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
     return report;
   } catch (error) { throw queryFailure(error); }
 }
