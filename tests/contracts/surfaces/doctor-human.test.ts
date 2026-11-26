@@ -520,7 +520,7 @@ describe('deckent doctor (command)', () => {
     expect(json).not.toHaveProperty('headlessLoginRefusals');
     logins = [login(sandbox)];
     const withRefusal = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
-    expect(withRefusal.headlessLoginRefusals).toEqual([{ profileId: 'fixture-profile', connection: 'claude-cli-subscription', code: 'SANDBOX_VIEW_TOO_LARGE',
+    expect(withRefusal.headlessLoginRefusals).toEqual([{ connection: 'claude-cli-subscription', code: 'SANDBOX_VIEW_TOO_LARGE',
       params: { count: 9007, bound: 9000, home: 0, protective: 8994, pins: 0, remounts: 2, tail: 7, other: 4 }, message: sandbox }]);
     for (const old of [sandbox.replace('9007', '9008'), null]) {
       logins = [login(old)];

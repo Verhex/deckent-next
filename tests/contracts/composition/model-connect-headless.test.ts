@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { DRIVER } from '../support/pty-steps.js';
 import * as adapters from '#adapters/index.js';
-import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -559,11 +559,20 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       return panel.inspect('chat', profile.reference);
     };
     const [refused, altered, missing] = [await shown(sandbox), await shown(sandbox.replace('9007', '9008')), await shown(null)];
-    await writeFile(preflight, original);
+    // The record is read with the observation reader's checks: a readable-by-others file or a link to the same record shows nothing.
+    expect(await shown(sandbox)).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
+    await chmod(preflight, 0o644); const shared = await panel.inspect('chat', profile.reference); await chmod(preflight, 0o600);
+    await rename(preflight, `${preflight}.target`); await symlink(`${preflight}.target`, preflight);
+    const linked = await panel.inspect('chat', profile.reference);
+    await rm(preflight); await rm(`${preflight}.target`);
+    const deleted = await panel.inspect('chat', profile.reference);
+    await writeFile(preflight, original, { mode: 0o600 });
     const plain = await panel.inspect('chat', profile.reference);
     expect(refused).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
     expect(plain).not.toHaveProperty('diagnostic');
-    expect({ ...refused, diagnostic: undefined }).toStrictEqual({ ...plain, diagnostic: undefined }); expect(altered).toStrictEqual(plain); expect(missing).toStrictEqual(plain);
+    // Every field except the one explanatory diagnostic is the plain reading's, and the plain reading has no other field.
+    expect(Object.fromEntries(Object.entries(refused).filter(([key]) => key !== 'diagnostic'))).toStrictEqual(plain);
+    for (const other of [altered, missing, shared, linked, deleted]) expect(other).toStrictEqual(plain);
     expect(subscriptionReadinessText(refused, 'en', 'claude-cli-subscription')).toContain(sandbox);
     expect(subscriptionReadinessText(refused, 'tr', 'claude-cli-subscription')).toContain('Başlatıcı için 9007 argüman gerekiyor, sınır 9000.');
     expect(localNativeAgentReadinessSchema.safeParse({ state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE',

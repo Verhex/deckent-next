@@ -3,7 +3,7 @@ import { realpath } from 'node:fs/promises';
 import { isAbsolute, relative } from 'node:path';
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { modelInvocationProfileDigest, configuredInvocationProfiles } from '#engine/index.js';
-import { readNativeAgentObservation, readHeadlessClosedRefusal, isNativeCliHeadlessAdapter, nativeAgentFlagSetDigest, nativeCliAgent, agentGlobalStateRoots } from '#adapters/index.js';
+import { readNativeAgentObservation, readClosedPreflightRefusal, isNativeCliHeadlessAdapter, nativeAgentFlagSetDigest, nativeCliAgent, agentGlobalStateRoots } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { nativeAgentContainmentDiagnostic, type NativeAgentDiagnostic } from '#capabilities/index.js';
 import { inspectNativeStateCustody, type ConfigLoadOptions } from '#platform/index.js';
@@ -28,8 +28,8 @@ export function configuredNativeChatReadiness(projectRoot: string, options: Conf
     const observed = await readNativeAgentObservation(profile, Date.now, display, error => { diagnostic = error; }); // R8e: display reads the last verification; gates never pass `display`
     const custody = await inspectNativeStateCustody(profile.adapter.definition, options.env);
     if (custody === 'outside-installation') return { ...(observed ? { environment: false } : {}), governedUse: custody, ...(diagnostic ? { diagnostic } : {}) };
-    // Display only: a closed preflight's re-read sandbox refusal explains the missing observation; the readiness state is unchanged.
-    if (!observed && display && !diagnostic) diagnostic = await readHeadlessClosedRefusal(profile.adapter.definition).catch(() => null) ?? undefined;
+    // Display only, record directory verified inside the installation: a closed preflight's sandbox refusal explains the missing observation.
+    if (!observed && display && !diagnostic && custody === 'inside-installation') diagnostic = await readClosedPreflightRefusal(profile).catch(() => null) ?? undefined;
     if (!observed) return diagnostic ? { diagnostic } : null;
     if (custody !== 'inside-installation') {
       // K15 seals installation-global roots. A custom login outside them has no tool-realm custody proof; name the established containment cause.

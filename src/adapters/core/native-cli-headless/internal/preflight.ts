@@ -1,14 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DeckentError, isRecord, readHeadlessDiagnosticCase, type HeadlessPreflightParams } from '#platform/index.js';
+import { DeckentError, isRecord, isSandboxViewDiagnostic, readHeadlessDiagnosticCase, readHeadlessDiagnosticRecord, type HeadlessPreflightParams } from '#platform/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
-import { SANDBOX_VIEW_TOO_LARGE } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { BUBBLEWRAP_ARGUMENT_MAX_COUNT, SANDBOX_VIEW_TOO_LARGE } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation, type HeadlessIsolationSeal } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
 import { headlessExecutableRefusal, resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
+/** A closed record's stored refusal. The named sandbox argument-count refusal counts only in the writer's own form (a v1 record from the
+ * isolated launcher: over its fixed bound, no HOME masks or ancestor pins, its two final remounts); otherwise today's unverified reading. */
+export function closedPreflightRefusal(record: Readonly<{ schemaVersion?: unknown; refusal?: unknown; check?: unknown }>): DeckentError {
+  const refusal = readHeadlessDiagnosticRecord(record.refusal, record.check), p = refusal.params ?? {};
+  return !isSandboxViewDiagnostic(refusal) || record.schemaVersion === 1 && p['bound'] === BUBBLEWRAP_ARGUMENT_MAX_COUNT && p['home'] === 0 && p['pins'] === 0
+    && p['remounts'] === 2 ? refusal : readHeadlessDiagnosticRecord(record.refusal, null);
+}
 
 /** The verified program for this preflight and its caller. Every spawn binds that file and the init guard checks its reported version. */
 export interface HeadlessPreflight { readonly executable: string; readonly program: HeadlessExecutable; readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;

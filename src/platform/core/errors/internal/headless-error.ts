@@ -24,20 +24,21 @@ export function refuseHeadlessDiagnostic(...args: HeadlessDiagnosticArgs): never
   throw headlessDiagnostic(...args);
 }
 
-// The sandbox's argument-count refusal stores its writer's sentence. Only an exact catalog round trip in either language yields its counts.
+// The sandbox's argument-count refusal stores its writer's sentence: the isolated-process form only (the headless preflight's writer). Only an
+// exact catalog round trip in either language over the bound yields its counts; the adapter checks the writer's fixed values (record form).
 const SANDBOX_COUNTS = ['count', 'bound', 'home', 'protective', 'pins', 'remounts', 'tail', 'other'] as const;
-const sandboxViewText = (counts: Readonly<Record<string, string | number>>, isolated: boolean, locale: Locale) =>
-  `${t('shell.sandboxArgumentCountExceeded', counts, locale)} ${isolated ? t('shell.sandboxIsolatedArgumentCountRemedy', {}, locale) : t('shell.sandboxArgumentCountRemedy', {}, locale)}`;
+const sandboxViewText = (counts: Readonly<Record<string, string | number>>, locale: Locale) =>
+  `${t('shell.sandboxArgumentCountExceeded', counts, locale)} ${t('shell.sandboxIsolatedArgumentCountRemedy', {}, locale)}`;
 function readSandboxViewRecord(stored: unknown): DeckentError | null {
   if (typeof stored !== 'string') return null;
-  for (const written of LOCALES) for (const remedy of [true, false]) {
-    const shape = sandboxViewText(Object.fromEntries(SANDBOX_COUNTS.map((name, index) => [name, `@@${index}@@`])), remedy, written);
+  for (const written of LOCALES) {
+    const shape = sandboxViewText(Object.fromEntries(SANDBOX_COUNTS.map((name, index) => [name, `@@${index}@@`])), written);
     const match = new RegExp(`^${shape.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/@@(\d)@@/gu, '(?<c$1>0|[1-9]\\d{0,8})')}$`, 'u').exec(stored);
     if (!match?.groups) continue;
     const [count = 0, bound = 0, home = 0, protective = 0, pins = 0, remounts = 0, tail = 0, other = 0] = SANDBOX_COUNTS.map((_, index) => Number(match.groups![`c${index}`]));
     const counts = Object.freeze({ count, bound, home, protective, pins, remounts, tail, other });
-    if (count !== home + protective + pins + remounts + tail + other || sandboxViewText(counts, remedy, written) !== stored) continue;
-    const localize = (locale: Locale) => ({ message: sandboxViewText(counts, remedy, locale) });
+    if (count <= bound || count !== home + protective + pins + remounts + tail + other || sandboxViewText(counts, written) !== stored) continue;
+    const localize = (locale: Locale) => ({ message: sandboxViewText(counts, locale) });
     return new DeckentError('SANDBOX_VIEW_TOO_LARGE', localize(resolveLocale()).message, undefined, undefined, undefined, undefined, undefined, 'error', undefined, localize, counts);
   }
   return null;
