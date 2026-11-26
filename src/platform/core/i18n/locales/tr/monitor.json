@@ -1,6 +1,7 @@
 {
   "monitor.diagnostic.refusalAuditLoss": "bir araç reddi denetim günlüğüne kaydedilemedi",
-  "cli.task.transcript.pluginCount": "{count} ad; okumak için içerik izni gerekir",
+  "cli.task.transcript.pluginCount": "Bildirilen yerleşik eklenti sayısı: {count}",
+  "cli.task.transcript.paidLimit": "Sağlayıcı ücretli ek kullanım sınırı bildirdi.",
   "cli.task.transcript.observation": "İşçinin bildirdiği: {facts}",
   "cli.worker.phase.starting": "başlıyor",
   "cli.worker.phase.thinking": "düşünüyor",

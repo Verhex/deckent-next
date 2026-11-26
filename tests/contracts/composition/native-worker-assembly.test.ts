@@ -8,11 +8,11 @@ import * as engine from '#engine/index.js';
 import { createConfiguredNativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { inspectSubscriptionReadiness } from '#composition/core/subscription-readiness/index.js';
 import { FIRST_RUN_TOOL_NAMES, modelInvocationProfileDigest } from '#engine/index.js';
-import { firstRunPolicyTemplate } from '#domain/index.js';
+import { firstRunPolicyTemplate, type WorkerEvent } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { connection, cleanupConnections } from '../../fixtures/native-headless/connection.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
-import { initLine, rateLimitLine } from '../../fixtures/native-headless/stream.js';
+import { builtinPlugins, initLine, rateLimitLine } from '../../fixtures/native-headless/stream.js';
 import type { NativeCliWorkerBinding, NativeCliWorkerPorts, NativeCliWorkerTransport, NativeCliWorkerDriver } from '#adapters/index.js';
 
 const temporary: string[] = [];
@@ -157,21 +157,35 @@ it('K21: configured drivers run both isolated fake CLIs and retain cancellation 
     const session = { schemaVersion: 1 as const, turnId: 'isolated-worker', generation: 1, approvalTtlMs: 1000, tools: [] };
     const tools = { session, propose: vi.fn(), cancel: vi.fn(), revoke: vi.fn() };
     const runtime = createConfiguredNativeCliWorkerRuntime(c.root, { env: process.env })!;
-    const signal = new AbortController().signal, input = { binding, tools, model: 'fixture-model', system: 'Use governed tools.', user: 'Complete the scoped task.', deadlineMs: 5000,
-      outputBytes: 65536, execution };
+    const events: WorkerEvent[] = [], signal = new AbortController().signal, input = { binding, tools, model: 'fixture-model', system: 'Use governed tools.', user: 'Complete the scoped task.', deadlineMs: 5000,
+      outputBytes: 65536, execution, onEvents: (batch: readonly WorkerEvent[]) => { events.push(...batch); } };
     const driver = await runtime.driver(input, signal);
     const bridge = await adapters.createNativeToolBridge({ port: driver.tools, bridge: entry.bridge, limits: runtime.bridgeLimits,
       correlationKind: entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal });
     try { expect(await driver.run(bridge, signal)).toMatchObject({ termination: 'confirmed', status: 'completed', text: 'retained-worker-answer' }); }
     finally { await bridge.close(); await driver.close(); }
+    // N0 producer: one count-only observation (all N built-in plugins, no paid fact) precedes session.ended; Codex reports none.
+    const claude = entry.agent.transport.kind === 'claude-mcp', counted = { schemaVersion: 1, cliVersion: '9.1.0', builtinPlugins: { names: [], omitted: builtinPlugins.length } };
+    const observations = () => events.splice(0).flatMap((event, index, all) => event.kind === 'cli.observation' ? [{ ...event.observation, before: all.slice(index).some(row => row.kind === 'session.ended') }] : []);
+    expect(observations()).toEqual(claude ? [{ ...counted, paidExtraUsage: null, before: true }] : []);
     await writeFakeAgentCli(bin, family!, { hang: true });
-    const cancel = new AbortController(), stopped = await runtime.driver({ ...input, execution: (await adapters.preflightNativeAgent(profile, Date.now, testIsolation)).execution }, cancel.signal);
+    // The waiting message (after init) is the cancel point, so the cancel always follows the guard's init.
+    const cancel = new AbortController(), stopped = await runtime.driver({ ...input, execution: (await adapters.preflightNativeAgent(profile, Date.now, testIsolation)).execution,
+      onEvents: batch => { input.onEvents(batch); if (batch.some(row => row.kind === 'message')) cancel.abort(); } }, cancel.signal);
     const pendingBridge = await adapters.createNativeToolBridge({ port: stopped.tools, bridge: entry.bridge, limits: runtime.bridgeLimits,
       correlationKind: entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal: cancel.signal });
-    const timer = setTimeout(() => cancel.abort(), 300);
     try { expect(await stopped.run(pendingBridge, cancel.signal)).toMatchObject({ termination: 'confirmed', status: 'cancelled' }); }
-    finally { clearTimeout(timer); await pendingBridge.close(); await stopped.close(); }
+    finally { await pendingBridge.close(); await stopped.close(); }
+    expect(observations()).toEqual(claude ? [{ ...counted, paidExtraUsage: null, before: false }] : []);
     expect(tools.propose).not.toHaveBeenCalled();
+    if (!claude) continue;
+    // A stopped paid line keeps today's quota refusal and the provider's first overage fact as reported, never the stop's quota kind.
+    await writeFakeAgentCli(bin, family!, { events: [rateLimitLine('allowed', { isUsingOverage: true })] });
+    const paid = await runtime.driver({ ...input, execution: (await adapters.preflightNativeAgent(profile, Date.now, testIsolation)).execution }, signal);
+    const paidBridge = await adapters.createNativeToolBridge({ port: paid.tools, bridge: entry.bridge, limits: runtime.bridgeLimits, correlationKind: 'claude-tool-use', signal });
+    try { expect(await paid.run(paidBridge, signal)).toMatchObject({ termination: 'confirmed', status: 'failed', stopped: true, failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' }); }
+    finally { await paidBridge.close(); await paid.close(); }
+    expect(observations()).toEqual([{ ...counted, paidExtraUsage: { kind: 'overage', status: 'allowed', window: 'five_hour', resetsAtMs: 1792773600000 }, before: false }]);
   }
 });
 

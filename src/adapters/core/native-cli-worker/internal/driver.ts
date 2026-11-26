@@ -1,7 +1,7 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import type { HeadlessEgress } from '#domain/index.js';
+import { nativeCallObservationSchema, type HeadlessEgress, type RateLimitFact } from '#domain/index.js';
 import { modelInvocationProfileDigest } from '#engine/index.js';
 import type { DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
@@ -18,7 +18,8 @@ type Entry = NonNullable<ReturnType<typeof nativeCliAgent>>;
 type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 'executable' | 'args' | 'cwd' | 'env' | 'schemaVersion'>;
 type Bridge = Parameters<NativeCliWorkerDriver['run']>[0];
 type ClaudeDriver = ToolSessionPort & { readonly signal: AbortSignal; line: ProcessLineConsumer;
-  finish(evidence: ProcessEvidence): ClaudeAgentResult | { kind: 'completed'; text: string } };
+  finish(evidence: ProcessEvidence): ClaudeAgentResult | { kind: 'completed'; text: string };
+  observedFacts?(): Readonly<{ builtinPluginCount: number; paidExtraUsage: RateLimitFact | null; terminal: boolean }> };
 /** K16 binds its public preflight/realm and K2 exports here. No adapter-internal import or host-spawn alternative. */
 export interface NativeCliWorkerTransport {
   readonly profile: Prepared['profile'];
@@ -70,13 +71,21 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         timeoutMs: input.deadlineMs, outputMaxBytes: input.outputBytes }); dispose = launch.dispose;
       const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
-      let lineStopped = false;
+      let lineStopped = false, observed = false;
+      // N0: at most one count-only observation from host-known values: before session.ended on an accepted result line, otherwise once the runner settles.
+      const observe = () => {
+        const facts = claude?.observedFacts?.(); if (observed || !facts || !input.onEvents) return; observed = true;
+        const observation = nativeCallObservationSchema.safeParse({ schemaVersion: 1, cliVersion: checked.preflight.version,
+          builtinPlugins: facts.builtinPluginCount ? { names: [], omitted: facts.builtinPluginCount } : null, paidExtraUsage: facts.paidExtraUsage });
+        if (observation.success) input.onEvents([{ schemaVersion: 1, kind: 'cli.observation', sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), observation: observation.data }]);
+      };
       const evidence = await transport.runIsolated(entry, { ...launch.spawn, executable: checked.preflight.executable, program: checked.preflight.program, stateDir: input.binding.definition.stateDir,
         mcp: bridge, now: Date.now }, launch.bounds, AbortSignal.any([combined, gate.signal, ...(claude ? [claude.signal] : [])]), raw => {
         const stop = claude ? claude.line(raw) === 'stop' : !!turn!.line(raw);
         if (stop) { lineStopped = true; return 'stop'; }
+        if (claude?.observedFacts?.().terminal) observe();
         observer.observe(Buffer.from(raw + '\n'));
-      });
+      }).finally(observe);
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
       // A clean-up failure keeps the established classification below; the turn-only refusal applies to a settled run.

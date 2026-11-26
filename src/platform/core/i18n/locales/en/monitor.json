@@ -1,6 +1,7 @@
 {
   "monitor.diagnostic.refusalAuditLoss": "a tool refusal could not be recorded in the audit log",
-  "cli.task.transcript.pluginCount": "{count} names; reading them needs content permission",
+  "cli.task.transcript.pluginCount": "Reported built-in plugins: {count}",
+  "cli.task.transcript.paidLimit": "The provider reported a paid extra usage limit.",
   "cli.task.transcript.observation": "Worker-reported: {facts}",
   "cli.worker.phase.starting": "starting",
   "cli.worker.phase.thinking": "thinking",

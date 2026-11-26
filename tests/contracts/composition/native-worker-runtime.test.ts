@@ -144,7 +144,11 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const seal = { schemaVersion: 1 as const, capability: 'NativeAgentExecution' as const, executable: bound.definition.executable, cliVersion: '9.0.0', ownerUid: userInfo().uid,
         profileDigest: bound.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) };
       const run = vi.fn(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] }) }));
-      const release = vi.fn(async () => undefined), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
+      // N0: the worker reports its start and one count-only observation with the provider's first overage fact; release must follow the seal.
+      const observation = { schemaVersion: 1, cliVersion: '9.0.0', builtinPlugins: { names: [], omitted: 3 }, paidExtraUsage: { kind: 'overage', status: 'allowed', window: 'five_hour', resetsAtMs: null } } as const;
+      const reported = [{ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'claude', model: 'exact-model', cliVersion: '9.0.0' },
+        { schemaVersion: 1, sequence: 2, atMs: 2, kind: 'cli.observation', observation }] as const, sealedAtRelease: boolean[] = [];
+      const release = vi.fn(async () => { sealedAtRelease.push(!!await store.loadWorkerEventLog('s', 'attempt')); }), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
       const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => undefined,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release }) },
         checkEnvironment: vi.fn<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>(async (request, _binding, requirements) => {
@@ -154,12 +158,14 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
           expect(await readFile(join(request.workspace, 'note.txt'), 'utf8')).toBe('fixed base\n'); expect(context).toEqual({});
           return { session, propose: vi.fn(), revoke: vi.fn(), cancel: async () => ({ kind: 'cancelled' as const, turnId: session.turnId, generation: session.generation,
             termination: 'unverified' as const, effects: 'settled' as const, pendingCallIds: [] }) };
-        }), driver: vi.fn(async input => { expect(input).not.toHaveProperty('workspace'); return { tools: input.tools, run, close: async () => undefined }; }),
+        }), driver: vi.fn(async input => { expect(input).not.toHaveProperty('workspace'); return { tools: input.tools, run: (...args: Parameters<typeof run>) => { input.onEvents?.(reported); return run(...args); }, close: async () => undefined }; }),
         bridgeLimits: { idleMs: 1000, maxConnections: 2, replayMaxEntries: 2, replayMaxBytes: entry.bridge.frameMaxBytes * 2 } };
       const result = await executeConfiguredTask(project, identity, { ...options, nativeCliWorker: { ports, projectionRetired: false } });
       expect(result.execution).toMatchObject({ status: 'terminal', outputRecorded: true, terminal: { exitCode: 0 } });
       const dispatch = await store.loadBoundDispatch(identity); expect(dispatch?.profile.adapterId).toBe('native-cli-worker'); expect(dispatch?.containerId).toBeUndefined();
-      expect(await store.loadWorkerEventLog('s', 'attempt')).toMatchObject({ eventCount: 1 });
+      expect(await store.loadWorkerEventLog('s', 'attempt')).toMatchObject({ eventCount: 3 }); expect(result.execution).not.toHaveProperty('eventLog'); expect(sealedAtRelease).toEqual([true]);
+      const { inspectConfiguredWorkerTranscript } = await import('../../../src/index.js'), sealed = await inspectConfiguredWorkerTranscript(project, identity, options);
+      expect(sealed.events.filter(event => event.kind === 'cli.observation')).toEqual([{ ...reported[1], sequence: 3, atMs: 2 }]);
       const restored = recordedNativeCliWorkerSupervisor(dispatch!.profile);
       expect(await restored.recoverOutput(dispatch!.request)).toMatchObject({ completeness: 'partial', stdout: expect.stringContaining('fixed note read') });
       await executeConfiguredTask(project, identity, { ...options, nativeCliWorker: { ports, projectionRetired: true } });
@@ -195,6 +201,19 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         expect(run).toHaveBeenCalledOnce(); expect(ports.openTools).toHaveBeenCalledOnce();
         if (cause !== 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
       }
+      // N0: an offered observation the Attempt cannot hold (before the provider's start) is the named log failure; exit, release and one spawn stay.
+      const unverified = { ...identity, runId: 'unverified', attemptId: 'unverified' }, settled = vi.fn(async () => undefined);
+      await store.createRun({ commandId: 'create-unverified', actor, identity: { scopeId: 's', runId: 'unverified', layoutRevision: identity.layoutRevision }, graph,
+        execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+        policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-unverified', actor, scopeId: 's', runId: 'unverified', expectedRevision: 0, now: 0, identities: [unverified] });
+      const once = vi.fn(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] }) }));
+      const lost = await executeConfiguredTask(project, unverified, { ...options, nativeCliWorker: { projectionRetired: true, ports: { ...ports, capacity: { acquire: async () => ({ state: 'acquired' as const, release: settled }) },
+        driver: vi.fn(async input => ({ tools: input.tools, run: () => { input.onEvents?.([reported[1]]); input.onEvents?.([reported[0]]); return once(); }, close: async () => undefined })) } } });
+      expect(lost.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null } });
+      expect(await store.loadWorkerEventLog('s', 'unverified')).toBeNull(); expect(settled).toHaveBeenCalledOnce(); expect(once).toHaveBeenCalledOnce();
+      await store.cancelRun({ commandId: 'cancel-unverified', actor, scopeId: 's', runId: 'unverified', expectedRevision: (await store.loadRun('s', 'unverified'))!.revision });
+      await store.settleCancelledAttempt(unverified);
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,

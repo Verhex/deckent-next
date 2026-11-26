@@ -290,9 +290,11 @@ it('reads retained observation excerpts as count/paid words in the selected lang
     const view = await readMonitorWorkerContent(reader, files, root, locale), text = JSON.stringify(view);
     expect(summarizeMonitorWorkerEvent(live[0]!.event, locale)).toEqual(view.transcript.excerpt[0]);
     expect(view.transcript.state).toBe('sealed');
-    expect(text).toContain(locale === 'en' ? '3 names; reading them needs content permission' : '3 ad; okumak için içerik izni gerekir');
+    expect(text).toContain(locale === 'en' ? 'Reported built-in plugins: 3' : 'Bildirilen yerleşik eklenti sayısı: 3');
     expect(text).toContain(locale === 'en' ? 'Worker-reported' : 'İşçinin bildirdiği');
-    expect(text).toContain(locale === 'en' ? 'Paid extra usage of your provider account is in use' : 'Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
+    // N0 (ruling 3775): the worker reader states only the reported limit; whether deckent stopped this worker is not established by the record.
+    expect(text).toContain(locale === 'en' ? 'The provider reported a paid extra usage limit.' : 'Sağlayıcı ücretli ek kullanım sınırı bildirdi.');
+    expect(text).not.toContain(locale === 'en' ? 'is in use' : 'devrede'); expect(text).not.toContain(locale === 'en' ? 'content permission' : 'içerik izni');
     expect(text).not.toContain('private-plugin-name'); expect(text).not.toContain('private-cli-version');
   }
 });

@@ -1,4 +1,3 @@
-import { nativePaidUsageText } from '#capabilities/index.js';
 import { t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult, WorkerModelView, WorkerToolClass } from '#domain/index.js';
 import { quotaWaitText } from './labels.js';
@@ -65,7 +64,7 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
       const observation = event.observation, plugins = observation.builtinPlugins;
       const facts = [
         ...(plugins ? [t('cli.task.transcript.pluginCount', { count: plugins.names.length + plugins.omitted }, locale)] : []),
-        ...(observation.paidExtraUsage ? [nativePaidUsageText(observation.paidExtraUsage, locale)] : []),
+        ...(observation.paidExtraUsage?.kind === 'overage' ? [t('cli.task.transcript.paidLimit', {}, locale)] : []),
       ];
       lines.push(`${at}  ${t('cli.task.transcript.observation', { facts: facts.join(' · ') }, locale)}`);
     }
