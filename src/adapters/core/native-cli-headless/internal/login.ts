@@ -4,6 +4,7 @@ import { lstat, mkdir, realpath, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { headlessDiagnostic, DeckentError } from '#platform/index.js';
 import { nativeCliAgent, nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
+import { failedGatewayDirectoryRemoval } from '#adapters/core/native-connection/index.js';
 import { refuse } from './contract.js';
 import { headlessExecutable } from './connect.js';
 import { resolveHeadlessExecutable } from './executable.js';
@@ -32,6 +33,8 @@ export async function headlessOwnedLoginDir(family: string, resourceDir: string)
   return realpath(path).catch(configReadRefusal);
 }
 const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
+const followUpCleanupChecks = new Set(['realm-program-close', 'realm-scratch-remove', 'lock-marker-read',
+  'lock-marker-read-changed', 'lock-marker-parse', 'lock-marker-remove', 'lock-guard-release']);
 /** Person-witnessed caller only: inherited stdio captures no login bytes; the lock and isolated status probe remain mandatory. */
 export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<HeadlessLoginResult> {
   const entry = nativeCliHeadless(input.family), uid = process.getuid?.();
@@ -87,6 +90,9 @@ async function finishSignIn(input: HeadlessLoginInput, entry: NonNullable<Return
         : status.reason !== 'exit' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-incomplete', reason: status.reason })
           : !auth || auth.state === 'unreadable' ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-unreadable' })
             : status.exitCode !== 0 ? headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'login-status-positive-nonzero' }) : undefined;
+  const cleanup = status.cleanupError;
+  const showCleanup = cleanup && (signedIn || failedGatewayDirectoryRemoval(cleanup)
+    || cleanup.code === 'HEADLESS_PREFLIGHT_FAILED' && followUpCleanupChecks.has(String(cleanup.params?.['check'])));
   return Object.freeze({ schemaVersion: 1, configDir: input.configDir, owned: input.owned, exit, signedIn, authMethod: signedIn ? text(auth.authMethod) : null, subscriptionType: signedIn ? text(auth.subscriptionType) : null,
-    ...(statusIssue && { statusIssue }), ...(signedIn && status.cleanupError && { cleanupIssue: status.cleanupError }) });
+    ...(statusIssue && { statusIssue }), ...(showCleanup && { cleanupIssue: cleanup }) });
 }

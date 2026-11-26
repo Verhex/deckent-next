@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
 import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#surfaces/core/terminal-turn/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
+import { streamLineTurn } from '#surfaces/core/terminal-kit/index.js';
 import { renderAssistantStream, startAssistantStream, type ToolUnit } from '#surfaces/core/terminal-render/index.js';
 import { builtinAgentToolClass } from '#composition/core/agent-turn/index.js';
 
@@ -168,6 +169,17 @@ describe('terminal agent turn stream', () => {
     const divergent = await collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { onEvent({ kind: 'text', text: 'Hello' });
       return result({ turnId: command.turnId }); }).value));
     expect(divergent).toEqual([{ kind: 'text', text: 'Hello' }, { kind: 'done', finish: 'stop', note: null }]);
+    // G3 rows 7/10: a live next step follows its cause even after a policy-record warning; a replay adds none; line mode prints the cause with it.
+    const warned = 'The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor. The model round ended without an answer. Temporary files from the agent turn could not be cleared. No tool call ran.';
+    const failed = (replayed: boolean) => collect(streamTerminalAgentTurn(input, ports(async command => result({ turnId: command.turnId, finish: 'error', note: warned, answer: null, replayed })).value));
+    expect.soft((await failed(false)).at(-1)).toEqual({ kind: 'done', finish: 'error', note: warned, notices: [{ key: '', text: 'Check any tool results above and resolve the cleanup problem before sending another request.' }] });
+    expect((await failed(true)).at(-1)).toEqual({ kind: 'done', finish: 'error', note: warned });
+    const busy = 'Cancelled. No tool call ran. The sign-in lock guard remained held at the end of the wait.';
+    const partial = await collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { onEvent({ kind: 'text', text: 'Part' }); return result({ turnId: command.turnId, finish: 'cancelled', note: busy, answer: null }); }).value));
+    let drawn = ''; const line = await streamLineTurn((async function* () { yield* partial; })(), { out: { write: text => { drawn += text; } }, err: { write: () => {} },
+      cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' });
+    expect.soft(drawn).toBe(`Part\n${busy}\nWait for the other operation to finish, then try again.\n`);
+    expect(line).toMatchObject({ finish: 'cancelled', answer: 'Part' });
   });
 
   it('cancels this exact turn at once on abort and when the consumer stops early; a service error surfaces as is', async () => {

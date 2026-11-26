@@ -30,6 +30,9 @@ import { clearConfigCache, clockText, ErrorRegistry, headlessDiagnostic, redactF
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
 import * as adapters from '#adapters/index.js';
 import { runDurableAgentTurn } from '#engine/index.js';
+import { bindSessionScope, streamLineTurn, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
+import { mountWorkline } from '../support/workline-harness.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
@@ -314,6 +317,59 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     expect(result.note).not.toMatch(/yarıda kesildi|interrupted|\/fixture\//u);
   }
   if (phase !== 'send') return;
+  const cleanup = await fixture(), cleanupDriver = cleanup.runtime.driver;
+  Object.assign(cleanup.f.options.env, { DECKENT_LANGUAGE: 'en' });
+  let fault = headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'agent-run-remove' });
+  cleanup.runtime.driver = async input => {
+    const opened = await cleanupDriver(input);
+    return { ...opened, native: (...args) => ({ ...opened.native(...args), send: async () => { throw fault; } }) };
+  };
+  for (const [cause, next, nextTr, key] of [
+    ['The agent turn’s temporary directory could not be removed.',
+      'Check any tool results above and resolve the cleanup problem before sending another request.',
+      'Yukarıdaki araç sonuçları varsa inceleyin ve yeni bir istek göndermeden önce temizlik sorununu giderin.', 'headless.chat.runCleanupNext'],
+    ['The sign-in lock guard remained held at the end of the wait.',
+      'Wait for the other operation to finish, then try again.', 'Diğer işlem bitince yeniden deneyin.', 'headless.chat.loginBusyNext'],
+  ] as const) {
+    cleanup.events.length = 0;
+    const directory = join(cleanup.f.data, 'terminal-test-sessions');
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const sessions = adapters.openTerminalSessionStore(directory), bound = bindSessionScope(sessions, 's', () => 1);
+    const saved = Promise.withResolvers<string>(), deltas: TurnDelta[] = [];
+    const note = `The model round ended without an answer. ${cause} No tool call ran.`;
+    const view = mountWorkline({ sessions: { ...bound, async save(snapshot) { await bound.save(snapshot); saved.resolve(snapshot.sessionId); } },
+      streamTurn: async function* (messages) {
+        const input = { projectRoot: cleanup.f.project, scopeId: 's', messages, options: cleanup.f.options };
+        const stream = streamTerminalAgentTurn(input, { async chatTurn(_root, command, onEvent) {
+          const result = await cleanup.run(command.turnId, command.messages);
+          expect.soft(result).toMatchObject({ finish: 'error', answer: null, toolCalls: 0, recorded: true, note });
+          cleanup.events.forEach(onEvent);
+          return result;
+        }, cancelChatTurn: async () => { throw new Error('unexpected cancel'); } });
+        for await (const delta of stream) { deltas.push(delta); yield delta; }
+      } }, 220);
+    try {
+      await view.instance.waitUntilRenderFlush();
+      view.stdin.write('fixture question\r');
+      const sessionId = await saved.promise;
+      const expected = { schemaVersion: 1, sessionId, scopeId: 's', updatedAtMs: 1, messages: [{ role: 'user', content: 'fixture question' }] };
+      expect.soft(await readFile(join(directory, `${sessionId}.json`), 'utf8')).toBe(JSON.stringify(expected));
+      expect.soft(await sessions.load('s', sessionId)).toEqual(expected.messages);
+      await view.instance.waitUntilRenderFlush();
+      expect.soft(view.stdout.text).toContain(next);
+      let drawn = '';
+      const line = await streamLineTurn((async function* () { yield* deltas; })(), {
+        out: { write: text => { drawn += text; } }, err: { write: () => {} }, cancel: () => {}, project: text => text,
+        toolLine: () => '', approvalLine: () => '',
+      });
+      expect.soft(drawn).toContain(note);
+      expect.soft(drawn).toContain(next);
+      expect.soft(line).toMatchObject({ finish: 'error', answer: note, appended: [] });
+      expect.soft(t(key, {}, 'tr')).toBe(nextTr);
+    } finally { view.instance.unmount(); }
+    fault = headlessDiagnostic('HEADLESS_LOGIN_BUSY', { holder: 'guard' });
+  }
+
   // Y25/Y26: a model refusal returned as the turn's rejection whose receipt cannot be recorded still names its check in the final note.
   const h = await fixture(), driver = h.runtime.driver, open = adapters.openSqliteModelInvocationStore;
   Object.assign(h.f.options.env, { DECKENT_LANGUAGE: 'en' });
@@ -485,6 +541,25 @@ it('derives verification execution and readiness from the same guarded observati
   read.mockReset().mockResolvedValueOnce(common).mockResolvedValue({ ...common, bridge: false });
   await h.run('observed-bridge-refusal');
   expect(h.events.find(event => event.kind === 'text')).toMatchObject({ text: 'The governed tool bridge is unavailable. No agent tool can run until it is ready.\n' });
+  expect(h.state.calls).toBe(0);
+
+  const nativeSend = vi.fn(async () => ({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: 'vendor/model',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'recorded native answer' }, finish_reason: 'stop' }] }, usage: {} }));
+  const driver = h.runtime.driver;
+  h.runtime.driver = async input => {
+    const opened = await driver(input);
+    return { ...opened, native: (...args) => ({ ...opened.native(...args), send: nativeSend }) };
+  };
+  read.mockReset().mockResolvedValue({ ...common, bridge: true });
+  const recorded = await h.run('recorded-native');
+  expect(recorded).toMatchObject({ finish: 'stop', answer: 'recorded native answer', toolCalls: 0, recorded: true });
+
+  read.mockReset().mockResolvedValueOnce({ ...common, toolSurface: null, plugins: null })
+    .mockResolvedValueOnce({ ...common, bridge: true })
+    .mockResolvedValue({ ...common, bridge: false });
+  await expect.soft(h.run('recorded-native')).resolves.toMatchObject({ ...recorded, replayed: true });
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(nativeSend).toHaveBeenCalledOnce();
   expect(h.state.calls).toBe(0);
 });
 
