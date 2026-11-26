@@ -296,7 +296,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(declined.timeout, declined.output).toBeUndefined();
     expect.soft(declined.status, 'declined session offer').toBe(1);
     const declinedScope = /Scope: ([a-f0-9-]{36})/u.exec(declined.output)?.[1];
-    const cancelled = (scope: string | undefined) => `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.`;
+    const cancelled = (scope: string | undefined) => `Connection cancelled. No new connection was made in this step. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.`;
     expect.soft(declined.output.replaceAll('\r', ''), 'declined session offer').toContain(cancelled(declinedScope));
     expect(declined.output).not.toMatch(/deckent workline|Start setup\?/u);
     const explicit = await f.pty('explicit-attachment-ctrl-d', [['Connect this folder to the selected installation?', '\u0004']], {},
