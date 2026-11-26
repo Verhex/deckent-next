@@ -68,6 +68,8 @@
   "monitor.human.evaluation": "Değerlendirme: {verdict}",
   "monitor.human.patch": "Yama: {count} dosya değişti · {files}",
   "monitor.human.emptyPatch": "Boş yama: dosya değişikliği yok",
+  "monitor.human.verifiedNoFileChanges": "İşçi hiçbir dosyayı değiştirmedi (kayıtlı dosya sayısı: {files}).",
+  "monitor.human.reportedChecksNotRun": "İşçi beyanı: {count} denetim çalıştırılmadı.",
   "monitor.human.patchMissing": "Yama kaydı yok",
   "monitor.human.patchDenied": "Yama okunamadı: politika izin vermedi",
   "monitor.human.patchUnavailable": "Yama okunamadı: kanıt kullanılamıyor",
