@@ -1,5 +1,5 @@
 import { workerReadinessText, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
-import { headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, headlessGovernedUseText, messageText, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupObservation, SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { SetupApplyResult } from './contract.js';
@@ -12,11 +12,15 @@ import type { ExecutionPermissionNotice } from './execution-permission.js';
 export const SETUP_DOCUMENT_SCHEMA_VERSION = 2 as const;
 export type SetupDocument = ReturnType<typeof setupDocument>;
 export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: boolean; results: readonly SetupApplyResult[] }>, externalConnections?: readonly string[]) {
+  const results: readonly Omit<SetupApplyResult, 'reason'>[] = apply.results.map(({ reason, ...result }) => {
+    void reason;
+    return result;
+  });
   return { schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION, planSchemaVersion: plan.schemaVersion, planDigest: plan.planDigest, registryDigest: plan.registryDigest,
     stages: plan.stages.map(stage => ({ id: stage.id, namespace: stage.namespace, phase: stage.phase, state: stage.state, title: stage.title, reason: stage.reason,
       question: stage.question, default: stage.default, cli: stage.cli, operation: stage.operation, autoEligible: stage.autoEligible })),
     authority: setupAuthority(plan), ...(externalConnections?.length ? { externalConnections } : {}),
-    apply: { requested: apply.requested, results: apply.results } };
+    apply: { requested: apply.requested, results } };
 }
 
 /** Derived from the install carrier's observation, never from --yes or an apply exit code. */
@@ -61,7 +65,12 @@ export function applyLine(plan: SetupPlan, result: SetupApplyResult, locale: Loc
   const found = plan.stages.find(item => item.id === result.stage), stage = found ? stageTitle(found, locale) : terminalSafeText(result.stage);
   if (result.status === 'not-wired') return t('setup.apply.notWired', { stage }, locale);
   if (result.status === 'declined') return t('setup.apply.declined', { stage }, locale);
-  if (result.status === 'refused') return t('setup.apply.refused', { stage, code: terminalSafeText(result.code ?? '-') }, locale);
+  if (result.status === 'refused') {
+    const line = t('setup.apply.refused', { stage, code: terminalSafeText(result.code ?? '-') }, locale);
+    const detail = result.code === 'INSTALLATION_PUBLICATION_CHANGED' && result.reason
+      ? ErrorRegistry.get(result.code, locale, { reason: result.reason })?.message : undefined;
+    return detail ? `${line} ${detail}` : line;
+  }
   return found?.state === 'done' ? t('setup.apply.applied', { stage }, locale) : t('setup.summary.state', { stage, state: stateLabel(found?.state ?? 'blocked', locale) }, locale);
 }
 

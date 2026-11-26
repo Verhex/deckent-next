@@ -3,17 +3,21 @@ import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
+import { applySetupPermissions, configuredSetup, observeSetupPermissions } from '#composition/core/setup/index.js';
+import { main as cliMain } from '#composition/core/cli/index.js';
 import { main } from '#surfaces/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 
-import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { FIRST_RUN_TOOL_NAMES, PermissionModeApplication, type SetupStage } from '#engine/index.js';
+import { clearConfigCache, resolveProductLayout, sha256 } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate } from '#domain/index.js';
+import { FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION, POLICY_CHANGE_MAX, firstRunExecutionRules, firstRunPolicyTemplate, policyFileSchema } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import { contextPolicySource } from '#composition/core/policy/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
 const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS, ...FIRST_RUN_V19_RULE_IDS, ...FIRST_RUN_PROPOSAL_UPGRADE_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
@@ -312,4 +316,121 @@ it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v1
   expect(JSON.parse(output.join(''))).toMatchObject({ status: 'upgraded', template: { to: 20 } });
   expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ ...current, revision: expect.stringMatching(/^a-/u), grants: [...current.grants, ...firstRunExecutionRules([], readLocalOsIdentity(), ['installation']).wanted] }); expect(await readFile(bindingPath, 'utf8')).toBe(bindings);
   expect(errors).toEqual([]);
+});
+
+it.skipIf(process.platform === 'win32')('explains a bindings-only permission change and retains the generic refusal for external drift', async () => {
+  const root = await project(), scopeId = 'w05', options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global') } };
+  const paths = ['installation/journal.json', 'policy.json', 'bindings.json', 'config.json'].map(path => join(root, '.deckent', path));
+  const snapshot = () => Promise.all(paths.map(path => readFile(path, 'utf8')));
+  await applyPolicyTemplateInstallation(root, scopeId, options);
+  const initial = await snapshot();
+  const context = await loadConfiguredScopeContext(root, scopeId, options, 'write');
+  const changed = await withScopeAudit(context, audit => new PermissionModeApplication(contextPolicySource(context), event => { audit.record(event); }, Date.now)
+    .set(context.principal, { schemaVersion: 1, scopeId, mode: 'standart', askEdits: true, expectedRevision: context.document.revision }));
+  expect(changed).toMatchObject({ changed: true, mode: 'standart', askEdits: true });
+  const before = await snapshot();
+  expect(before.map((bytes, index) => bytes === initial[index])).toEqual([true, true, false, true]);
+  await expect(applyPolicyTemplateInstallation(root, scopeId, options)).rejects.toMatchObject({
+    code: 'INSTALLATION_PUBLICATION_CHANGED', reason: 'governed-policy-advanced',
+  });
+  expect(await snapshot()).toEqual(before);
+
+  const drift = `${before[2]}\n`;
+  await writeFile(paths[2]!, drift);
+  await expect(applyPolicyTemplateInstallation(root, scopeId, options)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED', reason: undefined });
+  expect(await snapshot()).toEqual([before[0], before[1], drift, before[3]]);
+
+  await writeFile(paths[2]!, before[2]!);
+  const reformatted = `${JSON.stringify(policyFileSchema.parse(JSON.parse(before[1]!)), null, 2)}\n`;
+  expect(reformatted).not.toBe(before[1]);
+  await writeFile(paths[1]!, reformatted);
+  await expect(applyPolicyTemplateInstallation(root, scopeId, options)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED', reason: undefined });
+  expect(await snapshot()).toEqual([before[0], reformatted, before[2], before[3]]);
+});
+
+it.skipIf(process.platform === 'win32')('explains why plain init policy cannot replay after witnessed starting permissions and preserves the committed publication', async () => {
+  const root = await project(), scopeId = 'w05', global = join(root, 'global');
+  vi.stubEnv('DECKENT_GLOBAL_HOME', global);
+  vi.stubEnv('AI_AGENT', '1');
+  try {
+    const options = { env: { DECKENT_GLOBAL_HOME: global } }, witness = { attest: async () => true };
+    const setup = configuredSetup({}, { attest: async () => false });
+    const policyStage: SetupStage = { id: 'core:policy', namespace: 'core', title: 'setup.stage.policy', phase: 'install', state: 'ready',
+      reason: { code: 'setup.reason.policyFresh', params: {} }, operation: { id: 'installation.policy-template', version: 1, input: { scopeId } },
+      question: null, default: true, cli: null, autoEligible: true };
+    expect(await setup.applySetupStage(root, policyStage, { ...options, scopeId })).toMatchObject({ status: 'applied' });
+    const run = async (action: '--apply' | '--preview', locale: 'en' | 'tr', json = true) => {
+      let stdout = '', stderr = '';
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
+      const output = vi.spyOn(process.stdout, 'write').mockImplementation(value => { stdout += String(value); return true; });
+      const errors = vi.spyOn(process.stderr, 'write').mockImplementation(value => { stderr += String(value); return true; });
+      try {
+        const exit = await cliMain(['init', 'policy', '--scope', scopeId, action, ...(json ? ['--json'] : []), '--lang', locale]);
+        return { exit, stdout, stderr };
+      } finally {
+        errors.mockRestore(); output.mockRestore(); cwd.mockRestore();
+      }
+    };
+    const resources = ['installation/journal.json', 'policy.json', 'bindings.json', 'config.json'];
+    const snapshot = () => Promise.all(resources.map(path => readFile(join(root, '.deckent', path), 'utf8')));
+    const initial = await snapshot();
+    const replay = await run('--apply', 'en');
+    expect(replay.exit).toBe(0);
+    expect(JSON.parse(replay.stdout)).toMatchObject({ status: 'replayed' });
+    expect((await snapshot()).every((bytes, i) => bytes === initial[i])).toBe(true);
+    vi.stubEnv('AI_AGENT', undefined);
+    const permission = await observeSetupPermissions(root, scopeId, options);
+    expect(permission).toMatchObject({ state: 'needs-profile', mode: 'full-auto' });
+    await applySetupPermissions(root, scopeId, permission.digest, options, witness);
+    expect(await observeSetupPermissions(root, scopeId, options)).toMatchObject({ state: 'applied', effectiveMode: 'full-auto' });
+
+    const before = await snapshot();
+    const journal = JSON.parse(before[0]!) as { phase: string; planDigest: string; resources: { resource: string; targetDigest: string; state: string }[] };
+    expect(journal.phase).toBe('committed');
+    expect(journal.resources.every(resource => resource.state === 'published')).toBe(true);
+    expect(before.map((bytes, i) => bytes === initial[i])).toEqual([true, false, false, true]);
+    const policyTarget = journal.resources.find(resource => resource.resource === 'policy')!;
+    expect(policyTarget.targetDigest === sha256(initial[1]!)).toBe(true);
+    expect(policyTarget.targetDigest === sha256(before[1]!)).toBe(false);
+    const preview = await run('--preview', 'en');
+    expect(preview.exit).toBe(0);
+    expect(JSON.parse(preview.stdout).planDigest === journal.planDigest).toBe(true);
+    const english = await run('--apply', 'en');
+    vi.stubEnv('AI_AGENT', '1');
+    const turkish = await run('--apply', 'tr');
+    expect(english.exit).toBe(78);
+    expect(turkish.exit).toBe(78);
+    expect(english.stdout).toBe(''); expect(turkish.stdout).toBe('');
+    expect((await snapshot()).every((bytes, i) => bytes === before[i])).toBe(true);
+    expect(JSON.parse(english.stderr)).toEqual({ code: 'INSTALLATION_PUBLICATION_CHANGED',
+      message: 'After setup, deckent recorded approved changes to the installed policy. The initial template was not reapplied. Run `deckent policy status --scope <id>` to inspect the current policy.' });
+    expect(JSON.parse(turkish.stderr)).toEqual({ code: 'INSTALLATION_PUBLICATION_CHANGED',
+      message: 'Kurulumdan sonra deckent politikada yapılan onaylı değişiklikleri kaydetti. İlk kurulum şablonu yeniden uygulanmadı. Geçerli politikayı görmek için `deckent policy status --scope <id>` komutunu kullanın.' });
+    vi.stubEnv('AI_AGENT', undefined);
+    for (const [locale, expected] of [['en', english], ['tr', turkish]] as const) {
+      const plain = await run('--apply', locale, false);
+      expect(plain).toMatchObject({ exit: 78, stdout: '' });
+      expect(plain.stderr).toContain(JSON.parse(expected.stderr).message);
+    }
+    vi.stubEnv('AI_AGENT', '1');
+    expect(await setup.applySetupStage(root, policyStage, { ...options, scopeId })).toEqual({
+      stage: 'core:policy', operation: 'installation.policy-template', status: 'refused',
+      code: 'INSTALLATION_PUBLICATION_CHANGED', reason: 'governed-policy-advanced',
+    });
+    expect(await snapshot()).toEqual(before);
+
+    // Even where an earlier governed write exists, a later external edit must use the general refusal.
+    const drift = `${before[1]}\n`;
+    await writeFile(join(root, '.deckent/policy.json'), drift);
+    const external = await run('--apply', 'en');
+    expect(external.exit).toBe(78);
+    expect(JSON.parse(external.stderr)).toEqual({ code: 'INSTALLATION_PUBLICATION_CHANGED',
+      message: 'Installation evidence or published state changed; completion was not accepted.' });
+    expect(await setup.applySetupStage(root, policyStage, { ...options, scopeId })).toEqual({
+      stage: 'core:policy', operation: 'installation.policy-template', status: 'refused', code: 'INSTALLATION_PUBLICATION_CHANGED',
+    });
+    expect((await snapshot()).every((bytes, i) => bytes === (i === 1 ? drift : before[i]))).toBe(true);
+  } finally {
+    vi.unstubAllEnvs(); clearConfigCache();
+  }
 });

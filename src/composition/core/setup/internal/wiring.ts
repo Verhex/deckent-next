@@ -121,6 +121,10 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       return result('refused', 'TERMINAL_TTY_REQUIRED');
     } catch (error) {
       if (isCodedError(error, 'PROJECT_ATTACHMENT_DENIED') && error.params?.['reason'] === 'declined') return result('declined');
+      if (op === 'installation.policy-template' && isCodedError(error, 'INSTALLATION_PUBLICATION_CHANGED')
+        && 'reason' in error && error.reason === 'governed-policy-advanced') {
+        return { ...result('refused', error.code), reason: error.reason };
+      }
       return result('refused', failure(error));
     }
   };

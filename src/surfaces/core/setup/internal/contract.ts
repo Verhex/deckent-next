@@ -10,7 +10,8 @@ import type { FirstJobFacts } from '#surfaces/core/doctor/index.js';
 /** What applying one stage did. `not-wired`: this build has no apply owner for the stage yet (I-S3 wires each operation to its existing
  * owner); nothing was written. `declined`: the person said no on the owner's card. A surface never reports a stage as done from an apply
  * result, only from the next observation. */
-export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused' | 'declined'; code?: string; secretStore?: SetupSecretStoreDetail }>;
+export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused' | 'declined';
+  code?: string; reason?: 'governed-policy-advanced'; secretStore?: SetupSecretStoreDetail }>;
 /** U1 S1 (additive): what the fresh installation's secret store default did, on the policy stage's result (store ids, a typed code and the refused
  * directory only; never a name or value). `not-set` keeps the stage `applied`: the installation stands, the default was refused. */
 export type SetupSecretStoreDetail = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string }>;

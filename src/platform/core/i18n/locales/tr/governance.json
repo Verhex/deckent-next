@@ -535,6 +535,7 @@
   "error.INSTALLATION_PUBLICATION_INVALID": "Açık kurulum seçimleri veya kurtarma girdisi eksik ya da geçersiz.",
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.",
   "error.INSTALLATION_PUBLICATION_CHANGED": "Kurulum kanıtı veya yayımlanan durum değişti; tamamlanma kabul edilmedi.",
+  "error.INSTALLATION_PUBLICATION_CHANGED.governedPolicy": "Kurulumdan sonra deckent politikada yapılan onaylı değişiklikleri kaydetti. İlk kurulum şablonu yeniden uygulanmadı. Geçerli politikayı görmek için `deckent policy status --scope <id>` komutunu kullanın.",
   "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Veritabanı dönüşümü için eksiksiz ve tutarlı iş oluşturma kanıtı gerekiyor. Veritabanı değiştirilmedi.",
   "error.RUN_CAPACITY_OR_ORDER.delayed": "Görev rezervasyonu reddedildi ({site}/{reason}): hazır {readyCount}, gecikmeli {delayedCount}, dolu yürütme kapasitesi {executionOccupied}/{executionSlots}, uygunluk bekleme süresi {eligibilityGapMs} ms.",
   "error.MODEL_ACTIVATION_INVALID": "Model aktivasyon girdisi geçersiz.",
