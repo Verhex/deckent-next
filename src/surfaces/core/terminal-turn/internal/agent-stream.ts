@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnNotice, ChatTurnResult, ChatTurnSteer, ChatTurnSteerResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
-import { optionalField, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { optionalField, ErrorRegistry, LOCALES, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta, TurnSteer } from '#surfaces/core/terminal-kit/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
@@ -111,13 +111,33 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     if (result.answer !== null && result.answer.startsWith(roundText) && result.answer.length > roundText.length) {
       yield { kind: 'text', text: result.answer.slice(roundText.length) };
     }
-    const { notices, steer: lines } = result;
+    const lines = result.steer;
+    const notices = result.notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` }));
+    const guidance = result.replayed ? null : headlessTurnGuidance(result.note);
+    if (guidance) notices.push({ key: '', text: guidance }); // No deduplication key: this notice belongs to this live turn.
     yield { kind: 'done', finish: result.finish, note: result.note, ...(lines.joined.length || lines.returned.length ? { steer: lines } : {}),
-      ...(notices.length ? { notices: notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` })) } : {}) };
+      ...(notices.length ? { notices } : {}) };
   } finally {
     signal.removeEventListener('abort', onAbort);
     if (!finished && !outcome) { local.abort(); await cancel(); }
   }
+}
+
+/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. */
+function headlessTurnGuidance(note: string | null): string | null {
+  if (note === null) return null;
+  for (const locale of LOCALES) {
+    const failedWith = (diagnosis: string) => {
+      const summary = t('agent.turn.outcome.noTools', {}, locale);
+      const prefix = t('agent.turn.outcome.failedDiagnosis', { diagnosis, summary }, locale).split(summary)[0]!;
+      return note.startsWith(prefix);
+    };
+    const guard = t('error.headless.loginBusy.guard', {}, locale);
+    if (failedWith(guard) || note === guard || note.endsWith(` ${guard}`)) return t('headless.chat.loginBusyNext', {}, locale);
+    if (failedWith(t('error.headless.agentRunDispose', {}, locale)) || failedWith(t('error.headless.agentRunRemove', {}, locale)))
+      return t('headless.chat.runCleanupNext', {}, locale);
+  }
+  return null;
 }
 
 /** Tema L6: what makes an MCP notice new for the person — its kind, server and code (not its free detail), so a repeat is shown once. */

@@ -1206,6 +1206,7 @@
         "src/engine/core/agent-turn",
         "src/platform/core/config",
         "src/platform/core/errors",
+        "src/platform/core/i18n",
         "src/surfaces/core/terminal-kit",
         "src/platform/core/utils"
       ],

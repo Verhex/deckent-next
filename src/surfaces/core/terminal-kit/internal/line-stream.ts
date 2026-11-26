@@ -61,7 +61,16 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
       finish = delta.finish;
       feed(finishRecordStream(record, io.knownSecrets, terminalSafeText)); record = EMPTY_RECORD_STREAM;
       if (held) { write(io.project(held, 'prose')); held = ''; }
+      const guidance = delta.notices?.filter(item => !item.key) ?? [];
       if (answer.length === 0 && delta.note) { write(io.project(delta.note, 'prose')); answer = delta.note; }
+      else if (delta.finish === 'error' && delta.note && guidance.length) {
+        if (lastChar !== '\n') write('\n');
+        write(io.project(delta.note, 'prose'));
+      }
+      for (const item of guidance) {
+        if (lastChar !== '\n') write('\n');
+        write(io.project(item.text, 'prose') + '\n');
+      }
     }
   }
   feed(finishRecordStream(record, io.knownSecrets, terminalSafeText));

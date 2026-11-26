@@ -34,8 +34,8 @@ it.skipIf(process.platform !== 'linux')('holds the same kernel inode through a l
     await expect(waiter).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_BUSY', params: { holder: 'guard' } });
     const fault = await waiter.catch((error: DeckentError) => error);
     if (!(fault instanceof DeckentError)) throw new Error('The second waiter did not return its diagnostic');
-    expect.soft(fault.localize?.('en').message).toBe('The sign-in lock guard remained held at the end of the wait. Wait for the other operation to finish, then try again.');
-    expect.soft(fault.localize?.('tr').message).toBe('Bekleme sonunda giriş kilidi koruması hâlâ tutuluyordu. Diğer işlem bitince yeniden deneyin.');
+    expect.soft(fault.localize?.('en').message).toBe('The sign-in lock guard remained held at the end of the wait.');
+    expect.soft(fault.localize?.('tr').message).toBe('Bekleme sonunda giriş kilidi koruması hâlâ tutuluyordu.');
   } finally { release(); }
   await expect(running).rejects.toThrow('cancelled'); expect(calls).toBe(0);
   await withHeadlessLoginLock(f.entry, f.configDir, f.stateDir, () => 999_999, async () => { calls++; }); expect(calls).toBe(1);

@@ -6,9 +6,9 @@ const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => t
 const guardFields = new Set(['cliVersion', 'apiKeySource', 'permissionMode', 'tools', 'mcpServers', 'skills', 'plugins', 'pluginErrors', 'cwd',
   'num_turns', 'usage', 'permission_denials', 'init', 'api_retry', 'result', 'json', 'after-turn', 'thread', 'turn', 'item',
   'item.command_execution', 'item.file_change', 'item.mcp_tool_call', 'item.web_search', 'item.todo_list']);
-const modelFields = new Set(['init.model', 'modelUsage']);
+const modelFields = new Set(['init.model', 'assistant.model', 'modelUsage']);
 const outputStages = new Set(['model-unreported', 'error_during_execution', 'error_max_turns', 'error_max_budget_usd',
-  'error_max_structured_output_retries', 'turn-failed', 'no-answer', 'reconnect-limit', 'notice-limit', 'error']);
+  'error_max_structured_output_retries', 'turn.failed', 'no-answer', 'reconnect-limit', 'notice-limit', 'error']);
 const httpStatusText = (status: number | null | undefined, locale: Locale) =>
   typeof status === 'number' && status >= 100 && status <= 599 ? t('cli.run.refused.httpStatus', { status }, locale) : null;
 const terminalRejection = (refusal: string, locale: Locale, check?: string) =>

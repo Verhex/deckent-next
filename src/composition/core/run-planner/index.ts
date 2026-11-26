@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { brainInvocationCommandId, brainQuotaAttemptCommandId, brainRejectionForBody, readSubscriptionRejection, type ModelInvocationInspectionApplication, type RefusedRunRequest, configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, listRefusedRunRequestEvents, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { brainInvocationCommandId, brainRejectionForBody, readSubscriptionRejection, type ModelInvocationInspectionApplication, type RefusedRunRequest, configuredInvocationProfiles, verifiedPrincipal, listRefusedRunRequests, listRefusedRunRequestEvents, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, configuredBrainModel, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { SIWC_INFERENCE, SIWC_USAGE_LIMIT_STATUS, siwcRejection, siwcResponsesDefinitionSchema, nativeCliHeadless, nativeQuotaPolicy, FileBrainQuotaWaitStore, withLocalPrincipalChannel, localPrincipalPeer, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -156,7 +156,7 @@ const plannerRejectionCodes = new Set(['HEADLESS_QUOTA_EXHAUSTED', 'SIWC_USAGE_U
   'HEADLESS_LIMIT_REACHED', 'BRAIN_PROVIDER_REJECTED']);
 
 type RefusedIdentity = RefusedRunRequest & Readonly<{ scopeId: string; principal: Readonly<{ issuer: string; subject: string }> }>;
-/** The initial command is derivable. A quota successor or possible billing continuation makes the audit outcome ambiguous. */
+/** Only the initial command is derivable from the audit row. A successor can fail before it claims a receipt. */
 async function refusedPlanDetail(inspection: ModelInvocationInspectionApplication, row: RefusedIdentity, locale: Locale) {
   if (!plannerRejectionCodes.has(row.code)) return null;
   const commandId = brainInvocationCommandId(row);
@@ -171,15 +171,8 @@ async function refusedPlanDetail(inspection: ModelInvocationInspectionApplicatio
   }
   const data = read?.responseContent?.kind === 'response-body' ? read.responseContent.data : null;
   const body = data === null ? null : readSubscriptionRejection({ adapter: evidence.adapter, body: { data } }, subscriptionAdapters);
-  if (body ? row.code !== brainRejectionForBody(evidence, body).code
-    : row.code !== 'BRAIN_PROVIDER_REJECTED' && !matchesReceiptFamily(row.code, evidence.adapter.id, evidence.reason)) return null;
-  // A purged quota body cannot rule out a retry. Even an unreadable or unsettled successor defeats this join.
-  if (subscriptionAdapters.has(evidence.adapter.id)
-    && (body === null || body.refusal === 'quota' && typeof body.resetsAtMs === 'number')) {
-    const next = brainQuotaAttemptCommandId(row, 2, { commandId, invocationId: receipt.claim.invocationId });
-    if (await inspection.inspectCommand({ schemaVersion: 1, scopeId: row.scopeId, commandId: next, reference: receipt.request.reference })) return null;
-  }
   if (body) {
+    if (row.code !== brainRejectionForBody(evidence, body).code || body.refusal === 'quota' && typeof body.resetsAtMs === 'number') return null;
     const guards = nativeCliHeadless(receipt.profile.protocol.family)?.headless.guards;
     const errorClass = body.schemaVersion === 5 && guards && 'errorAllow' in guards
       && (body.errorClass === 'unclassified' || guards.errorAllow.rules.some(rule => rule.errorClass === body.errorClass)) ? body.errorClass : undefined;
@@ -194,21 +187,32 @@ async function refusedPlanDetail(inspection: ModelInvocationInspectionApplicatio
       providerCode: classified?.schemaVersion === 3 && classified.code === providerCode ? classified.code : undefined }, locale);
   }
   const { reason, httpStatus } = evidence;
+  if (!matchesReceiptFamily(row.code, evidence.adapter.id, receipt.profile.protocol.family, reason, httpStatus)) return null;
   return httpStatus === null ? t('cli.run.refused.receiptReason', { reason }, locale)
     : t('cli.run.refused.receiptStatus', { reason, status: httpStatus }, locale);
 }
-/** Match a purged subscription reply only to its own registered planner family and compatible envelope. */
-function matchesReceiptFamily(code: string, adapter: string, reason: string): boolean {
-  if (adapter === SIWC_INFERENCE.adapter.id)
-    return reason === 'http-status' && ['SIWC_USAGE_UNAVAILABLE', 'SIWC_SERVICE_UNAVAILABLE', 'HEADLESS_LOGIN_REQUIRED', 'HEADLESS_QUOTA_EXHAUSTED'].includes(code);
-  if (adapter !== NATIVE_CLI_HEADLESS_ADAPTER_ID) return false;
-  switch (code) {
-    case 'HEADLESS_QUOTA_EXHAUSTED': case 'HEADLESS_CREDITS_REQUIRED': case 'HEADLESS_LOGIN_REQUIRED': return reason === 'http-status';
-    case 'HEADLESS_GUARD_FAILED': return reason === 'model-mismatch' || reason === 'invalid-response';
-    case 'BRAIN_OUTPUT_INVALID': return reason === 'invalid-response';
-    case 'HEADLESS_LIMIT_REACHED': return reason === 'response-limit';
-    default: return false;
+/** Without the typed reply, only compatible envelopes that exclude another attempt qualify. */
+function matchesReceiptFamily(code: string, adapter: string, family: string, reason: string, status: number | null): boolean {
+  const generic = code === 'BRAIN_PROVIDER_REJECTED';
+  if (adapter === NATIVE_CLI_HEADLESS_ADAPTER_ID) {
+    // Even an absent HTTP status can accompany an overage whose reset permits another attempt.
+    if (reason === 'http-status') {
+      const guards = nativeCliHeadless(family)?.headless.guards;
+      if (status === null || !guards || !('quotaStatuses' in guards) || guards.quotaStatuses.includes(status)) return false;
+      return generic || code === 'HEADLESS_CREDITS_REQUIRED' || code === 'HEADLESS_LOGIN_REQUIRED';
+    }
+    return generic
+      || code === 'HEADLESS_GUARD_FAILED' && (reason === 'model-mismatch' || reason === 'invalid-response')
+      || code === 'BRAIN_OUTPUT_INVALID' && reason === 'invalid-response'
+      || code === 'HEADLESS_LIMIT_REACHED' && reason === 'response-limit';
   }
+  if (adapter === SIWC_INFERENCE.adapter.id && reason === 'http-status') {
+    if (status === null || status === SIWC_USAGE_LIMIT_STATUS) return false;
+    const refusal = siwcRejection(null, status)?.refusal;
+    return generic || code === 'HEADLESS_LOGIN_REQUIRED' && refusal === 'login-required'
+      || (code === 'SIWC_USAGE_UNAVAILABLE' || code === 'SIWC_SERVICE_UNAVAILABLE') && refusal === 'service-unavailable';
+  }
+  return generic;
 }
 export { transitionConfiguredRunIntent } from './internal/intents.js';
 /** Explicit person's start only; ordinary /do replay keeps the durable intent parked/released/starting. */
