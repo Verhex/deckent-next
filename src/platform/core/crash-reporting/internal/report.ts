@@ -2,7 +2,7 @@ import { mkdir, open, rename, unlink, readdir, lstat, readFile } from 'node:fs/p
 import { join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { PACKAGE_VERSION } from '#platform/core/common/index.js';
-import { DeckentError, ErrorRegistry, exitCodeFor, redactSensitive, takeQueryErrorRecord, type ExitCode } from '#platform/core/errors/index.js';
+import { DeckentError, ErrorRegistry, FatalErrorWithDetails, exitCodeFor, redactSensitive, takeQueryErrorRecord, type ExitCode } from '#platform/core/errors/index.js';
 import { colorTier, type ColorOptions } from '#platform/core/output/index.js';
 import { emit, type OutputSink } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
@@ -100,16 +100,21 @@ export async function writeDiagnosticRecord(failure: DeckentError, root: string,
   } catch { return null; }
 }
 /** Fatal path is best effort, including broken stderr and hostile error objects. */
-export async function reportFatal(error: unknown, options: { root?: string; argv?: readonly string[]; env?: Environment; stderr?: OutputSink; json?: boolean; locale?: Locale } = {}): Promise<ExitCode> {
+export async function reportFatal(failure: unknown, options: { root?: string; argv?: readonly string[]; env?: Environment; stderr?: OutputSink; json?: boolean; locale?: Locale } = {}): Promise<ExitCode> {
   let code: ExitCode = 1;
+  let error = failure;
   try {
+    const details = failure instanceof FatalErrorWithDetails ? failure.lines : [];
+    if (failure instanceof FatalErrorWithDetails) error = failure.primary;
     code = error === undefined ? 1 : exitCodeFor(error);
     let typed = error instanceof DeckentError ? error : ErrorRegistry.createError('UNKNOWN', { message: error instanceof Error ? error.message : String(error) });
     const recorded = typed.code === 'QUERY_UNEXPECTED_FAILURE' ? await writeDiagnosticRecord(typed, options.root ?? process.cwd(), options.argv, options.env) : null;
     if (recorded) typed = ErrorRegistry.createError('QUERY_UNEXPECTED_FAILURE', { params: { ...typed.params, record: recorded } });
     const locale = options.locale ?? resolveLocale(undefined, options.env);
     emit({ code: typed.code, ...(typed.params && Object.keys(typed.params).length ? { params: Object.fromEntries(Object.entries(typed.params).map(([key, value]) => [key, typeof value === 'string' ? redactSensitive(value) : value])) } : {}), message: redactSensitive(typed.localize?.(locale).message ?? typed.message) }, { level: 'critical', ...(options.json === undefined ? {} : { json: options.json }),
-      ...(options.stderr ? { stderr: options.stderr } : {}), render: () => formatHumanError(typed, { ...(options.locale ? { locale: options.locale } : {}), env: options.env ?? process.env, isTTY: process.stderr.isTTY ?? false }) });
+      ...(options.stderr ? { stderr: options.stderr } : {}), render: () => [formatHumanError(typed, {
+        ...(options.locale ? { locale: options.locale } : {}), env: options.env ?? process.env, isTTY: process.stderr.isTTY ?? false,
+      }), ...details.map(redactSensitive)].join('\n') });
   } catch { /* No second failure may escape the fatal boundary. */ }
   try {
     if (!(error instanceof DeckentError)) await writeCrashArtifact(error, options.root ?? process.cwd(), options.argv, options.env);

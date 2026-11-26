@@ -7,7 +7,7 @@ export type { OutputMode } from '#platform/core/common/index.js';
 export { DECKENT_VERSION, NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 export type { Params } from '#platform/core/i18n/index.js';
-export { DeckentError, CodedError, isCodedError } from '#platform/core/errors/index.js';
+export { DeckentError, CodedError, FatalErrorWithDetails, isCodedError } from '#platform/core/errors/index.js';
 export type { ErrorCategory } from '#platform/core/errors/index.js';
 export { ErrorRegistry, ERROR_CODES, isAuthorizationRefusal, launchRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';

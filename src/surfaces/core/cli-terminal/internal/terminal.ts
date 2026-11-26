@@ -10,8 +10,8 @@ import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
-import { optionalField, DeckentError, ErrorRegistry, EXIT_CODES, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, headlessGovernedUseText, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
+import { optionalField, DeckentError, ErrorRegistry, EXIT_CODES, FatalErrorWithDetails, isCodedError, deliveryMode, emit, getConfigMetadata, getConfigKnownSecrets, headlessGovernedUseText, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort, type SourceRepairKind } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -35,13 +35,24 @@ import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver
 import type { TerminalChatPlanView, TerminalChatTurnResult } from './terminal-chat.js';
 import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 const DEFAULT_HISTORY_MESSAGES = 40;
-/** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
+/** Identity write refusals after which a read-only identity observation can still let the view open. */
 const ADMISSION_DEFERRED = {
   POLICY_UNAVAILABLE: (locale: Locale) => t('terminal.admission.policyUnavailable', {}, locale),
   POLICY_DENIED: (locale: Locale) => t('terminal.admission.policyDenied', {}, locale),
   SCOPE_UNKNOWN: (locale: Locale) => t('terminal.admission.scopeUnknown', {}, locale),
   ATTEMPT_STORE_VERSION: (locale: Locale) => t('terminal.admission.ledgerUpgrade', {}, locale),
 } as const;
+function membershipFailureDetails(readError: unknown, sourceRepair: SourceRepairKind | undefined, locale: Locale): readonly string[] {
+  const lines: string[] = [];
+  if (sourceRepair === 'device-only') lines.push(t('terminal.admission.sourceBindingUpdated', {}, locale));
+  if (sourceRepair === 'registration-only') lines.push(t('terminal.admission.sourceLocationUpdated', {}, locale));
+  let code = 'QUERY_UNEXPECTED_FAILURE';
+  try {
+    const candidate = (readError as { code?: unknown } | null | undefined)?.code;
+    if (typeof candidate === 'string' && isCodedError(readError, candidate) && ErrorRegistry.has(candidate)) code = candidate;
+  } catch { /* A secondary diagnostic cannot replace the primary refusal. */ }
+  return [...lines, code];
+}
 const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
 function ttyState(context: TerminalLaunchContext) {
   const stdin = context.stdin ?? process.stdin;
@@ -253,15 +264,19 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (left()) return;
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
-    try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
+    let sourceRepair: SourceRepairKind | undefined;
+    try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options, kind => { sourceRepair = kind; })); }
     catch (error) {
-      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. A write admission that the trusted policy or a
-      // not-yet-upgraded ledger refuses creates nothing; the view still opens and every governed command meets its own gate (B36 R6).
+      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. After a policy or ledger refusal, the view can
+      // still open on a successful read and every governed command meets its own gate (B36 R6).
       // Existing identities are only read; absent ones get a fixed panel custody label that is never persisted, shown or authority.
       const code = String((error as { code?: unknown }).code);
       if (!Object.hasOwn(ADMISSION_DEFERRED, code)) throw error;
+      const observed = await readIdentity().catch((readError: unknown) => {
+        if (code !== 'POLICY_DENIED' && code !== 'SCOPE_UNKNOWN' && code !== 'POLICY_UNAVAILABLE') throw readError;
+        throw new FatalErrorWithDetails(error, membershipFailureDetails(readError, sourceRepair, locale));
+      });
       accessNotices.push({ level: 'error', text: ADMISSION_DEFERRED[code as keyof typeof ADMISSION_DEFERRED](locale) });
-      const observed = await readIdentity();
       installationId = observed.installation.status === 'available' ? observed.installation.value.installationId : UNADMITTED_CUSTODY_LABEL;
       projectId = observed.project.status === 'available' ? observed.project.value.projectId : UNADMITTED_CUSTODY_LABEL;
     }

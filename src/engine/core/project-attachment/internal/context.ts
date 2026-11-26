@@ -13,11 +13,14 @@ export class ProjectAttachmentError extends CodedError {
 }
 export const attachmentFailure = (code: ProjectAttachmentErrorCode, sourceRoot?: string): never => { throw new ProjectAttachmentError(code, sourceRoot); };
 export const sameAttachmentPerson = (a: AttachmentPerson, b: AttachmentPerson) => a.issuer === b.issuer && a.subject === b.subject;
+type ActiveTargetRegistration = (current: InstallationRegistration | null) => InstallationRegistration;
 export interface InstallationContextPorts {
   registration(): Promise<InstallationRegistration | null>;
   attachment(): Promise<ProjectAttachment | null>;
   source(source: InstallationSource): Promise<{ readonly identity: InstallationIdentityRead; readonly source: InstallationSource }>;
-  repairSource?(source: InstallationSource, requireActiveTarget: (current: InstallationRegistration | null) => InstallationRegistration): Promise<void>;
+  repairSource?(source: InstallationSource, requireActiveTarget: ActiveTargetRegistration): Promise<void>;
+  repairTarget?(reference: ProjectAttachment, requireActiveTarget: ActiveTargetRegistration,
+    refusal: 'PROJECT_ATTACHMENT_DENIED' | 'PROJECT_ATTACHMENT_CHANGED'): Promise<InstallationProjectContext>;
   target(): Promise<{ readonly canonicalRoot: string; readonly device: string; readonly inode: string; readonly projectId: string | null }>;
   observeFilesystemIdentity?(location: AttachmentLocation): Promise<FilesystemIdentity | null>;
   legacy(): Promise<InstallationIdentityRead>;
@@ -26,7 +29,7 @@ export interface InstallationProjectContext {
   readonly kind: 'legacy' | 'attached'; readonly identity: InstallationIdentityRead;
   readonly source: InstallationSource | null; readonly attachment: ProjectAttachment | null;
 }
-/** A reference never bootstraps or strengthens an identity. Every access revalidates both retained locations and revocation. */
+/** Every access revalidates both retained locations and revocation. The write port can reconcile an authorized stale pair. */
 export async function resolveInstallationProjectContext(ports: InstallationContextPorts,
   request: { readonly registrationId: string | null; readonly companyId: string; readonly scopeId?: string; readonly actor?: AttachmentPerson }): Promise<InstallationProjectContext> {
   const raw = await ports.attachment();
@@ -44,16 +47,24 @@ export async function resolveInstallationProjectContext(ports: InstallationConte
   // A workload (the MCP channel of a native chat turn) is held to the person it acts for; source scope membership still checks the workload itself.
   if (request.actor !== undefined && !sameAttachmentPerson(attachment.actor, delegationOwner(request.actor))) return attachmentFailure('PROJECT_ATTACHMENT_PERSON_MISMATCH');
   const entry = registration.entries.find(item => item.attachment.projectId === attachment.projectId);
-  if (!entry || JSON.stringify(entry.attachment) !== JSON.stringify(attachment)) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  if (!entry) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
+  const sameReference = isDeepStrictEqual(entry.attachment, attachment);
+  if (!sameReference && (!ports.repairTarget || !sameProjectAttachmentAuthority(entry.attachment, attachment))) return attachmentFailure('PROJECT_ATTACHMENT_DENIED');
   if (entry.state === 'revoked') return attachmentFailure('PROJECT_ATTACHMENT_REVOKED');
   if (entry.state !== 'active') return attachmentFailure('PROJECT_ATTACHMENT_INCOMPLETE');
   const target = await ports.target();
-  if (target.projectId !== attachment.projectId || !await matchesObservedAttachmentLocation(ports, attachment.location, target)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
+  if (target.projectId !== attachment.projectId) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
   const requireActiveTarget = (current: InstallationRegistration | null) => {
     if (!current || current.unregistered || current.registrationId !== registration.registrationId
       || !isDeepStrictEqual(current.entries.find(item => item.attachment.projectId === attachment.projectId), entry)) return attachmentFailure('PROJECT_ATTACHMENT_CHANGED');
     return current;
   };
+  if (!sameReference || !await matchesObservedAttachmentLocation(ports, attachment.location, target)) {
+    const refusal = sameReference ? 'PROJECT_ATTACHMENT_CHANGED' : 'PROJECT_ATTACHMENT_DENIED';
+    if (!ports.repairTarget || entry.attachment.location.canonicalRoot !== target.canonicalRoot
+      || entry.attachment.location.inode !== target.inode) return attachmentFailure(refusal);
+    return ports.repairTarget(raw, requireActiveTarget, refusal);
+  }
   await ports.repairSource?.(registration.source, requireActiveTarget);
   const current = ports.repairSource ? requireActiveTarget(await ports.registration()) : registration;
   const observed = await ports.source(current.source).catch(() => attachmentFailure('PROJECT_ATTACHMENT_UNAVAILABLE'));
@@ -68,9 +79,12 @@ export function existingSharedIdentity(identity: InstallationIdentityRead, sourc
   return identity.value;
 }
 
-/** Location changes only through witnessed relocation; every authority identity remains exact. */
+/** Location and schema version carry no attachment authority. */
 export function sameProjectAttachmentAuthority(left: ProjectAttachment, right: ProjectAttachment) {
-  const { location: ignoredLeft, ...a } = left, { location: ignoredRight, ...b } = right; void ignoredLeft; void ignoredRight; return isDeepStrictEqual(a, b);
+  const { location: ignoredLeft, schemaVersion: versionLeft, ...a } = left;
+  const { location: ignoredRight, schemaVersion: versionRight, ...b } = right;
+  void ignoredLeft; void ignoredRight; void versionLeft; void versionRight;
+  return isDeepStrictEqual(a, b);
 }
 
 export async function matchesObservedAttachmentLocation(ports: Pick<InstallationContextPorts, 'observeFilesystemIdentity'>,

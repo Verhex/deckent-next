@@ -10,7 +10,7 @@ import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
 import type { DeliveryPortHost } from '#surfaces/core/delivery-port/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunInspectionApplication, RunQuery, RunView, SurfaceSnapshotAccess,
-  TaskWorkerModel } from '#engine/index.js';
+  SourceRepairKind, TaskWorkerModel } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink, ProductLayout } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { AutonomyShadowReader } from '#surfaces/core/delivery-summary/index.js';
@@ -81,7 +81,8 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
   /** Managed interactive startup only; status and piped observation never call this write port. */
-  ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly installationId: string; readonly projectId: string }>;
+  ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions, onSourceRepair?: (kind: SourceRepairKind) => void) =>
+    Promise<{ readonly installationId: string; readonly projectId: string }>;
   preflightTerminalIdentity?: (root: string, options: ConfigLoadOptions) => Promise<void>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   describeRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<ServiceDescription>;

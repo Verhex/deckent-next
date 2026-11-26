@@ -161,6 +161,8 @@
   "terminal.admission.policyDenied": "Kimlik kabulü ertelendi: politika erişimi reddetti. Yönetilen komutlar kendi yetki kontrolünde reddedilecek.",
   "terminal.admission.scopeUnknown": "Kimlik kabulü ertelendi: kapsam bilinmiyor. Yönetilen komutlar kendi yetki kontrolünde reddedilecek.",
   "terminal.admission.ledgerUpgrade": "Kimlik kabulü ertelendi: defter yükseltmesi bekliyor. Yönetilen komutlar kendi yetki kontrolünde reddedilecek.",
+  "terminal.admission.sourceBindingUpdated": "Kaynak kurulumun bağı güncellendi.",
+  "terminal.admission.sourceLocationUpdated": "Kaynakta yalnızca ortak envanterde kayıtlı konum güncellendi.",
   "terminal.workline.watchAccessDenied": "İzleme erişimi: reddedildi ({kinds}). Bu olay türleri okunmuyor.",
   "terminal.workline.watchAccessStopped": "İzleme erişimi: reddedildi ({kinds}). Takip durdu; otomatik yeniden deneme yok.",
   "terminal.workline.watchStep": "İzleme {status}. Zaman aşımı {timeoutMs} ms. Sahip: {owner}. Eylem: {action}.",
