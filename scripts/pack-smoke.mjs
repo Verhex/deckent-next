@@ -169,7 +169,8 @@ async function terminalCheck() {
   //   TTY `deckent`                 workline: banner, status `Ready`, composer placeholder — and no line-mode prompt; Ctrl+C twice exits 0
   //   piped `deckent terminal`      typed refusal TERMINAL_TTY_REQUIRED, exit 2 (the workline needs a terminal on both ends)
   //   TTY `terminal session --lang tr`  line mode: Turkish banner and `deckent› ` prompt; /exit closes with the closed line, exit 0
-  //   piped `terminal session`      line mode without banner or prompt: /status answers, an unknown /command is reported, exit 0
+  //   piped `terminal session`      line mode without banner or prompt: /status answers, an unknown /command is reported, exit 2
+  //   piped `terminal session`      /status and /exit only, exit 0
   // Every catalog family of the locale (alpha.48 A2 split cli.json into per-command families; keys are unique across families).
   const catalog = locale => { const dir = join(root, 'dist/platform/core/i18n/locales', locale);
     return Object.assign({}, ...readdirSync(dir).filter(name => name.endsWith('.json')).sort().map(name => JSON.parse(readFileSync(join(dir, name), 'utf8')))); };
@@ -200,7 +201,10 @@ async function terminalCheck() {
   const piped = run([bin('deckent'), 'terminal', 'session'], { cwd: project, input: '/status\n/nope\n/exit\n', timeout: 20_000 });
   const p = expect(`${piped.stdout}${piped.stderr}`, [words(en['terminal.status.chat']), `${en['terminal.session.unknown'].split('{command}')[0]}/nope`],
     [en['terminal.session.prompt'].trim(), en['terminal.session.banner'], en['terminal.session.closed']]);
-  verdict('sessionPiped', piped.status === 0 && !p.missing.length && !p.unexpected.length, { status: piped.status, ...p, stderr: piped.stderr.trim().slice(-300) });
+  verdict('sessionPiped', piped.status === 2 && !p.missing.length && !p.unexpected.length, { status: piped.status, ...p, stderr: piped.stderr.trim().slice(-300) });
+
+  const known = run([bin('deckent'), 'terminal', 'session'], { cwd: project, input: '/status\n/exit\n', timeout: 20_000 });
+  verdict('sessionPipedKnown', known.status === 0, { status: known.status, stderr: known.stderr.trim().slice(-300) });
 
   record('terminal', Object.values(cases).every(item => item.ok), { cases });
 }
