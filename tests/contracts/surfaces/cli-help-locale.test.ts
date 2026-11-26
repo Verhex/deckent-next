@@ -142,14 +142,14 @@ it('ATTACHDOC: human previews give a complete apply command; JSON stays exact an
 it('attachment confirmations name the selected action in EN/TR and never offer a write card to a pipe or agent', async () => {
   const projectId = '11111111-1111-4111-8111-111111111111', digest = 'a'.repeat(64);
   const cancelled = (language: 'en' | 'tr', scope: string) => language === 'en'
-    ? `Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.\n`
-    : `Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için bu klasörde \`deckent terminal attach --scope ${scope} --preview\` çalıştırın. \`deckent init\` burada yeni ve ayrı bir kurulum başlatır.\n`;
+    ? `Connection cancelled. No new connection was made in this step. To see the connection plan again, run \`deckent terminal attach --scope ${scope} --preview\` in this folder. \`deckent init\` starts a new, separate installation here.\n`
+    : `Bağlantı iptal edildi. Bu adımda yeni bir bağlantı kurulmadı. Bağlantı planını yeniden görmek için bu klasörde \`deckent terminal attach --scope ${scope} --preview\` çalıştırın. \`deckent init\` burada yeni ve ayrı bir kurulum başlatır.\n`;
   const maskedScope = 'token=demo';
   const lifecycleCancelled = { en: 'Cancelled; nothing was changed.\n', tr: 'Vazgeçildi; hiçbir şey değiştirilmedi.\n' };
   const registerCancelled = { en: 'Registration cancelled. The source installation was not registered.\n', tr: 'Kayıt iptal edildi. Kaynak kurulum kaydedilmedi.\n' };
   const cancelledWithOriginalScope = {
-    en: 'Connection cancelled. This step left the folder and its connection records unchanged. To see the connection plan again, rerun the earlier preview in this folder with the original scope. `deckent init` starts a new, separate installation here.\n',
-    tr: 'Bağlantı iptal edildi. Bu adımda klasör ve bağlantı kayıtları değişmedi. Bağlantı planını yeniden görmek için önceki önizlemeyi bu klasörde özgün kapsamla tekrar çalıştırın. `deckent init` burada yeni ve ayrı bir kurulum başlatır.\n',
+    en: 'Connection cancelled. No new connection was made in this step. To see the connection plan again, rerun the earlier preview in this folder with the original scope. `deckent init` starts a new, separate installation here.\n',
+    tr: 'Bağlantı iptal edildi. Bu adımda yeni bir bağlantı kurulmadı. Bağlantı planını yeniden görmek için önceki önizlemeyi bu klasörde özgün kapsamla tekrar çalıştırın. `deckent init` burada yeni ve ayrı bir kurulum başlatır.\n',
   };
   const cases: readonly [string[], string, string][] = [
     [['--register', '--scope', 'source', '--expect', digest], 'Register this source installation?', 'Bu kaynak kurulum kaydedilsin mi?'],
