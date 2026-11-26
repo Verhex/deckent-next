@@ -54,6 +54,8 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   private released = false;
   /** N0: events are taken only while the CLI runs (spawn to the top of `finally`); `offered` once the driver produced its one observation. */
   private acceptingEvents = false; private offered = false;
+  /** N0 R2: one in-flight release; a concurrent custody sweep or patch preparation joins it, a rejection lets the next call retry as before. */
+  private releasing: Promise<'absent'> | undefined;
   offeredObservation(): boolean { return this.offered; }
   private result: SandboxResult | undefined;
   private running: Promise<SandboxResult> | undefined;
@@ -200,6 +202,9 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   /** Called only after DispatchApplication has retained output and terminal evidence. Unknown CLI/effects keep capacity for reconciliation. */
   async release(request: SandboxRequest): Promise<'absent'> {
     this.check(request); if (this.released) return 'absent';
+    return this.releasing ??= this.settleRelease().finally(() => { this.releasing = undefined; });
+  }
+  private async settleRelease(): Promise<'absent'> {
     if (this.started && this.result?.result.kind !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
     if (this.verification) {
       if (this.result?.result.kind === 'exited' && this.verdict) await this.verification.finish(this.verdict);

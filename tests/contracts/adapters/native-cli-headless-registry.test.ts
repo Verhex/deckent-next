@@ -311,6 +311,14 @@ describe('A63-K0 separate NativeAgentExecution v1 contract', () => {
     noCallback.line(JSON.stringify({ ...init, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }));
     expect(noCallback.line(event)).toBe('stop');
     expect(noCallback.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
+    // N0 R2: the worker keeps the overage fact only from a line of the session accepted at init; a foreign or absent session stops the same way, no fact.
+    for (const session_id of ['s-1', 'foreign-session', undefined]) {
+      const worker = createClaudeAgentDriver({ entry: nativeCliAgent(FAMILY)!, port, model: PINNED, cliVersion: '2.1.322', runDir: '/run/dir', outputMaxBytes: 8192, quotaPolicy: nativeQuotaPolicy() });
+      worker.line(JSON.stringify({ ...init, model: PINNED, claude_code_version: '2.1.322', cwd: '/run/dir' }));
+      expect(worker.line(JSON.stringify({ ...rateLimitLine('rejected', { overageStatus: 'allowed' }), session_id }))).toBe('stop');
+      expect(worker.finish({ reason: 'cancelled', exitCode: null, stdoutTruncated: false, stderrTruncated: false })).toMatchObject({ limit: { kind: 'quota' } });
+      expect(worker.observedFacts().paidExtraUsage).toEqual(session_id === 's-1' ? expect.objectContaining({ kind: 'overage', status: 'rejected' }) : null);
+    }
     let delivered = 0;
     const laterFailure = start(nativeQuotaPolicy(), 'continue', async () => { delivered++; });
     expect(await laterFailure.line(event)).toBeUndefined();

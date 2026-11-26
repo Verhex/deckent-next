@@ -203,7 +203,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const guards = entry.headless.guards;
       const limit = classifyClaudeRateLimit(record(value.rate_limit_info) ?? {}, options.quotaPolicy, 'creditsErrors' in guards ? guards.creditsErrors : [], options.paidExtraUsage);
       if (limit.kind === 'overage') {
-        firstOverage ??= limit;
+        // N0: the fact is kept only from a line of the session accepted at init (non-empty id); the stop below is unchanged either way.
+        if (typeof sessionId === 'string' && sessionId && value.session_id === sessionId) firstOverage ??= limit;
         const stop = () => fail('rate-limit', undefined, `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, { ...limit, kind: 'quota' });
         const deliver = options.onPaidUsage;
         const shown = wire?.active ? { ...limit, window: '?' } : limit;

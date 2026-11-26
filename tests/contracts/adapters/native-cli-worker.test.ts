@@ -73,7 +73,7 @@ const session = { schemaVersion: 1 as const, turnId: 'fixture-turn', generation:
   tools: [{ name: 'read_file', version: 1, toolClass: 'read' as const, description: 'Read the Attempt workspace', inputSchema: { type: 'object' as const, properties: {} } }] };
 const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
 const report = { schemaVersion: 1, summary: 'scoped answer', changedFiles: [], checks: [], openIssues: [] };
-const offered = (sequence: number, cliVersion: string, fact: string): WorkerEvent => ({ schemaVersion: 1, sequence, atMs: 1, kind: 'cli.observation', observation: {
+const offered = (sequence: number, cliVersion: string, fact: string): Extract<WorkerEvent, { kind: 'cli.observation' }> => ({ schemaVersion: 1, sequence, atMs: 1, kind: 'cli.observation', observation: {
   schemaVersion: 1, cliVersion, builtinPlugins: { names: [fact], omitted: 1 }, paidExtraUsage: { kind: 'overage', status: fact, window: fact, resetsAtMs: null } } });
 function fixture() {
   const release = vi.fn(async () => {}), run = vi.fn<NativeCliWorkerDriver['run']>(async () => ({ termination: 'confirmed', status: 'completed', text: JSON.stringify(report) }));
@@ -251,7 +251,8 @@ it('K12: cancellation aborts the same driver, closes the facade/session and keep
   const observed = await p.supervisor.cancel(request), result = await running;
   expect(sandboxObservationSchema.parse(observed)).toEqual({ handle: result.handle, result: result.result });
   expect(result).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true, interruptCause: 'cancel' });
-  expect(f.tools.cancel).toHaveBeenCalledOnce(); await p.supervisor.release(request);
+  // N0 R2: a concurrent release (custody sweep, patch preparation) joins the one in flight; capacity and the claim settle once.
+  expect(f.tools.cancel).toHaveBeenCalledOnce(); await Promise.all([p.supervisor.release(request), p.supervisor.release(request)]); expect(f.release).toHaveBeenCalledOnce();
   // N0: a cancel before any observation hands over nothing; a cancel after one keeps exactly that one row for the Attempt.
   expect(p.supervisor.offeredObservation()).toBe(false);
   const g = fixture(), rows: WorkerEvent[] = [], driver = g.ports.driver, begun = Promise.withResolvers<void>(); let offer!: (events: readonly WorkerEvent[]) => void;

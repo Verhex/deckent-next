@@ -171,11 +171,13 @@ it('K21: configured drivers run both isolated fake CLIs and retain cancellation 
     await writeFakeAgentCli(bin, family!, { hang: true });
     // The waiting message (after init) is the cancel point, so the cancel always follows the guard's init.
     const cancel = new AbortController(), stopped = await runtime.driver({ ...input, execution: (await adapters.preflightNativeAgent(profile, Date.now, testIsolation)).execution,
-      onEvents: batch => { input.onEvents(batch); if (batch.some(row => row.kind === 'message')) cancel.abort(); } }, cancel.signal);
+      onEvents: batch => { input.onEvents(batch); if (batch.some(row => row.kind === 'message')) cancel.abort('waiting-message'); } }, cancel.signal);
     const pendingBridge = await adapters.createNativeToolBridge({ port: stopped.tools, bridge: entry.bridge, limits: runtime.bridgeLimits,
       correlationKind: entry.agent.transport.kind === 'claude-mcp' ? 'claude-tool-use' : 'codex-mcp', signal: cancel.signal });
     try { expect(await stopped.run(pendingBridge, cancel.signal)).toMatchObject({ termination: 'confirmed', status: 'cancelled' }); }
     finally { await pendingBridge.close(); await stopped.close(); }
+    // The message callback is what stopped it, not the 5 s deadline (which would also read `cancelled`).
+    expect(cancel.signal.reason).toBe('waiting-message');
     expect(observations()).toEqual(claude ? [{ ...counted, paidExtraUsage: null, before: false }] : []);
     expect(tools.propose).not.toHaveBeenCalled();
     if (!claude) continue;
