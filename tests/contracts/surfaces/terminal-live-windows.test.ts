@@ -160,12 +160,12 @@ describe('live windows in the workline', () => {
       mounted.push(view.instance);
       await until(() => view.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && view.stdin.listenerCount('readable') > 0, 'English composer ready for input');
       view.stdin.write('/tasks\r');
-      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'observed worker and the active Run');
+      await until(() => view.stdout.frame.includes('1 observed worker(s) · 1 listed Run(s)'), 'observed worker and the active Run');
       view.stdin.write('\u001b[B');
       await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run highlighted');
       for (const workers of [1, 0]) {
         if (workers === 0) sources = [{ ...active, workers: [] }];
-        await until(() => view.stdout.frame.includes(`${workers} workers · 1 runs`), 'Run without a local worker');
+        await until(() => view.stdout.frame.includes(`${workers} observed worker(s) · 1 listed Run(s)`), 'Run without a local worker');
         view.stdin.write('\r');
         await until(() => view.stdout.frame.includes(EN.jobs!.transcriptTitle), 'Run transcript window without a local worker');
         expect.soft(view.stdout.frame).toContain('No local worker record for this Run. If the work runs in another project, open that project.');
@@ -175,7 +175,7 @@ describe('live windows in the workline', () => {
         await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back to tasks after the unavailable transcript');
       }
       sources = [{ ...active, workers: [] }, other];
-      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'other project worker returns');
+      await until(() => view.stdout.frame.includes('1 observed worker(s) · 1 listed Run(s)'), 'other project worker returns');
       view.stdin.write('\u001b[A');
       await until(() => />[^\n]*Task 1 · observed-worker/u.test(view.stdout.frame), 'other project worker explicitly selected');
 
@@ -201,10 +201,10 @@ describe('live windows in the workline', () => {
       inspectTranscript.mockClear();
 
       sources = [active, other];
-      await until(() => view.stdout.frame.includes('2 workers · 1 runs'), 'the same Attempt from both projects');
+      await until(() => view.stdout.frame.includes('2 observed worker(s) · 1 listed Run(s)'), 'the same Attempt from both projects');
       expect.soft(view.stdout.frame).toMatch(/>[^\n]*Task 2 · observed-worker/u);
       sources = [active];
-      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'the observed project disappears');
+      await until(() => view.stdout.frame.includes('1 observed worker(s) · 1 listed Run(s)'), 'the observed project disappears');
       expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
       const beforeLostInput = view.stdout.text.length;
       view.stdin.write('\r');
@@ -237,7 +237,7 @@ describe('live windows in the workline', () => {
       expect(cancelRun).toHaveBeenCalledExactlyOnceWith(attempt.runId, 3);
 
       sources = [active, other];
-      await until(() => view.stdout.frame.includes('2 workers · 1 runs') && view.stdout.frame.includes(EN.live!.tasksHints!), 'both projects after the local confirmation');
+      await until(() => view.stdout.frame.includes('2 observed worker(s) · 1 listed Run(s)') && view.stdout.frame.includes(EN.live!.tasksHints!), 'both projects after the local confirmation');
       inspectTranscript.mockClear();
       view.stdin.write('\u001b[A');
       await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run row explicitly selected');
@@ -257,7 +257,7 @@ describe('live windows in the workline', () => {
       mounted.push(tr.instance);
       await until(() => tr.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && tr.stdin.listenerCount('readable') > 0, 'Turkish composer ready for input');
       tr.stdin.write('/tasks\r');
-      await until(() => tr.stdout.frame.includes('2 işçi · 1 iş'), 'both project sources through the Turkish snapshot');
+      await until(() => tr.stdout.frame.includes('2 gözlemlenen işçi · 1 listelenen iş'), 'both project sources through the Turkish snapshot');
       tr.stdin.write('\u001b[B');
       await until(() => />[^\n]*observed-worker/u.test(tr.stdout.frame), 'other project worker selected in Turkish');
       tr.stdin.write('\u001b[B');
@@ -292,17 +292,17 @@ describe('live windows in the workline', () => {
     };
     const view = mountWorkline({ pollMs: 20, ledger }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r');
-    await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial live list');
+    await until(() => view.stdout.frame.includes('3 observed worker(s) · 3 listed Run(s)'), 'initial live list');
     view.stdin.write('\r');
     await until(() => view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT'), 'transcript of the initial selection');
     expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempts[0]);
     view.stdin.write(ESC);
     await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'return to the live list');
     visible = [attempts[1]!, attempts[2]!];
-    await until(() => view.stdout.frame.includes('2 workers · 3 runs'), 'initially acted-on worker leaves');
+    await until(() => view.stdout.frame.includes('2 observed worker(s) · 3 listed Run(s)'), 'initially acted-on worker leaves');
     expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
     visible = attempts;
-    await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial worker returns');
+    await until(() => view.stdout.frame.includes('3 observed worker(s) · 3 listed Run(s)'), 'initial worker returns');
     view.stdin.write('\u001b[A');
     await until(() => />[^\n]*run-c/u.test(view.stdout.frame), 'cursor wraps to last Run');
     view.stdin.write('\u001b[B');
@@ -311,7 +311,7 @@ describe('live windows in the workline', () => {
     view.stdin.write('\u001b[B');
     await until(() => />[^\n]*Task 2/u.test(view.stdout.frame), 'middle worker selected');
     visible = [attempts[0]!, attempts[2]!];
-    await until(() => view.stdout.frame.includes('2 workers · 3 runs'), 'selected worker leaves');
+    await until(() => view.stdout.frame.includes('2 observed worker(s) · 3 listed Run(s)'), 'selected worker leaves');
     view.stdin.write('\r'); await settle(80);
     expect.soft(inspectTranscript).not.toHaveBeenCalled();
     if (view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT')) {
@@ -333,14 +333,14 @@ describe('live windows in the workline', () => {
     legacySources = ['legacy-a', 'legacy-b'];
     const legacyView = mountWorkline({ pollMs: 20, ledger }); mounted.push(legacyView.instance);
     await settle(20); legacyView.stdin.write('/tasks\r');
-    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs') && />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'first of two legacy observations selected');
+    await until(() => legacyView.stdout.frame.includes('2 observed worker(s) · 3 listed Run(s)') && />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'first of two legacy observations selected');
     legacyView.stdin.write('\u001b[B'); await settle(80);
     expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 2 · unknown · present-unverified/u);
     legacySources = ['legacy-b', 'legacy-a'];
     await until(() => /Task 1 · unknown · present-unverified/u.test(legacyView.stdout.frame), 'legacy sources reordered');
     expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 1 · unknown · present-unverified/u);
     legacySources = ['legacy-a'];
-    await until(() => legacyView.stdout.frame.includes('1 workers · 3 runs'), 'selected legacy source disappears');
+    await until(() => legacyView.stdout.frame.includes('1 observed worker(s) · 3 listed Run(s)'), 'selected legacy source disappears');
     expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
     inspectTranscript.mockClear();
     legacyView.stdin.write('x'); await settle(80);
@@ -356,7 +356,7 @@ describe('live windows in the workline', () => {
       await until(() => legacyView.stdout.frame.includes(EN.live!.tasksHints!), 'return from unexpected unavailable window');
     }
     legacySources = ['legacy-a', 'legacy-b'];
-    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs'), 'both observation sources are back');
+    await until(() => legacyView.stdout.frame.includes('2 observed worker(s) · 3 listed Run(s)'), 'both observation sources are back');
     expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
     legacyView.stdin.write('\u001b[B');
     await until(() => />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'legacy worker explicitly selected');
