@@ -1,12 +1,12 @@
 import { persistedInteger } from '#platform/index.js';
-import { ledgerTransaction, openLedgerDatabase, readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { ledgerTransaction, openLedgerDatabase, readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, RUN_OPEN_PHASES, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, attemptIdentitySchema, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, RUN_OPEN_PHASES, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
+import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema, MonitorApplication,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerIndex, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
+import { aggregateDelivery, monitorRunKey, readDeliveryReceipts } from './receipt-observation.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
 const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, CATALOG_VERSION = 43;
@@ -64,25 +64,35 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   const created = new Map<string, number>(), reserved = new Map<string, number>(), models = new Map<string, WorkerModelView>();
   for (const row of db.prepare(`SELECT scope_id,command FROM run_receipts WHERE (CASE WHEN json_valid(command) THEN json_extract(command,'$.action') END)
     IN ('create-run','reserve-run-tasks','apply-task-evaluation')${inScope().sql}`).all(...inScope().args)) {
-    const command = json(row.command) as { action?: string; now?: unknown; identity?: { runId?: string }; identities?: { attemptId?: string }[];
-      evaluation?: { identity?: { attemptId?: string }; model?: unknown } };
+    const command = json(row.command) as { action?: string; now?: unknown; identity?: { scopeId?: string; runId?: string }; identities?: unknown[];
+      evaluation?: { identity?: unknown; model?: unknown } };
     if (command?.action === 'apply-task-evaluation') {
       const model = taskEvaluationModelSchema.safeParse(command.evaluation?.model);
-      if (model.success) models.set(`${row.scope_id}/${command.evaluation?.identity?.attemptId}`, Object.freeze({ ...model.data, evidence: model.data.evidence === 'sealed' ? 'sealed' : 'none' }));
+      const identity = attemptIdentitySchema.safeParse(command.evaluation?.identity);
+      if (model.success && identity.success && identity.data.scopeId === row.scope_id) {
+        models.set(MonitorApplication.attemptKey(identity.data), Object.freeze({ ...model.data, evidence: model.data.evidence === 'sealed' ? 'sealed' : 'none' }));
+      }
       continue;
     }
     const now = num(command?.now); if (now === null) continue;
-    if (command.action === 'create-run') created.set(`${row.scope_id}/${command.identity?.runId}`, now);
-    else for (const identity of command.identities ?? []) reserved.set(`${row.scope_id}/${identity?.attemptId}`, now);
+    if (command.action === 'create-run') {
+      const identity = command.identity;
+      if (typeof identity?.scopeId === 'string' && identity.scopeId === row.scope_id && typeof identity.runId === 'string') {
+        created.set(monitorRunKey(identity.scopeId, identity.runId), now);
+      }
+    }
+    else if (Array.isArray(command.identities)) for (const value of command.identities) {
+      const identity = attemptIdentitySchema.safeParse(value);
+      if (identity.success && identity.data.scopeId === row.scope_id) reserved.set(MonitorApplication.attemptKey(identity.data), now);
+    }
   }
   const total = Number(db.prepare(`SELECT count(*) AS n FROM runs${inScope('WHERE').sql}`).get(...inScope().args)?.n);
   if (total > maxRuns) diagnostics.push('info:runs-truncated:' + total);
   const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
     FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''}${selected ? inScope().sql : inScope('WHERE').sql} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId] : []), ...inScope().args, maxRuns);
-  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version, scope?.scopeIds), evaluationRows = scope ? scopedEvaluationRows(db, scope.scopeIds) : readAcceptanceEvaluationRows(db);
+  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version, scope?.scopeIds), evaluationRows = groupEvaluationRows(db, scope?.scopeIds);
   for (const row of rows) {
-    const key = `${row.scope_id}/${row.run_id}`;
     try {
       const raw = json(row.snapshot) as Record<string, unknown>;
       // Read-only compatibility projection; ledger45 alone owns the durable migration.
@@ -92,21 +102,25 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       // Evaluation replay selects its retained bindings and revision, never the current Run's later Tasks/acceptance.
       if (pinned && (pinned.identity.layoutRevision !== current.identity.layoutRevision || pinned.revision > current.revision)) throw new Error();
       const snapshot = pinned ?? current;
+      const key = monitorRunKey(snapshot.identity.scopeId, snapshot.identity.runId);
+      const receipts = snapshot.revision === current.revision ? deliveries.get(key) ?? [] : [];
       const intent = version >= INTENT_LEDGER_VERSION ? db.prepare('SELECT admitted_at FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(row.scope_id, row.run_id) : undefined;
       const found: MonitorAttemptFiles[] = [];
-      const attempts = snapshot.bindings.map(binding => attempt(db, version, binding, reserved.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null,
-        models.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null, snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found));
+      const attempts = snapshot.bindings.map(binding => {
+        const attemptKey = MonitorApplication.attemptKey(binding.identity);
+        return attempt(db, version, binding, reserved.get(attemptKey) ?? null, models.get(attemptKey) ?? null,
+          snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found);
+      });
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
       // Supplemental cost projection cannot invalidate the canonical Run or its producer acceptance receipt.
       let costMetrics: MonitorLedgerRun['costMetrics'];
       try { costMetrics = readRunAcceptanceMetrics(db, snapshot); }
-      catch (error) { recordOnly(error); diagnostics.push('run-cost-unavailable:' + key); }
+      catch (error) { recordOnly(error); diagnostics.push(`run-cost-unavailable:${row.scope_id}/${row.run_id}`); }
       runs.push(Object.freeze({ snapshot, quotaHolds: readQuotaHolds(db, snapshot, 0), ...(costMetrics ? { costMetrics } : {}), evaluations: readRunAcceptanceEvaluations(db, snapshot, evaluationRows.get(key) ?? []), ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
         createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts),
-        deliveryReceipts: Object.freeze(snapshot.revision === current.revision ? deliveries.get(key) ?? [] : []),
-        delivery: snapshot.revision === current.revision ? aggregateDelivery(deliveries.get(key) ?? []) : null }));
+        deliveryReceipts: Object.freeze(receipts), delivery: aggregateDelivery(receipts) }));
       files.push(...found);
-    } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
+    } catch (error) { recordOnly(error); diagnostics.push(`run-corrupt:${row.scope_id}/${row.run_id}`); }
   }
   const approvals = version >= APPROVAL_LEDGER_VERSION ? currentApprovals(db, maxRuns, diagnostics, scope?.scopeIds) : [];
   const scopes = new Set(db.prepare(`SELECT DISTINCT scope_id FROM runs${inScope('WHERE').sql} ORDER BY scope_id`).all(...inScope().args).map(row => String(row.scope_id)));
@@ -208,12 +222,12 @@ function pools(db: DatabaseSync, version: number, diagnostics: string[], poolIds
   });
 }
 
-/** `readAcceptanceEvaluationRows` limited to the admitted scopes (same row shape, keyed `scope/run`). */
-function scopedEvaluationRows(db: DatabaseSync, scopeIds: readonly string[]): ReadonlyMap<string, readonly { commandId: string; command: string }[]> {
+/** Scan evaluations once, limited to admitted scopes when supplied. */
+function groupEvaluationRows(db: DatabaseSync, scopeIds?: readonly string[]): ReadonlyMap<string, readonly { commandId: string; command: string }[]> {
   const rows = new Map<string, { commandId: string; command: string }[]>(), within = scopedTo('scope_id', scopeIds);
   for (const row of db.prepare(`SELECT scope_id,command_id,command,json_extract(command,'$.evaluation.identity.runId') AS run_id FROM run_receipts WHERE CASE WHEN json_valid(command)
     THEN json_extract(command,'$.action')='apply-task-evaluation' ELSE 0 END${within.sql}`).all(...within.args)) if (typeof row.run_id === 'string') {
-    const key = `${row.scope_id}/${row.run_id}`, list = rows.get(key) ?? []; list.push({ commandId: String(row.command_id), command: String(row.command) }); rows.set(key, list); }
+    const key = monitorRunKey(String(row.scope_id), row.run_id), list = rows.get(key) ?? []; list.push({ commandId: String(row.command_id), command: String(row.command) }); rows.set(key, list); }
   return rows;
 }
 

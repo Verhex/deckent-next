@@ -5,6 +5,7 @@ import { runWorkspaceCustodySchema, workingTreeSource, RunWorkspaceCustodyError,
 type Receipt = NonNullable<MonitorLedgerRun['deliveryReceipts']>[number];
 // First ledger versions of integration, delivery and adoption evidence (schema.ts history).
 const INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33;
+export const monitorRunKey = (scopeId: string, runId: string) => JSON.stringify([scopeId, runId]);
 /** Retain the command's full producer identity alongside every receipt, including historical Attempts. */
 export function readDeliveryReceipts(db: DatabaseSync, version: number, scopeIds?: readonly string[]) {
   // M-VIS: receipts of other scopes are not read when the monitor read is scoped (same `IN (json_each)` form as the reader).
@@ -14,13 +15,14 @@ export function readDeliveryReceipts(db: DatabaseSync, version: number, scopeIds
     let custody;
     try { custody = runWorkspaceCustodySchema.parse(JSON.parse(String(row.record))); } catch { throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT'); }
     if (custody.scopeId !== row.scope_id || custody.runId !== row.run_id) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT');
-    modes.set(`${row.scope_id}/${row.run_id}`, workingTreeSource(custody.source) ? 'working-tree' : 'reference-only');
+    modes.set(monitorRunKey(custody.scopeId, custody.runId), workingTreeSource(custody.source) ? 'working-tree' : 'reference-only');
   }
   const put = (row: Record<string, unknown>, state: MonitorDeliveryState, commit: unknown, targetRef: unknown) => {
     let identity;
     try { identity = attemptIdentitySchema.safeParse(JSON.parse(String(row.identity))); } catch { identity = null; }
-    const producer = identity?.success && identity.data.scopeId === row.scope_id && identity.data.runId === row.run_id ? identity.data : null;
-    const key = `${row.scope_id}/${row.run_id}`, receipts = histories.get(key) ?? [];
+    if (!identity?.success || identity.data.scopeId !== row.scope_id || identity.data.runId !== row.run_id) return;
+    const producer = identity.data;
+    const key = monitorRunKey(producer.scopeId, producer.runId), receipts = histories.get(key) ?? [];
     const application = modes.get(key);
     receipts.push(Object.freeze({ identity: producer, receipt: Object.freeze({ ...(application ? { schemaVersion: 2 as const, application } : {}), state,
       commit: typeof commit === 'string' && /^[0-9a-f]{40,64}$/.test(commit) ? commit : null,
@@ -53,12 +55,16 @@ export async function authorizeMonitorDelivery<T extends MonitorLedgerReading>(r
   };
   const runs: MonitorLedgerRun[] = [];
   for (const run of reading.runs) {
+    const { scopeId, runId } = run.snapshot.identity;
     const evidence = { run, workers: new Map(), approvals: reading.approvals, pool: null, observedAt: Date.now() };
     const hasOutlook = deriveRunState(evidence, deriveRunBlocker(evidence)) === 'accepted';
     let deliveryOutputPermitted = hasOutlook && run.snapshot.bindings.length > 0;
     if (hasOutlook) for (const binding of run.snapshot.bindings) if (!(await allowed(binding.identity))) deliveryOutputPermitted = false;
     const receipts: Receipt[] = [];
-    for (const value of run.deliveryReceipts ?? []) if (value.identity && await allowed(value.identity)) receipts.push(value);
+    for (const value of run.deliveryReceipts ?? []) {
+      const producer = value.identity;
+      if (producer?.scopeId === scopeId && producer.runId === runId && await allowed(producer)) receipts.push(value);
+    }
     // No identity custody (including an older reader) means no aggregate, never inherited Run authority.
     runs.push(Object.freeze({ ...run, deliveryReceipts: Object.freeze(receipts), delivery: aggregateDelivery(receipts), deliveryOutputPermitted }));
   }

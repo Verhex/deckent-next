@@ -41,9 +41,13 @@ export function buildWorklineBridgeSnapshot(input: BuildWorklineBridgeSnapshotIn
   const tail = (work.length > maxTail ? work.slice(-maxTail) : work).map(entry => {
     if (entry.kind === 'notice') return Object.freeze({ ...entry, text: safe(entry.text),
       ...(entry.identity ? { identity: { model: safe(entry.identity.model), provider: safe(entry.identity.provider) } } : {}) });
-    if (entry.kind === 'worker') return Object.freeze({ ...entry, process: safe(entry.process), provider: safe(entry.provider), authority: safe(entry.authority),
-      ...(entry.live ? { live: { ...entry.live, target: nullable(entry.live.target), detail: nullable(entry.live.detail),
-        provider: nullable(entry.live.provider), model: nullable(entry.live.model) } } : {}) });
+    if (entry.kind === 'worker') {
+      const { sourceId, ...worker } = entry;
+      void sourceId; // The terminal's selection provenance stays local.
+      return Object.freeze({ ...worker, process: safe(worker.process), provider: safe(worker.provider), authority: safe(worker.authority),
+        ...(worker.live ? { live: { ...worker.live, target: nullable(worker.live.target), detail: nullable(worker.live.detail),
+          provider: nullable(worker.live.provider), model: nullable(worker.live.model) } } : {}) });
+    }
     return entry;
   });
   const published = input.publishedModelIds?.length

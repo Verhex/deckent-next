@@ -273,6 +273,92 @@ describe('fullscreen monitor', () => {
       await view.instance.waitUntilExit();
     } finally { view.instance.unmount(); }
   });
+  it('opens and retains only the selected Run detail when scope and Run IDs contain slashes', async () => {
+    const seed = fullSnapshot.installs[0]!;
+    const run = seed.runs.find(value => value.runId === 'run-broken')!;
+    const first = { ...run, scopeId: 's', runId: 'a/b', createdAtMs: OBSERVED_AT - 1 };
+    const second = { ...run, scopeId: 's/a', runId: 'b', createdAtMs: OBSERVED_AT - 2 };
+    const install = { ...seed, scopeIds: ['s', 's/a'], workers: [], approvals: [] };
+    let runs = [first, second];
+    const view = mount({ load: async () => ({ ...fullSnapshot, sourcesRead: [install.id], installs: [{ ...install, runs }] }) });
+    const firstDetail = 'Run a/b · scope s ·';
+    const secondDetail = 'Run b · scope s/a ·';
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press('2');
+      expect(view.stdout.frame).toMatch(/› │ a\/b\s/);
+      expect(view.stdout.frame).toMatch(/│ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(secondDetail);
+      await view.press(KEY.esc); await view.press(KEY.down);
+      expect(view.stdout.frame).toMatch(/› │ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(secondDetail);
+      expect(view.stdout.frame).not.toContain(firstDetail);
+
+      await view.press(KEY.esc);
+      runs = [{ ...first, runId: 'newer', createdAtMs: OBSERVED_AT }, first, second];
+      await view.press('r');
+      await until(() => view.stdout.frame.includes('newer'), 'new Run above the selection');
+      expect(view.stdout.frame).toMatch(/› │ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(secondDetail);
+
+      runs = [first];
+      await view.press('r');
+      const detailGone = t('monitor.live.detailGone', {}, 'en');
+      await until(() => view.stdout.frame.includes(detailGone), 'selected Run removed');
+      expect(view.stdout.frame).not.toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(secondDetail);
+
+      const third = { ...first, runId: 'third', createdAtMs: OBSERVED_AT - 3 };
+      const thirdDetail = 'Run third · scope s ·';
+      await view.press(KEY.esc);
+      runs = [first, second, third];
+      await view.press('r');
+      await until(() => view.stdout.frame.includes('third'), 'three Runs in the list');
+      await view.press('\u001b[H'); await view.press(KEY.down);
+      expect(view.stdout.frame).toMatch(/›[ +*]│ b\s/);
+      await view.press('/');
+      expect(view.stdout.frame).toMatch(/›[ +*]│ b\s/);
+      await view.press(KEY.enter);
+      expect.soft(view.stdout.frame).toMatch(/›[ +*]│ b\s/);
+      runs = [first, third];
+      await view.press('r');
+      await until(() => !/│ b\s/.test(view.stdout.frame), 'selected middle Run leaves the list');
+      await view.press(KEY.enter);
+      expect.soft(view.stdout.frame).not.toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(thirdDetail);
+      expect(view.stdout.frame).toContain(detailGone);
+      await view.press('\u001b[F'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(thirdDetail);
+      expect(view.stdout.frame).not.toContain(firstDetail);
+
+      await view.press(KEY.esc);
+      runs = [first, second, third];
+      await view.press('r');
+      await until(() => /│ b\s/.test(view.stdout.frame), 'middle Run returns');
+      await view.press('\u001b[H'); await view.press(KEY.down);
+      await view.press('/'); await view.press('!r:third'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toMatch(/›[ +*]│ b\s/);
+      await view.press(KEY.esc);
+      await view.press('/'); await view.press('r:third'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(detailGone);
+      await view.press(KEY.esc);
+      expect(view.stdout.frame).toMatch(/│ b\s/);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(detailGone);
+      expect(view.stdout.frame).not.toContain(firstDetail);
+      expect(view.stdout.frame).not.toContain(secondDetail);
+      expect(view.stdout.frame).not.toContain(thirdDetail);
+      await view.press(KEY.down); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(firstDetail);
+    } finally { view.instance.unmount(); }
+  });
+});
+
+describe('fullscreen monitor refresh and layout', () => {
   it('refreshes in place every interval, single-flight; r refreshes now; p pauses; a failure keeps the last snapshot with a warning', async () => {
     const builds = vi.mocked(surface.buildMonitorView); builds.mockClear();
     let calls = 0, fail = false, release: (() => void) | null = null;
@@ -322,6 +408,46 @@ describe('fullscreen monitor', () => {
     expect(widest(frame)).toBeLessThanOrEqual(120);
     await expect(`${frame}\n`).toMatchFileSnapshot('../../fixtures/monitor/frame-full-tr-120.txt');
   });
+});
+
+it('keeps open Map model detail through earlier row removal and insertion, and shows when the model leaves', async () => {
+  const install = fullSnapshot.installs[0]!, map = install.map!;
+  const front = map.models[0]!, after = map.models[2]!;
+  const selected = { ...map.models[1]!, scopeId: 'scope-a', billing: 'subscription' as const,
+    reference: { providerId: 'subscription', providerVersion: 1, modelId: 'model-alpha-1', modelVersion: 2 } };
+  const inserted = { ...front, modelId: 'new-model' };
+  const reason = t('model.invocable.subscription', {}, 'en');
+  let models = [front, selected, after], observedAt = OBSERVED_AT;
+  const view = mount({ load: async () => ({ ...fullSnapshot, observedAt, sourcesRead: [install.id], installs: [{ ...install, map: { ...map, models } }] }) });
+  const refresh = async (next: typeof models, time: string) => {
+    models = next;
+    observedAt += 1000;
+    await view.press('r');
+    await until(() => view.stdout.frame.includes(`snapshot 2026-10-02 ${time}Z`), `refreshed Map at ${time}`);
+  };
+  try {
+    await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+    await view.press('7');
+    for (let index = 0; index < map.config.length + map.registry.kinds.length + 1; index++) await view.press(KEY.down);
+    await view.press(KEY.enter);
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+
+    await refresh([selected, after], '09:30:01');
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+    expect(view.stdout.frame).not.toContain(after.modelId);
+
+    await refresh([inserted, selected, after], '09:30:02');
+    expect(view.stdout.frame).toContain(selected.modelId);
+    expect(view.stdout.frame).toContain(reason);
+    expect(view.stdout.frame).not.toContain(inserted.modelId);
+
+    await refresh([inserted, after], '09:30:03');
+    expect(view.stdout.frame).toContain(t('monitor.live.detailGone', {}, 'en'));
+    expect(view.stdout.frame).not.toContain(after.modelId);
+    expect(view.stdout.frame).not.toContain(reason);
+  } finally { view.instance.unmount(); }
 });
 
 describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () => {
@@ -412,20 +538,27 @@ describe('monitor finish/delivery/attempt diagnostics', () => {
     const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 200, ascii: false });
     expect(tr).toContain('operation: özet görme izniniz yok'); expect(tr).toContain('scope-dog kapsamının onayları gizli: görme izniniz yok');
     expect(surface.describeDiagnostic('output-denied', 'tr').text).toBe('denemenin çıktısı okunmadı: okuma izni yok');
+    expect(surface.describeDiagnostic('refusal-audit-loss', 'en')).toMatchObject({ note: false, text: 'a tool refusal could not be recorded in the audit log' });
+    expect(surface.describeDiagnostic('refusal-audit-loss', 'tr')).toMatchObject({ note: false, text: 'bir araç reddi denetim günlüğüne kaydedilemedi' });
     expect(surface.describeDiagnostic('attempt-files-unavailable:scope-a/run-x/build:EACCES', 'en').text).toBe('the files of attempt scope-a/run-x/build could not be read (EACCES)');
     expect(surface.describeDiagnostic('ledger-version-unsupported:99', 'en').text).toBe('the ledger is version 99, which this build cannot read');
   });
   it('Run detail: delivery state + commit, "no delivery recorded", unknown end, ≈ host-observed end, output-denied', async () => {
-    const view = mount({ load: async () => fullSnapshot });
+    const snapshot = structuredClone(fullSnapshot);
+    const broken = snapshot.installs.flatMap(install => install.runs).find(run => run.runId === 'run-broken')!;
+    Object.assign(broken.tasks[0]!.lastAttempt!, { diagnostics: ['refusal-audit-loss'] });
+    const view = mount({ load: async () => snapshot });
     try {
       await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
       await view.press('2'); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Run run-broken'); expect(view.stdout.frame).toContain('duration ≈ 15 min');
       expect(view.stdout.frame).toContain('Delivery/adoption: no integration, delivery or adoption recorded.');
       expect(view.stdout.frame).toContain('08:55:00Z → 09:05:00Z (≈ 10 min) · exit 1');
+      expect(view.stdout.frame).toContain('! a tool refusal could not be recorded in the audit log');
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Run run-broken-quiet'); expect(view.stdout.frame).toContain('duration unknown');
       expect(view.stdout.frame).toContain("! the attempt's output was not read: no permission to read it");
+      expect(view.stdout.frame).not.toContain('a tool refusal could not be recorded in the audit log');
       await view.press(KEY.esc);
       for (let i = 0; i < 10 && !/› │ run-done/.test(view.stdout.frame); i++) await view.press(KEY.down);
       await view.press(KEY.enter);
@@ -862,7 +995,9 @@ it.each(['en', 'tr'] as const)('only actionable approvals appear as waiting, whi
   const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, approvals }] };
   const view = surface.buildMonitorView(snapshot, locale, true);
   const rows = view.tabs.approvals.filter(block => block.kind === 'table').flatMap(block => block.rows);
-  expect(rows.map(row => row.key)).toEqual(['current:fresh']);
+  expect(rows.map(row => row.detail()[0]?.[0]?.text)).toEqual([
+    t('monitor.detail.approval', { id: 'fresh', scope: base.scopeId, kind: base.subjectKind, install: 'current' }, locale),
+  ]);
   expect(surface.renderMonitorText(snapshot, { locale, width: 160, ascii: true })).toContain(t('monitor.approval.expiredCount', { count: 2 }, locale));
   expect(snapshot.installs[0]!.approvals).toHaveLength(5);
 });

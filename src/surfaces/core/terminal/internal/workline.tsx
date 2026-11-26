@@ -21,7 +21,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, QueuedListOpeningContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
+import { CardCopyContext, Window, WindowDecideHintContext, WindowLayerIdContext, WindowOpeningContext, WindowNoteContext, QueuedListOpeningContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { turnRefusal } from './turn-refusal.js';
@@ -569,7 +569,7 @@ export function WorklineApp(props: WorklineProps) {
       // BeUser M-32 / NF-4, lead 2026-11-09: the Run card says where the worker starts (the last commit, or the current files in working-tree delivery); one card.
       const dirty = selectedIntent?.pending ? null : await dirtyLine();
       setDoRunning(true); setPlanning(true);
-      setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
+      setActiveDo({ commandId, title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
         let result = await plan(); if (!isRunIntentResult(result) && result.proposal.status === 'rejected' && result.proposal.reason && ErrorRegistry.has(result.proposal.reason)) throw ErrorRegistry.createError(result.proposal.reason!, { ...(result.reasonParams ? { params: result.reasonParams } : {}) }); // BeUser M-07: no worker can run it → as a refused /do
         if (result.run) completion.register(result.run);
@@ -577,9 +577,9 @@ export function WorklineApp(props: WorklineProps) {
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
         // L1c: a plan whose basis changed while its card was open (the person's mode) comes back with a fresh card; the person decides on that one.
         for (let cards = 0; cards < 3 && !isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval; cards++) {
-          const expiresAtMs = result.proposal.approval.expiresAt;
-          setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
-          await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, [...(props.doPlan.cardLines ?? props.doPlan.lines)(result), ...(dirty ? [dirty] : [])].join('\n'));
+          const { approvalId, expiresAt: expiresAtMs } = result.proposal.approval;
+          setActiveDo(current => current && { ...current, phase: 'waiting', approvalId, expiresAtMs });
+          await work.run('approvals', '', execution, approvalId, undefined, [...(props.doPlan.cardLines ?? props.doPlan.lines)(result), ...(dirty ? [dirty] : [])].join('\n'));
           if (execution.signal.aborted) return true;
           result = await plan();
           if (result.run) completion.register(result.run);
@@ -746,8 +746,10 @@ export function WorklineApp(props: WorklineProps) {
     taskActions.current.delete(execution.input.inputId);
     if (action && ledger && labels.work) {
       if (!await waitForOpening(`/${action.action}`, execution)) return;
-      try { await openTaskAction(action, panel, execution, ledger, labels.work,
-        runId => work.run('cancel', '', execution, undefined, runId)); }
+      try {
+        const feedback = await openTaskAction(action, panel, execution, ledger, labels.work, runId => work.run('cancel', '', execution, undefined, runId));
+        if (feedback) push([notice('warning', feedback)]);
+      }
       catch (error) { push([notice('error', errorText(error))]); }
       return;
     }
@@ -792,7 +794,7 @@ export function WorklineApp(props: WorklineProps) {
   // TERMINAL-SABIT slice 2: the strip is a view over this session's /do and completion records; its clock ticks at the inspection cadence.
   const activeLabels = labels.work?.activeWork, jobLabels = labels.work?.jobs;
   const stripTicking = activeDo !== null || deliveries.pending.length > 0 || completion.tracked.some(item => item.run.state.kind !== 'terminal');
-  const stripNow = useActiveWorkClock(stripTicking, pollMs, `${activeDo?.phase ?? ''}:${completion.tracked.length}:${deliveries.pending.length}`);
+  const stripNow = useActiveWorkClock(stripTicking, pollMs, `${activeDo?.commandId ?? ''}:${activeDo?.phase ?? ''}:${completion.tracked.length}:${deliveries.pending.length}`);
   const stripItems = activeLabels && jobLabels && labels.work ? activeWorkItems({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending, nowMs: stripNow,
     labels: activeLabels, jobs: jobLabels, duration: labels.work.workerLine }) : [];
   const focusStrip = useCallback((focused: boolean) => { stripFocus.current = focused; setStripFocused(focused); }, []);
@@ -856,6 +858,11 @@ export function WorklineApp(props: WorklineProps) {
     : copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
     waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
+  const firstWork = stripItems[0]?.target;
+  const doWindowId = firstWork?.kind === 'do' ? firstWork.windowId : undefined;
+  const doApprovalWindowId = activeDo?.phase === 'waiting' && !state.approval && presentation?.kind === 'approval' && presentation.approval.approvalId === activeDo.approvalId
+    ? doWindowId : undefined;
+  const doPlanningWindowId = activeDo?.phase === 'waiting' ? undefined : doWindowId;
   const windowsNode = <>
     {othersOpen ? <TimingWindowFrame trace={executionTiming.current} /> : null}
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
@@ -863,13 +870,15 @@ export function WorklineApp(props: WorklineProps) {
     {fullscreenMode ? null : liveNode}
     <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
     <QueuedListOpeningContext.Provider value={queuedListOpening.current && (presentation?.kind === 'job-picker' || presentation?.kind === 'runs-window' || presentation?.kind === 'approvals')}>
-    {work.region}
+    <WindowLayerIdContext.Provider value={doApprovalWindowId}>{work.region}</WindowLayerIdContext.Provider>
     </QueuedListOpeningContext.Provider>
-    {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
-      position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
+    {planning && props.doPlan ? <WindowLayerIdContext.Provider value={doPlanningWindowId}>
+      <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
+        position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} />
+    </WindowLayerIdContext.Provider> : null}
     </WindowOpeningContext.Provider>
-    {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-    {othersOpen || deliveryShown ? null : liveWin.element}
+    {/* A covering window takes the screen and keyboard without discarding the live window's selection. */}
+    {liveWin.renderWindow(othersOpen || deliveryShown)}
     {/* TESLIM-PENCERESI: the delivery window gives way to every card, picker and slash window and returns after it; it takes the live window's place. */}
     {deliveryShown ? deliveries.element : null}
     <QueuedListOpeningContext.Provider key={state.picker?.pickerHandle} value={queuedListOpening.current}>

@@ -1,18 +1,29 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inspectConfiguredWorkers } from '../../../src/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
-import { openConfiguredAttemptStore } from '../support/configured-open.js';
+import { openConfiguredArtifactStore, openConfiguredAttemptStore } from '../support/configured-open.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { clearConfigCache, productResourcePath, getConfigKnownSecrets, DeckentError, reportQueryError } from '#platform/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
-import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { clearConfigCache, createHmacIntegrity, productResourcePath, getConfigKnownSecrets, DeckentError, reportQueryError, SystemTrustedClock } from '#platform/index.js';
+import { DockerSupervisor, openSqliteAttemptStore } from '#adapters/index.js';
+import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { AuditApplication, DispatchApplication, MonitorSourceMemo, type ExecutionSupervisor, type WorkerActivity } from '#engine/index.js';
+import { inspectMonitor } from '#composition/index.js';
+import { main } from '#surfaces/index.js';
+import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
+// eslint-disable-next-line no-restricted-imports -- Exercise the private Attempt sampler while the Task binding is assembled separately.
+import { startConfiguredWorkerObservation } from '../../../src/composition/core/execution/internal/observation.js';
+// eslint-disable-next-line no-restricted-imports -- Fault the actual refusal writer without adding a public test port.
+import { createRefusalAudit } from '../../../src/composition/core/agent-turn/internal/refusal-audit.js';
+import { custodyPrincipal, custodyProfile, custodyProfiles } from '../support/custody.js';
+import { fixtureDockerRegistry, fixtureExecution } from '../support/execution-registry.js';
 const exec = promisify(execFile); const roots: string[] = []; const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture(delay: number) {
@@ -88,4 +99,119 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect((await f.inspect()).sources[0]?.workers[0]?.resources).toBeUndefined();
     await f.policy(false); await expect(f.inspect()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   }, 30000);
+});
+
+it.skipIf(process.platform !== 'linux')('projects an exact Attempt’s failed refusal append from heartbeat and final result, while the sidecars are in custody', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'dn-audit-loss-')); roots.push(project);
+  await mkdir(join(project, '.deckent'), { mode: 0o700 });
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') } }));
+  const options = { env: { HOME: join(project, 'home') } };
+  const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+  const sqlite = { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' } as const;
+  const store = await openSqliteAttemptStore(opened.path, sqlite, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+  cleanup.push(async () => store.close());
+  const { store: artifacts } = await openConfiguredArtifactStore(project, options);
+  const identity = { scopeId: 's', runId: 'r-audit', taskId: 't', attemptId: 'a-audit', layoutRevision: 'layout', generation: 1 };
+  const custody = join(project, 'attempt');
+  await mkdir(custody, { mode: 0o700 });
+  const request = { protocolVersion: 1, identity, workspace: join(custody, 'tree'), argv: ['fixture'] } as const;
+  const capacity = { executionSlots: 1, inFlightSlots: 1 }, graph = { schemaVersion: 2 as const, revision: 1,
+    tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
+    criterionDefinitions: [{ id: 'exit', version: 1, description: 'exit', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
+  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
+  const actor = { id: custodyPrincipal.id, issuer: custodyPrincipal.issuer, subject: custodyPrincipal.subject };
+  await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r-audit', layoutRevision: 'layout' },
+    graph, execution: fixtureExecution(graph), now: 1, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+  await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'r-audit', expectedRevision: 0, now: 2, identities: [identity] });
+  const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+  const policy = (output: boolean) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: output ? 'allow' : 'deny', restrictions: [], grants: [
+    { id: 'inspect', effect: 'allow', scopes: ['s'], principals, actions: ['inspect'], resource: { kind: 'scope', ids: ['s'] } },
+    ...(output ? [{ id: 'output', effect: 'allow', scopes: ['s'], principals, actions: ['read-output'], resource: { kind: 'attempt', ids: ['a-audit'] } }] : []),
+  ] }), { mode: 0o600 });
+  await policy(true);
+  const auditStore = await openSqliteAuditStore(opened.path, sqlite);
+  cleanup.push(async () => auditStore.close());
+  const integrity = createHmacIntegrity('fixture', Buffer.alloc(32, 7)), audit = new AuditApplication(auditStore, integrity);
+  const append = vi.spyOn(audit, 'record');
+  const db = new DatabaseSync(opened.path);
+  try { db.exec("CREATE TRIGGER refuse_fixture_append BEFORE INSERT ON audit_events WHEN NEW.kind='access-refusal-summary' BEGIN SELECT RAISE(ABORT,'fixture'); END"); }
+  finally { db.close(); }
+  const { scopeId, runId, taskId, attemptId, generation } = identity;
+  const writer = createRefusalAudit({ scopeId, attempt: { runId, taskId, attemptId, generation }, turnId: 'worker-turn', principal: principals[0]!,
+    installationId: null, companyId: 'fixture', clock: new SystemTrustedClock(), async write(record) { record(audit, integrity); } });
+  const lossCode = 'refusal-audit-loss';
+  let loss: WorkerActivity['refusalAuditLoss'], processState: 'running' | 'exited' = 'running';
+  const inspect = () => inspectConfiguredWorkers(project, { schemaVersion: 1, scopeId: 's' }, options);
+  const memo = new MonitorSourceMemo();
+  const monitor = () => inspectMonitor(project, options, { schemaVersion: 1 }, memo);
+  const monitorAttempt = (snapshot: Awaited<ReturnType<typeof monitor>>) => snapshot.installs[0]!.runs.find(run => run.runId === identity.runId)!.tasks[0]!.lastAttempt!;
+  const sidecar = (suffix: string) => join(custody, 'worker.' + suffix);
+  const effect = join(project, 'completed-effect');
+  const supervisor = {
+    async captureProfile() { return custodyProfile; },
+    async execute() {
+      await writeFile(effect, 'settled');
+      const before = audit.list('s', 0, 10);
+      writer.observe({ basis: 'agent-tool-policy', reason: 'AGENT_TOOL_POLICY_DENIED', role: 'tool', policyRevision: 'allow' });
+      const observed = await writer.flush();
+      expect(observed).toBe(lossCode); expect(audit.list('s', 0, 10)).toEqual(before);
+      expect(append.mock.results).toEqual([{ type: 'throw', value: expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }) }]);
+      if (observed) loss = observed;
+      await vi.waitFor(async () => expect((await inspect()).sources[0]!.workers[0]).toMatchObject({
+        identity, terminal: null, files: { heartbeat: { phase: 'running' }, result: { state: 'missing' }, refusalAuditLoss: lossCode }, diagnostics: expect.arrayContaining([lossCode]),
+      }));
+      const live = await monitor();
+      expect(monitorAttempt(live).diagnostics).toContain(lossCode);
+      expect(JSON.stringify(live.installs[0]!.workers)).not.toContain(lossCode);
+      processState = 'exited';
+      return { handle: 'fixture', result: { kind: 'exited', exitCode: 0 }, interrupted: false, outputCompleteness: 'complete', stdout: 'done', stderr: '' } as const;
+    },
+    async inspectActivity() { return { state: processState, handle: 'fixture' }; },
+    async observe() { throw new Error('unexpected reconciliation'); }, async cancel() { throw new Error('unexpected cancellation'); },
+    async recoverOutput() { throw new Error('unexpected recovery'); }, async release() { throw new Error('unexpected release'); },
+  } satisfies ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> };
+  const app = new DispatchApplication(store, supervisor, { async verify() { return custodyPrincipal; } }, { async authorize() {} }, 'fixture', artifacts);
+  const sample = (maxFileBytes: number) => startConfiguredWorkerObservation({
+    supervisor, app, store, request, backend: 'native-cli-worker', provider: 'codex', heartbeatMs: 15, maxFileBytes, stall: undefined, gateway: undefined, refusalAuditLoss: () => loss,
+  });
+  const observer = await sample(4096);
+  try { expect(await app.execute(request, undefined, observer.signal)).toMatchObject({ kind: 'terminal', record: { terminal: { exitCode: 0, interrupted: false } } }); }
+  finally { await observer.close(); }
+  const terminalOnly = JSON.parse(await readFile(sidecar('result'), 'utf8')) as WorkerActivity;
+  await rm(sidecar('hb'));
+  const output: string[] = [];
+  expect(await main(['workers', '--scope', 's', '--json'], { root: project, env: options.env, inspectWorkers: inspectConfiguredWorkers,
+    initialize() {}, stdout: { write(value: string) { output.push(value); } } })).toBe(0);
+  expect(JSON.parse(output.join('')).sources[0].workers[0]).toMatchObject({ identity, terminal: { exitCode: 0 },
+    files: { heartbeat: { state: 'missing' }, result: { state: 'available' }, refusalAuditLoss: lossCode }, diagnostics: expect.arrayContaining([lossCode]) });
+  const final = await monitor();
+  expect(monitorAttempt(final)).toMatchObject({ exitCode: 0, diagnostics: [lossCode] });
+  const surface = await loadMonitorSurface();
+  for (const [locale, message] of [['en', 'a tool refusal could not be recorded in the audit log'], ['tr', 'bir araç reddi denetim günlüğüne kaydedilemedi']] as const) {
+    const row = surface.buildMonitorView(final, locale, true).tabs.runs.flatMap(block => block.kind === 'table' ? block.rows : [])
+      .find(candidate => candidate.facets?.run === runId)!;
+    expect(row.detail().flat().map(span => span.text).join('\n')).toContain(message);
+  }
+  await policy(false);
+  expect((await inspect()).sources[0]!.workers[0]).toMatchObject({ identity, terminal: { exitCode: 0 }, files: null, diagnostics: ['output-denied'] });
+  expect(monitorAttempt(await monitor()).diagnostics).toEqual(['output-denied']);
+  await policy(true);
+  const { refusalAuditLoss, ...ordinary } = terminalOnly;
+  expect(refusalAuditLoss).toBe(lossCode);
+  const maxBytes = Buffer.byteLength(JSON.stringify(ordinary) + '\n');
+  await (await sample(maxBytes)).close();
+  for (const suffix of ['hb', 'result']) {
+    const bytes = await readFile(sidecar(suffix));
+    expect(bytes.length).toBe(maxBytes);
+    expect(JSON.parse(bytes.toString())).toEqual({ ...ordinary, observedAt: expect.any(Number) });
+  }
+  await (await sample(maxBytes + Buffer.byteLength(JSON.stringify(terminalOnly)) - Buffer.byteLength(JSON.stringify(ordinary)))).close();
+  expect((await inspect()).sources[0]!.workers[0]!.diagnostics).toContain(lossCode);
+  const settled = await store.loadBoundDispatch(identity);
+  for (const suffix of ['hb', 'log', 'result']) await rm(sidecar(suffix));
+  await rmdir(custody);
+  expect((await inspect()).sources[0]!.workers[0]!.diagnostics).not.toContain(lossCode);
+  expect(monitorAttempt(await monitor()).diagnostics ?? []).not.toContain(lossCode);
+  expect(await store.loadBoundDispatch(identity)).toEqual(settled);
+  expect(await readFile(effect, 'utf8')).toBe('settled');
 });

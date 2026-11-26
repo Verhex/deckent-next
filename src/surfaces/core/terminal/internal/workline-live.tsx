@@ -46,9 +46,14 @@ export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push,
     setOpening(cause); setFailure(null); latest.current = { ...latest.current, kind: next }; setKind(next);
   }, []);
   const live = work?.live;
-  const element = !live || !work || kind === null ? null : kind === 'monitor'
-    ? (failure ? <Window title={[span(live.monitorTitle)]} body={[{ spans: [span(failure, { role: 'error' })] }]} hints={live.monitorHints} position={positionLabel} onClose={close} /> : monitor ? <MonitorWindow render={monitor} labels={live} onClose={close} /> : null)
-    : <LiveWatchWindow data={{ workers, runs }} labels={{ live, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs }} position={positionLabel} statusText={status} statusLines={statusLines} onClose={close} onAction={onTaskAction} />;
+  const renderWindow = (covered: boolean) => {
+    if (!live || !work || kind === null) return null;
+    const element = kind === 'tasks'
+      ? <LiveWatchWindow data={{ workers, runs }} labels={{ live, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs }} position={positionLabel} statusText={status} statusLines={statusLines} onClose={close} onAction={onTaskAction} covered={covered} />
+      : failure ? covered ? null : <Window title={[span(live.monitorTitle)]} body={[{ spans: [span(failure, { role: 'error' })] }]} hints={live.monitorHints} position={positionLabel} onClose={close} />
+        : monitor ? <MonitorWindow render={monitor} labels={live} onClose={close} covered={covered} /> : null;
+    return <WindowOpeningContext.Provider value={opening}>{element}</WindowOpeningContext.Provider>;
+  };
   const isOpen = useCallback(() => latest.current.kind !== null, []);
-  return { show, openMonitor, close, isOpen, setRuns, element: <WindowOpeningContext.Provider value={opening}>{element}</WindowOpeningContext.Provider>, canOpenMonitor: Boolean(monitorWindow && live) };
+  return { show, openMonitor, close, isOpen, setRuns, renderWindow, canOpenMonitor: Boolean(monitorWindow && live) };
 }

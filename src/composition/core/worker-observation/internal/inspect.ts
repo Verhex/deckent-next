@@ -64,13 +64,15 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
                 const output = parseRetainedOutputEnvelope(bytes, entry.identity);
                 return output.completeness === 'unavailable' ? [] : nativeWorkerReservationDiagnostics(output);
               }).catch(() => []) : [];
-            let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
+            // Monitor selects Attempt content after this inventory walk.
+            let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity, walk === undefined)
               .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
             const evidence = await recall(JSON.stringify(['models', entry.identity, files?.usage ?? null]), async () => observeAttemptWorkerModels(await reader(),
               artifacts, entry.identity, files?.usage ?? null), value => value.usageEvidence !== 'unavailable'), model = evidence.model;
             return { ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
               patchRecorded: !!record.patch, dispatch: { containerId: record.containerId ?? null }, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [
                 ...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+                ...(files?.refusalAuditLoss ? [files.refusalAuditLoss] : []),
                 ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable']),
                 ...(retainedDiagnostics.length ? retainedDiagnostics : activityDiagnostic ? [activityDiagnostic] : [])] };
           } catch { return { ...basic, diagnostics: ['observation-unavailable'] }; }

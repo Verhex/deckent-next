@@ -3,11 +3,11 @@ import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import { type WorklineInkPalette, useWorklinePalette } from '#surfaces/core/terminal-kit-ink/index.js';
 import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
-import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
-import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
+import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorBlock, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
+import { clockText, durationText, MONITOR_TABS, tabLabel, type MonitorTab } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
-import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, signatures, SORT_CYCLE, type MonitorControls } from './controls.js';
+import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, rowMatches, signatures, SORT_CYCLE, type MonitorControls } from './controls.js';
 import { CHANGE_GLYPHS, legendLines } from './legend.js';
 
 export interface MonitorAppProps {
@@ -34,6 +34,8 @@ export interface MonitorAppProps {
 export interface MonitorBodyProps extends MonitorAppProps {
   /** Keys are read only while true (a window below the top layer must not react). Default true. */
   readonly active?: boolean;
+  /** The host hides the body and suspends observation while another window covers it. */
+  readonly covered?: boolean;
   /** `q` always closes; Esc closes only with `escapeCloses` and only when it has nothing to back out of first (help, detail, filter). */
   readonly onClose: () => void;
   readonly escapeCloses?: boolean;
@@ -57,6 +59,7 @@ function detailBody(row: MonitorRow | null, width: number, requestedOffset: numb
   return body;
 }
 interface Failure { readonly text: string; readonly at: number }
+const LOST_ROW = Symbol('lost monitor row');
 /** MON-CPU-FIX: the Config tab's read, one at a time; the view calls it only while that tab is shown (on entering it and with each heartbeat there). */
 function useConfigRead(load: MonitorAppProps['loadConfigView'], errorText: (error: unknown) => string, alive: { readonly current: boolean }) {
   const [view, setView] = useState<ConfigMonitorInspection | null>(null), [failure, setFailure] = useState<string | null>(null), inFlight = useRef(false);
@@ -76,13 +79,35 @@ function receive(snapshot: MonitorSnapshot, project: Received['project'], at: nu
   return { snapshot, view, project, at, signatures: current, marks: new Map() };
 }
 
+function useMonitorSelection(tabs: readonly (MonitorTab | 'config')[], tab: number, items: readonly MonitorFlatLine[], view: Received['view'] | null, configBlocks: readonly MonitorBlock[], filter: string) {
+  const [selection, setSelection] = useState<readonly (string | typeof LOST_ROW | null)[]>(tabs.map(() => null));
+  const selectedKey = selection[tab] ?? null;
+  const selected = selectedKey === null ? 0 : items.findIndex(item => item.row?.key === selectedKey);
+  const nextSelection = selection.map((key, index) => {
+    if (typeof key !== 'string') return key;
+    if (index === tab) return selected < 0 ? LOST_ROW : key;
+    const name = tabs[index];
+    if (!view || !name) return key;
+    const blocks = name === 'config' ? configBlocks : view.tabs[name];
+    const matches = (row: MonitorRow) => row.key === key && (!filter || rowMatches(row, filter));
+    return blocks.some(block => block.kind === 'table' ? block.rows.some(matches) : block.kind === 'card' && block.row && matches(block.row)) ? key : LOST_ROW;
+  });
+  if (nextSelection.some((key, index) => key !== selection[index])) setSelection(nextSelection);
+  const move = (delta: number) => {
+    const row = items[Math.max(0, Math.min(items.length - 1, selected + delta))]?.row;
+    if (row) setSelection(values => values.map((value, index) => index === tab ? row.key : value));
+  };
+  return { selected, move };
+}
+
 /**
  * The fullscreen monitor (MONITOR-SURFACE, htop/k9s class): a fixed header (installs, builds, snapshot age, filter), a tab bar, one scrollable
  * body and a key hint, refreshed in place every heartbeat. A failed refresh keeps the last good snapshot with a visible warning.
  * Keys: Tab/←→ or tab numbers, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
  */
-export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProps, 'active' | 'onClose' | 'escapeCloses' | 'minRows'>>) {
+export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProps, 'active' | 'covered' | 'onClose' | 'escapeCloses' | 'minRows'>>) {
   const { load, intervalMs, locale, ascii, palette, filters, errorText } = props, verbose = props.verbose ?? false;
+  const covered = props.covered ?? false, active = !covered && (props.active ?? true);
   // Fullscreen: `q` leaves the program. A host window passes its own `onClose` (see MonitorBody).
   const { exit } = useApp(), onClose = props.onClose ?? exit;
   const now = props.now ?? Date.now;
@@ -96,7 +121,6 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [generation, setGeneration] = useState(0);
   const [paused, setPaused] = useState(false);
   const [tab, setTab] = useState(0);
-  const [selection, setSelection] = useState<readonly number[]>(tabs.map(() => 0));
   const [detail, setDetail] = useState<string | null>(null);
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
@@ -121,26 +145,28 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
   }, [errorText, load, now, project, readConfig]);
-  useEffect(() => { alive.current = true; if (!props.initial) void refresh(); return () => { alive.current = false; }; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => { if (!covered && !props.initial && !paused) void refresh(); }, [covered]);
   // One read timer at a time: re-armed only after a read settled (generation) and never while paused.
   useEffect(() => {
-    if (paused) return undefined;
+    if (paused || covered) return undefined;
     const handle = setTimeout(() => { void refresh(); }, intervalMs);
     return () => clearTimeout(handle);
-  }, [generation, intervalMs, paused, refresh]);
+  }, [covered, generation, intervalMs, paused, refresh]);
   // The age indicator ticks once per interval even when reads hang or are paused (no per-second churn).
-  useEffect(() => { const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [intervalMs, now]);
+  useEffect(() => { if (covered) return undefined; const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [covered, intervalMs, now]);
 
   const view = useMemo(() => received ? received.project === project ? received.view : project(received.snapshot) : null, [project, received]);
   const current = tabs[tab]!;
-  useEffect(() => { configShown.current = current === 'config'; if (configShown.current) void readConfig(); }, [current, readConfig]);
-  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
+  useEffect(() => { configShown.current = !covered && current === 'config'; if (configShown.current) void readConfig(); }, [covered, current, readConfig]);
+  const configBlocks = useMemo(() => configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : [], [configView, locale, configAll]);
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configBlocks : configFailure
     ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
     : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configBlocks, configFailure, configView, controls, current, locale, received, view]);
   const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
-  const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
+  const { selected, move } = useMonitorSelection(tabs, tab, items, view, configBlocks, controls.filter);
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
   // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
@@ -154,25 +180,25 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const lastRead = received ? clockText(received.at).slice(11) : '—';
   const sortWord = (key: 'age' | 'state' | 'name') => key === 'age' ? t('monitor.sort.age', {}, locale) : key === 'state' ? t('monitor.sort.state', {}, locale) : t('monitor.sort.name', {}, locale);
   const status: MonitorLine = editing ? [span(`/${controls.filter}${ascii ? '_' : '▏'}`, 'accent'), span(`  ${t('monitor.filter.hint', {}, locale)}`, 'muted')]
-    : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
+    : detail === null && selected < 0 ? [span(t('monitor.live.detailGone', {}, locale), 'warning')]
+      : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
       : paused ? [span(t('monitor.live.paused', {}, locale), 'warning')]
         : [span(t('monitor.live.every', { every: durationText(intervalMs, locale), time: snapshot ? clockText(snapshot.observedAt) : '—' }, locale), 'muted'),
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),
           ...(controls.group ? [span(`  ${controls.group === 'install' ? t('monitor.group.install', {}, locale) : t('monitor.group.state', {}, locale)}`, 'muted')] : [])];
   const bodyHeight = Math.max(1, height - shownHeader.length - 4);
-  const move = (delta: number) => setSelection(values => values.map((value, index) => index === tab ? Math.max(0, Math.min(items.length - 1, selected + delta)) : value));
   const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); setDetailOffset(0); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
   const pointer = ascii ? '>' : '›';
 
   useInput((input, key) => {
+    if (!active) return;
     if (editing) {
       // The filter line owns the keys while it is open: Enter keeps the filter, Esc clears it, Backspace edits; the filter applies as typed.
       if (key.return) setEditing(false);
       else if (key.escape) { setEditing(false); setControls(value => ({ ...value, filter: '' })); }
       else if (key.backspace || key.delete) setControls(value => ({ ...value, filter: value.filter.slice(0, -1) }));
       else if (input && !key.ctrl && !key.meta && !key.tab) setControls(value => ({ ...value, filter: value.filter + input }));
-      setSelection(tabs.map(() => 0));
       return;
     }
     if (input === 'q') { onClose(); return; }
@@ -181,7 +207,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
     if (input === 'r') { memo.current = null; void refresh(); return; }
-    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
+    if (input === 'p') { setPaused(value => !value); return; }
+    if (input === 'a' && current === 'config') { setConfigAll(value => !value); return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }
@@ -198,8 +225,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (key.upArrow) move(-1); else if (key.downArrow) move(1);
     else if (key.pageUp) move(-bodyHeight); else if (key.pageDown) move(bodyHeight);
     else if (key.home) move(-items.length); else if (key.end) move(items.length);
-    else if (key.return) { const row = items[selected]?.row; if (row) { setDetail(row.key); setDetailOffset(0); } }
-  }, { isActive: props.active ?? true });
+    else if (key.return) { const row = items[selected]?.row; if (row) { move(0); setDetail(row.key); setDetailOffset(0); } }
+  }, { isActive: active });
 
   let body: MonitorLine[];
   if (help) body = legendLines(locale, ascii, tabs);

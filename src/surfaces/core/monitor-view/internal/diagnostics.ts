@@ -76,6 +76,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsigned', {}, locale),
     'catalog-evolution-registry-unavailable': () => t('agentsevo.monitor.registry', {}, locale),
     'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
+    'refusal-audit-loss': () => t('monitor.diagnostic.refusalAuditLoss', {}, locale),
     'mcp-item-reservation': () => t('headless.agent.toolItemStopped', {}, locale),
     // f4: the Brain quota wait store (host state): a failed read, waits in scopes the viewer may not read (a count, never a scope), more than the bound.
     'brain-waits-unavailable': () => t('brainwait.monitor.unavailable', { detail: detail ? ` (${detail})` : '' }, locale),

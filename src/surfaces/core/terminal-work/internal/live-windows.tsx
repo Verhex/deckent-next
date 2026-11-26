@@ -2,8 +2,8 @@ import type { RunView } from '#engine/index.js';
 import type { JobWindowLabels } from './job-windows.js';
 import { runViewToLedgerEntry, LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { useState, type ReactElement } from 'react';
-import { Text, useWindowSize } from 'ink';
-import { shortId } from '#platform/index.js';
+import { Box, Text, useWindowSize } from 'ink';
+import { resolveLocale, shortId, t } from '#platform/index.js';
 import { span, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import { SpanText } from '#surfaces/core/terminal-render-ink/index.js';
 import { Window, WINDOW_RESERVED_ROWS, useWindowReserve, type WindowLine } from '#surfaces/core/terminal-window/index.js';
@@ -36,7 +36,7 @@ export interface LiveWindowLabels {
 }
 
 /** The monitor body is rendered by the host that owns it; this unit never imports the monitor (T3 L5, split step 7). */
-export interface LiveWindowView { readonly active: boolean; readonly onClose: () => void; readonly size: { readonly columns: number; readonly rows: number } }
+export interface LiveWindowView { readonly active: boolean; readonly covered?: boolean; readonly onClose: () => void; readonly size: { readonly columns: number; readonly rows: number } }
 export type MonitorWindowRender = (view: LiveWindowView) => ReactElement;
 export type MonitorWindowLoader = () => Promise<MonitorWindowRender>;
 
@@ -105,21 +105,27 @@ export function liveWindowClosedText(data: LiveWindowData, labels: LiveWindowLab
 
 /** Frame rows around a window body (two borders, title row, hint row) and the border/padding columns: the same numbers `Window` lays out with. */
 const FRAME_ROWS = 4, FRAME_COLUMNS = 4, MONITOR_MIN_ROWS = 6, FALLBACK_COLUMNS = 80, FALLBACK_ROWS = 24;
+const LOST_TARGET = Symbol('lost task window target');
 
 /**
  * The `/tasks` window updates in place and takes the keys: Up/Down select a worker or Run, Enter opens its transcript, x its existing
  * cancellation approval; Esc closes it and stops the watch.
  */
-export function LiveWatchWindow({ data, labels, position, statusText, statusLines, onClose, onAction }: {
+export function LiveWatchWindow({ data, labels, position, statusText, statusLines, onClose, onAction, covered }: {
   readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly statusText?: string | undefined; readonly statusLines?: readonly string[] | undefined; readonly onClose: () => void;
   readonly onAction?: ((action: TaskWindowAction) => void) | undefined;
+  readonly covered?: boolean;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | typeof LOST_TARGET | null>(null);
   const targets = [...data.workers, ...data.runs];
   const keyOf = (target: TaskWindowAction['target']) => target.kind === 'run' ? `run:${target.scopeId}:${target.runId}`
-    : `worker:${target.scopeId}:${target.taskId}:${JSON.stringify(target.attempt ?? target.provider)}`;
-  const selected = Math.max(0, targets.findIndex(target => keyOf(target) === selectedId));
+    : target.attempt ? `worker:${JSON.stringify([target.scopeId, target.taskId, target.sourceId ?? null, target.attempt])}`
+      : `worker-observation:${JSON.stringify([target.scopeId, target.taskId, target.provider, target.sourceId ?? null])}`;
+  const selected = selectedId === null ? 0 : targets.findIndex(target => keyOf(target) === selectedId);
+  if (selected < 0 && selectedId !== LOST_TARGET) setSelectedId(LOST_TARGET);
+  if (covered) return null;
   const notes = (statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] }));
+  if (selected < 0) notes.unshift({ spans: [span(t('terminal.live.selectionGone', {}, resolveLocale(labels.jobs?.locale ?? labels.workerLine.numberLocale)), { role: 'warning' })] });
   const taskRows = targets.map((target, index) => ({ spans: [span(`${index === selected ? '>' : ' '} `),
     ...(target.kind === 'worker' ? workerLines([target], labels, 1)[0]!.spans : runLines([target], labels, 1)[0]!.spans)] }));
   const taskBody = [{ spans: [span(labels.panel.title, { bold: true })] }, ...taskRows.slice(0, data.workers.length),
@@ -128,14 +134,19 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
     body={[...notes, ...(targets.length ? taskBody : liveWindowLines('tasks', data, labels))]}
     footerRows={1} footer={() => <Text wrap="truncate-end"><SpanText spans={[span(liveWindowStatus(data, labels), { role: 'muted' })]} /></Text>}
     hints={labels.live.tasksHints ?? labels.live.hints} position={position} onClose={onClose}
-    reveal={notes.length + selected + (selected >= data.workers.length ? 3 : 1)} onInput={(input, key) => {
+    reveal={selected < 0 ? 0 : notes.length + selected + (selected >= data.workers.length ? 3 : 1)} onInput={(input, key) => {
       if (key.ctrl || key.meta || key.shift) return false;
       if ((key.upArrow || key.downArrow) && targets.length) {
-        const next = (selected + (key.upArrow ? -1 : 1) + targets.length) % targets.length;
+        const next = key.upArrow ? (Math.max(0, selected) + targets.length - 1) % targets.length : (selected + 1) % targets.length;
         setSelectedId(keyOf(targets[next]!)); return true;
       }
-      if ((key.return || input === 'x') && targets[selected]) {
-        onAction?.({ action: key.return ? 'transcript' : 'cancel', target: targets[selected]! }); return true;
+      if (key.return || input === 'x') {
+        const target = targets[selected];
+        if (target) {
+          setSelectedId(keyOf(target));
+          onAction?.({ action: key.return ? 'transcript' : 'cancel', target });
+        }
+        return true;
       }
       return false;
     }} />;
@@ -145,10 +156,13 @@ export function LiveWatchWindow({ data, labels, position, statusText, statusLine
  * The monitor in a window: the frame is the window's, the body is the monitor's own view (tabs, selection, filter, details) given the
  * rows and columns left on the terminal. The body reads keys only while this window is on top; `q` and Esc (when it has nothing to back out of) close it.
  */
-export function MonitorWindow({ render, labels, onClose }: { readonly render: MonitorWindowRender; readonly labels: LiveWindowLabels; readonly onClose: () => void }) {
+export function MonitorWindow({ render, labels, onClose, covered = false }: { readonly render: MonitorWindowRender; readonly labels: LiveWindowLabels;
+  readonly onClose: () => void; readonly covered?: boolean }) {
   const size = useWindowSize(), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS, width = Math.max(1, columns - FRAME_COLUMNS);
   const rows = Math.max(reserve === undefined ? MONITOR_MIN_ROWS : 1, terminalRows - reserved - FRAME_ROWS - (wrapCells(labels.monitorHints, width).length - 1));
-  return <Window title={[span(labels.monitorTitle)]} hints={labels.monitorHints} position="" footerRows={rows} onClose={onClose}
-    footer={focused => render({ active: focused, onClose, size: { columns: width, rows } })} />;
+  return <Box display={covered ? 'none' : 'flex'} flexDirection="column" flexShrink={0}>
+    <Window title={[span(labels.monitorTitle)]} hints={labels.monitorHints} position="" footerRows={rows} onClose={onClose} interactive={!covered}
+      footer={focused => render({ active: focused && !covered, covered, onClose, size: { columns: width, rows } })} />
+  </Box>;
 }

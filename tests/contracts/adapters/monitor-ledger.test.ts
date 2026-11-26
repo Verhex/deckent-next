@@ -120,14 +120,21 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   it('v1.1: furthest proven delivery step per Run, evaluation model record and profile provider, model catalog (ledger records only)', async () => {
     const f = await fixture(); f.store.close();
     const writer = new DatabaseSync(f.path); const c1 = 'a'.repeat(40), c2 = 'b'.repeat(40);
-    const intent = (runId: string, extra: object) => JSON.stringify({ schemaVersion: 1, command: { identity: { runId } }, ...extra });
-    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i1', intent('r1', {}), '{}');
-    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i3', intent('r3', {}), null);
-    writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'd1', intent('r1', { plan: { commit: c1 } }), 1);
-    writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent('r1', { toCommit: c2 }), 0);
-    writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run('s', 'eval-model', JSON.stringify({ action: 'apply-task-evaluation',
-      evaluation: { identity: { attemptId: 'r3-x' }, model: { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
-        verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
+    const a = identity('s', 'r1', 'a'), x = identity('s', 'r3', 'x');
+    const intent = (producer: AttemptIdentity, extra: object) => JSON.stringify({ schemaVersion: 1, command: { identity: producer }, ...extra });
+    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i1', intent(a, {}), '{}');
+    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i3', intent(x, {}), null);
+    writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'd1', intent(a, { plan: { commit: c1 } }), 1);
+    writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent(a, { toCommit: c2 }), 0);
+    const receipt = writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)');
+    const model = { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
+      verdict: 'verified', unexpected: [], evidence: 'sealed' };
+    writer.prepare(`UPDATE run_receipts SET command=json_set(command,'$.evaluation.identity',json(?),'$.evaluation.model',json(?))
+      WHERE scope_id=? AND command_id=?`).run(JSON.stringify(x), JSON.stringify(model), 's', 'evaluate-x');
+    for (const [scopeId, attempt, label] of [['s', { attemptId: a.attemptId }, 'incomplete'], ['s2', a, 'wrong-scope']] as const) {
+      receipt.run(scopeId, `eval-${label}`, JSON.stringify({ action: 'apply-task-evaluation', evaluation: { identity: attempt, model } }), '{}');
+      receipt.run(scopeId, `reserve-${label}`, JSON.stringify({ action: 'reserve-run-tasks', now: 9000, identities: [attempt] }), '{}');
+    }
     writer.close();
     const reading = await read(f.path); const runs = Object.fromEntries(reading.runs.map(run => [run.snapshot.identity.runId, run]));
     expect(runs.r1!.delivery).toMatchObject({ state: 'adopting', commit: c2, commandId: 'a1', receipts: [{ state: 'integrated', commandId: 'i1' }, { state: 'delivered', commandId: 'd1' }, { state: 'adopting', commandId: 'a1' }] });
@@ -135,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const exact = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 1, run: { scopeId: 's', runId: 'r1' } });
     expect(exact.runs.map(run => run.snapshot.identity.runId)).toEqual(['r1']);
     expect(runs.r3!.attempts[0]).toMatchObject({ provider: 'claude', model: { usage: ['m-1'], verdict: 'verified', evidence: 'sealed' } });
-    expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null });
+    expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null, reservedAtMs: 2000 });
     expect(reading.map).toMatchObject({ models: [] });
   });
   it('keeps mixed delivery receipts in ledger order with exact scope/Run identity, nulls and frozen results', async () => {
@@ -143,19 +150,22 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     await f.store.createRun({ commandId: 'create-s2-r1', actor, identity: { scopeId: 's2', runId: 'r1', layoutRevision: 'layout' },
       graph: g, execution: fixtureExecution(g), now: 7000, policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 3 }, ordering: ['only'] } });
     f.store.close(); const writer = new DatabaseSync(f.path), commit = 'c'.repeat(40);
-    const intent = (runId: string, extra: object) => JSON.stringify({ command: { identity: { runId } }, ...extra });
+    const a = identity('s', 'r1', 'a'), other = identity('s2', 'r1', 'only'), x = identity('s', 'r3', 'x');
+    const intent = (producer: AttemptIdentity, extra: object) => JSON.stringify({ command: { identity: producer }, ...extra });
     const integration = writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)');
-    integration.run('s', 'i-pending', intent('r1', {}), null); integration.run('s2', 'i-other-scope', intent('r1', {}), '{}');
-    integration.run('s', 'i-finished', intent('r1', {}), '{}'); integration.run('s', 'i-other-run', intent('r3', {}), null);
+    integration.run('s', 'i-pending', intent(a, {}), null); integration.run('s2', 'i-other-scope', intent(other, {}), '{}');
+    integration.run('s', 'i-finished', intent(a, {}), '{}'); integration.run('s', 'i-other-run', intent(x, {}), null);
     const delivery = writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)');
-    delivery.run('s', 'd-pending', intent('r1', { plan: { commit: 'invalid', ref: 7 } }), 0);
-    delivery.run('s', 'd-finished', intent('r1', { plan: { commit, ref: 'refs/heads/delivery' } }), 1);
+    delivery.run('s', 'd-pending', intent(a, { plan: { commit: 'invalid', ref: 7 } }), 0);
+    delivery.run('s', 'd-finished', intent(a, { plan: { commit, ref: 'refs/heads/delivery' } }), 1);
+    delivery.run('s', 'd-mismatched-scope', intent(other, {}), 1);
+    delivery.run('s', 'd-incomplete-producer', JSON.stringify({ command: { identity: { runId: 'r1' } } }), 1);
     const adoption = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)');
     // Insertion order differs from the per-target sequence; later rollback is not delivery success.
-    adoption.run('s', 'rollback-pending', 'refs/heads/main', 4, 'rollback', intent('r1', { toCommit: null, targetRef: 'refs/heads/main' }), 0);
-    adoption.run('s2', 'adopt-other-scope', 'refs/heads/other', 3, 'adopt', intent('r1', { toCommit: commit, targetRef: 'refs/heads/other' }), 1);
-    adoption.run('s', 'rollback-finished', 'refs/heads/main', 2, 'rollback', intent('r1', { toCommit: commit }), 1);
-    adoption.run('s', 'adopt-pending', 'refs/heads/main', 1, 'adopt', intent('r1', { toCommit: commit, targetRef: 'refs/heads/main' }), 0);
+    adoption.run('s', 'rollback-pending', 'refs/heads/main', 4, 'rollback', intent(a, { toCommit: null, targetRef: 'refs/heads/main' }), 0);
+    adoption.run('s2', 'adopt-other-scope', 'refs/heads/other', 3, 'adopt', intent(other, { toCommit: commit, targetRef: 'refs/heads/other' }), 1);
+    adoption.run('s', 'rollback-finished', 'refs/heads/main', 2, 'rollback', intent(a, { toCommit: commit }), 1);
+    adoption.run('s', 'adopt-pending', 'refs/heads/main', 1, 'adopt', intent(a, { toCommit: commit, targetRef: 'refs/heads/main' }), 0);
     writer.close(); const before = await files(f.path), reading = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10 });
     expect((await files(f.path))[0]).toEqual(before[0]);
     const find = (scopeId: string, runId: string) => reading.runs.find(run => run.snapshot.identity.scopeId === scopeId && run.snapshot.identity.runId === runId)!.delivery!;
@@ -182,7 +192,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   it('retains a large single-Run receipt history and isolates earlier readings from later ledger receipts', async () => {
     const f = await fixture(); f.store.close(); const writer = new DatabaseSync(f.path), count = 4096, commit = 'd'.repeat(40);
     const insert = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,repository,target_ref,sequence,kind,intent,settled) VALUES(?,?,\'pre-v58\',?,?,?,?,?)');
-    const intent = JSON.stringify({ command: { identity: { runId: 'r1' } }, toCommit: commit, targetRef: 'refs/heads/main' });
+    const intent = JSON.stringify({ command: { identity: identity('s', 'r1', 'a') }, toCommit: commit, targetRef: 'refs/heads/main' });
     writer.exec('BEGIN');
     for (let sequence = count; sequence > 0; sequence--) insert.run('s', `adopt-${sequence}`, 'refs/heads/main', sequence, 'adopt', intent, 1);
     writer.exec('COMMIT'); writer.close();

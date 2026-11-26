@@ -19,11 +19,11 @@ import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { loadConfig, clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
-import { readMonitorRunResults, FileArtifactStore } from '#adapters/index.js';
+import { prepareMonitorInstall, readMonitorRunResults, FileArtifactStore } from '#adapters/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { patchExclusions, patchFile } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
-import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { custodyPrincipal, custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 // MONITOR-DATA: the one composed monitor snapshot over real project ledgers (current + a configured next-project source).
 beforeEach(context => {
@@ -90,9 +90,11 @@ describe('inspectMonitor composition', () => {
   it('lists never-dispatched Runs of every admitted scope across installs, read-only, without a running service', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s', 's2', 'hidden'], ['s', 's2']), other = await project(root, 'other', ['s'], ['s']);
-    const gone = join(root, 'gone');
+    const gone = join(root, 'gone'), legacy = join(root, 'legacy');
+    await mkdir(legacy, { mode: 0o700 });
+    await writeFile(join(legacy, 'task-t.hb'), '{}');
     current.config.inspection.workers.sources = [{ id: 'dogfood', kind: 'next-project', path: other.dir, scopeId: 's' },
-      { id: 'legacy', kind: 'legacy-tasks', path: join(root, 'legacy'), scopeId: 's' }, { id: 'gone', kind: 'next-project', path: gone, scopeId: 's' }];
+      { id: 'legacy', kind: 'legacy-tasks', path: legacy, scopeId: 's' }, { id: 'gone', kind: 'next-project', path: gone, scopeId: 's' }];
     await writeFile(current.configPath, JSON.stringify(current.config)); clearConfigCache();
     const before = [await files(current.ledger), await files(other.ledger)];
     const snapshot = await inspectMonitor(current.dir, current.options);
@@ -100,6 +102,14 @@ describe('inspectMonitor composition', () => {
     await expect(stat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
     const [mine, dogfood, missing] = snapshot.installs;
+    if (process.platform === 'linux') {
+      const report = await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's', source: 'legacy' }, current.options);
+      expect(report.sources[0]?.workers).toMatchObject([{ taskId: 't', identity: null, authority: 'legacy-activity' }]);
+    }
+    for (const [install, runId] of [[mine, 'current-s'], [dogfood, 'other-s']] as const)
+      expect(install!.workers).toMatchObject([{ taskId: 't', authority: 'next-ledger', identity: {
+        scopeId: 's', runId, taskId: 't', attemptId: runId + '-t', generation: 1, layoutRevision: 'layout',
+      } }]);
     expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: process.platform === 'linux' ? 'stopped' : 'unknown', build: null } });
     expect(mine!.diagnostics).toContain('scopes-denied:1'); expect(JSON.stringify(mine)).not.toMatch(/hidden(?!Pools)/);
     if (process.platform !== 'linux') expect(mine!.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_UNSUPPORTED');
@@ -256,32 +266,166 @@ describe('inspectMonitor content authorization (security)', () => {
     const shown = await project(root, 'shown', ['s'], ['s'], ['approvals']); await insert(shown.ledger);
     expect((await inspectMonitor(shown.dir, shown.options)).installs[0]!.approvals).toMatchObject([{ approvalId: 'ap-1', summary: 'confidential approval text' }]);
   });
-  it('a finished attempt without a sealed log ends at its host-observed exit (sidecar), read only under read-output', async () => {
+  it('reads the selected Attempt’s host-observed exit and refusal audit loss only under exact read-output', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
-    const run = async (name: string, extra: readonly ('output' | 'approvals' | 'runs')[], resultAttempt = 'verify-t') => {
+    const loss = 'refusal-audit-loss';
+    const run = async (name: string, extra: readonly ('output' | 'approvals' | 'runs')[], mismatch: { attemptId?: string; generation?: number } = {}) => {
       const current = await project(root, name, ['s'], ['s'], extra);
       const attemptDir = join(root, name + '-attempt'); await mkdir(attemptDir, { mode: 0o700 }); await chmod(attemptDir, 0o700);
       const identity = { scopeId: 's', runId: 'r-verify', taskId: 't', attemptId: 'verify-t', layoutRevision: 'layout', generation: 1 };
+      const workspace = join(attemptDir, 'tree'), terminal = { handle: 'h', exitCode: 1, interrupted: false };
       await writeFile(join(attemptDir, 'worker.log'), [JSON.stringify({ schemaVersion: 1, sequence: 1, observedAt: 30_900, process: 'running', terminal: null, outputRecorded: false }),
-        JSON.stringify({ schemaVersion: 1, sequence: 2, observedAt: 498_000, process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, outputRecorded: true })].join('\n') + '\n', { mode: 0o600 });
-      await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity: { ...identity, attemptId: resultAttempt }, backend: 'docker', provider: 'docker', terminal: { handle: 'h', exitCode: 0, interrupted: false } }), { mode: 0o600 });
+        JSON.stringify({ schemaVersion: 1, sequence: 2, observedAt: 498_000, process: 'exited', terminal, outputRecorded: false })].join('\n') + '\n', { mode: 0o600 });
+      await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity: { ...identity, ...mismatch },
+        backend: 'native-cli-worker', provider: 'codex', workspace, process: 'exited', handle: 'h', observedAt: 498_000,
+        terminal, outputRecorded: false, refusalAuditLoss: loss }), { mode: 0o600 });
       const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
       try {
         await store.createRun({ commandId: 'create-r-verify', actor, identity: { scopeId: 's', runId: 'r-verify', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
           now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
         await store.reserveRunTasks({ commandId: 'reserve-r-verify', actor, scopeId: 's', runId: 'r-verify', expectedRevision: 0, now: 20_800, identities: [identity] });
-        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(attemptDir, 'tree'), argv: ['x'] } };
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace, argv: ['x'] } };
         await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_800);
-        await store.finishDispatch(claim, { handle: 'h', exitCode: 0, interrupted: false });
+        await store.finishDispatch(claim, terminal);
       } finally { store.close(); }
-      return (await inspectMonitor(current.dir, current.options)).installs[0]!.runs.find(value => value.runId === 'r-verify')!.tasks[0]!.lastAttempt!;
+      if (name === 'granted') {
+        const readOutput = vi.fn(async () => true);
+        const captured = await prepareMonitorInstall(await loadConfig(current.dir, current.options), current.options.env, readOutput);
+        expect(JSON.stringify(captured.reading)).not.toContain(loss);
+        const summary = await captured.readShown([], [identity]);
+        expect(readOutput).toHaveBeenCalledExactlyOnceWith(identity);
+        expect(JSON.stringify(summary)).not.toContain(loss);
+        expect(summary.runs.find(row => row.snapshot.identity.runId === identity.runId)!.attempts[0]!.firstFailure).toBeNull();
+      }
+      const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+      expect(install.workers.find(worker => worker.identity?.attemptId === identity.attemptId)?.diagnostics).toContain('info:ledger-only');
+      expect(JSON.stringify(install.workers)).not.toContain(loss);
+      return install.runs.find(value => value.runId === 'r-verify')!.tasks[0]!.lastAttempt!;
     };
-    expect(await run('granted', ['output'])).toMatchObject({ startedAtMs: 30_800,
+    const granted = await run('granted', ['output']);
+    expect(granted).toMatchObject({ startedAtMs: 30_800,
       endedAtMs: process.platform === 'linux' ? 498_000 : null, endedAtSource: process.platform === 'linux' ? 'observed' : null });
+    if (process.platform === 'linux') expect(granted.diagnostics).toEqual([loss]);
+    else expect(granted.diagnostics ?? []).not.toContain(loss);
     // macOS has no /proc/self/fd custody: the same sidecar cannot prove a host-observed end there.
     expect(await run('denied', [])).toMatchObject({ endedAtMs: null, endedAtSource: null, diagnostics: ['output-denied'] });
     // Sidecars bound to another attempt prove nothing about this one.
-    expect(await run('mismatch', ['output'], 'other-attempt')).toMatchObject({ endedAtMs: null, endedAtSource: null });
+    for (const [name, mismatch] of [['wrong-attempt', { attemptId: 'other-attempt' }], ['wrong-generation', { generation: 2 }]] as const) {
+      const hidden = await run(name, ['output'], mismatch);
+      expect(hidden).toMatchObject({ endedAtMs: null, endedAtSource: null });
+      expect(hidden.diagnostics ?? []).not.toContain(loss);
+    }
+  });
+
+  it.skipIf(process.platform !== 'linux')('binds selected Monitor content to each full Attempt identity when the old keys collide', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const loss = 'refusal-audit-loss';
+    const first = { scopeId: 's', runId: 'a/b', taskId: 't', attemptId: 'a/a', layoutRevision: 'layout', generation: 1 };
+    const second = { ...first, scopeId: 's/a', runId: 'b', attemptId: 'a' };
+    const scopes = [first.scopeId, second.scopeId];
+    const current = await project(root, 'collision', scopes, scopes, ['output', 'runs']);
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+    try {
+      for (const [identity, name, createdAt, reservedAt, grantedAt, observedAt, refusalAuditLoss] of [
+        [first, 'first', 10_800, 20_800, 30_800, 40_000, loss], [second, 'second', 11_800, 21_800, 31_800, 50_000, undefined],
+      ] as const) {
+        const { scopeId, runId, layoutRevision } = identity;
+        const attemptDir = join(root, name), workspace = join(attemptDir, 'tree');
+        await mkdir(attemptDir, { mode: 0o700 });
+        const terminal = { handle: 'h', exitCode: 1, interrupted: false };
+        await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity,
+          backend: 'native-cli-worker', provider: 'codex', workspace, process: 'exited', handle: 'h', observedAt,
+          terminal, outputRecorded: false, refusalAuditLoss }), { mode: 0o600 });
+        await writeFile(join(attemptDir, 'worker.log'), JSON.stringify({ sequence: 1, observedAt, process: 'exited', terminal }) + '\n', { mode: 0o600 });
+        await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision }, graph, execution: fixtureExecution(graph),
+          now: createdAt, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: reservedAt, identities: [identity] });
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace, argv: ['x'] } };
+        await store.claimDispatch(dispatchAdmission(claim));
+        await store.grantLaunch({ claim, principal: { ...custodyPrincipal, scopeIds: [scopeId] }, now: grantedAt });
+        const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported',
+          report: { schemaVersion: 1, summary: name + ' report', changedFiles: [name + '.txt'], checks: [], openIssues: [] } };
+        await store.retainDispatchOutput(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({
+          schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '',
+        }))));
+        await store.finishDispatch(claim, terminal);
+        await store.retainDispatchPatch(claim, await artifacts.put(scopeId, Buffer.from(JSON.stringify({
+          schemaVersion: 1, kind: 'workspace-patch', identity,
+          source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) },
+          baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions,
+          changes: [{ path: name + '.txt', before: null, after: patchFile(Buffer.from(name), '100644') }],
+        }))));
+        await store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId, runId,
+          source: { schemaVersion: 1, adapter: { id: 'git', version: name === 'first' ? 2 : 1 }, sourceFingerprint: 'a'.repeat(64) }, baseRevision: 'b'.repeat(40) });
+      }
+    } finally { store.close(); }
+
+    const config = await loadConfig(current.dir, current.options);
+    const permitFirst = vi.fn(async (identity: typeof first) => identity.scopeId === first.scopeId);
+    const captured = await prepareMonitorInstall(config, current.options.env, permitFirst);
+    const selected = await captured.readShown([first]);
+    const attempt = (reading: typeof selected, identity: typeof first) => {
+      const run = reading.runs.find(({ snapshot }) => snapshot.identity.scopeId === identity.scopeId && snapshot.identity.runId === identity.runId)!;
+      expect(run.snapshot.bindings[0]?.identity).toEqual(identity);
+      expect(run.attempts[0]?.attemptId).toBe(identity.attemptId);
+      return run.attempts[0]!;
+    };
+    expect(permitFirst).toHaveBeenCalledExactlyOnceWith(first);
+    expect(attempt(selected, first)).toMatchObject({ diagnostics: [loss], observedEndAtMs: 40_000 });
+    expect.soft(attempt(selected, second).diagnostics ?? []).not.toContain(loss);
+    expect.soft(attempt(selected, second).observedEndAtMs).toBeUndefined();
+
+    const permitBoth = vi.fn(async () => true);
+    const both = await (await prepareMonitorInstall(config, current.options.env, permitBoth)).readShown([first, second]);
+    expect(permitBoth).toHaveBeenCalledTimes(2);
+    expect(permitBoth).toHaveBeenCalledWith(first);
+    expect(permitBoth).toHaveBeenCalledWith(second);
+    expect.soft(attempt(both, first)).toMatchObject({ diagnostics: [loss], observedEndAtMs: 40_000 });
+    expect.soft(attempt(both, second).diagnostics ?? []).not.toContain(loss);
+    expect.soft(attempt(both, second).observedEndAtMs).toBe(50_000);
+    expect.soft(attempt(both, first).reservedAtMs).toBe(20_800);
+    expect.soft(attempt(both, second).reservedAtMs).toBe(21_800);
+
+    const firstDelivery = { schemaVersion: 2, application: 'working-tree', commandId: 'deliver-first', state: 'delivered', commit: '1'.repeat(40), targetRef: 'refs/heads/first' };
+    const secondDelivery = { schemaVersion: 2, application: 'reference-only', commandId: 'deliver-second', state: 'delivered', commit: '2'.repeat(40), targetRef: 'refs/heads/second' };
+    const writer = new DatabaseSync(current.ledger);
+    try {
+      const insert = writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,1)');
+      for (const [identity, delivery] of [[first, firstDelivery], [second, secondDelivery]] as const) {
+        insert.run(identity.scopeId, delivery.commandId, JSON.stringify({ command: { identity }, plan: { commit: delivery.commit, ref: delivery.targetRef } }));
+      }
+    } finally { writer.close(); }
+
+    const policyPath = productResourcePath(current.layout, 'policy');
+    const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; scopes: string[] }[] };
+    for (const bothAllowed of [false, true]) {
+      await writeFile(policyPath, JSON.stringify({ ...policy, revision: bothAllowed ? 'both' : 'first-only',
+        grants: policy.grants.map(grant => grant.id === 'output' ? { ...grant, scopes: bothAllowed ? scopes : [first.scopeId] } : grant) }));
+      const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+      const worker = (identity: typeof first) => install.workers.find(row => row.identity?.scopeId === identity.scopeId && row.identity.runId === identity.runId);
+      const run = (identity: typeof first) => install.runs.find(row => row.scopeId === identity.scopeId && row.runId === identity.runId);
+      const lastAttempt = (identity: typeof first) => run(identity)?.tasks[0]?.lastAttempt;
+      const ownFirst = { ...firstDelivery, receipts: [firstDelivery] };
+      const ownSecond = bothAllowed ? { ...secondDelivery, receipts: [secondDelivery] } : null;
+      expect.soft(run(first)).toMatchObject({ createdAtMs: 10_800, delivery: ownFirst });
+      expect.soft(run(second)).toMatchObject({ createdAtMs: 11_800, delivery: ownSecond });
+      expect.soft(worker(first)?.human?.resultBrief?.runDelivery).toEqual(ownFirst);
+      expect.soft(worker(second)?.human?.resultBrief?.runDelivery).toEqual(ownSecond);
+      expect.soft(worker(second)).toMatchObject({ identity: second, human: { startedAtMs: 31_800, endedAtMs: bothAllowed ? 50_000 : null,
+        endedAtSource: bothAllowed ? 'observed' : null,
+        patch: bothAllowed ? { state: 'recorded', files: ['second.txt'] } : { state: 'denied', files: [] },
+        finalReport: bothAllowed ? { status: 'reported', report: { summary: 'second report' } } : null } });
+      expect.soft(worker(first)).toMatchObject({ identity: first, human: { startedAtMs: 30_800, endedAtMs: 40_000, endedAtSource: 'observed',
+        patch: { state: 'recorded', files: ['first.txt'] }, finalReport: { status: 'reported', report: { summary: 'first report' } } } });
+      expect.soft(worker(first)?.diagnostics).toEqual(['info:ledger-only']);
+      expect.soft(worker(second)?.diagnostics).toEqual(bothAllowed ? ['info:ledger-only'] : ['info:ledger-only', 'output-denied']);
+      expect.soft(lastAttempt(first)).toMatchObject({ endedAtMs: 40_000, diagnostics: [loss] });
+      expect.soft(lastAttempt(second)?.endedAtMs).toBe(bothAllowed ? 50_000 : null);
+      expect.soft(lastAttempt(second)?.diagnostics ?? []).toEqual(bothAllowed ? [] : ['output-denied']);
+      const collidedWorkers = install.workers.filter(row => row.identity?.runId === first.runId || row.identity?.runId === second.runId);
+      expect.soft(collidedWorkers.map(row => row.identity)).toEqual([second, first]);
+    }
   });
 });
 

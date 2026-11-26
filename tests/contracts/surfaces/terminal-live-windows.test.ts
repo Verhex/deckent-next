@@ -2,19 +2,20 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
-import { createElement } from 'react';
-import { render } from 'ink';
+import { createElement, Fragment } from 'react';
+import { Box, render } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { shortId, clearConfigCache } from '#platform/index.js';
+import { shortId, clearConfigCache, t } from '#platform/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindowStatus, LIVE_WINDOW_MAX_ROWS, type LiveWindowRenderLabels } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal/index.js';
+import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
 import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
-import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { plainText, resolveRenderGlyphs, RenderGlyphsContext } from '#surfaces/core/terminal-render-ink/index.js';
+import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
+import { Window, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { plainText, resolveRenderGlyphs, RenderGlyphsContext, span } from '#surfaces/core/terminal-render-ink/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
@@ -112,7 +113,7 @@ describe('live windows in the workline', () => {
     }
   });
 
-  it('/tasks Enter opens the selected transcript and x uses the refreshed run cancellation approval; opening a card never cancels', async () => {
+  it('/tasks opens the selected transcript and confirms refreshed Run cancellation within the selected project', async () => {
     const attempt = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-0', attemptId: 'attempt-a' };
     const cancelled: unknown[][] = [], transcripts: unknown[] = [];
     let revision = 3, ready!: () => void;
@@ -135,12 +136,259 @@ describe('live windows in the workline', () => {
     await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks after denial');
     view.stdin.write('x'); await until(() => view.stdout.frame.includes('C-PROMPT'), 'cancel approval again'); view.stdin.write('y');
     await until(() => cancelled.length === 1, 'approved cancellation'); expect(cancelled).toEqual([['run-a', 9]]);
+
+    for (const instance of mounted.splice(0)) instance.unmount();
+
+    // A foreign row must retain its project identity even when its Attempt matches a local one.
+    {
+      const attempt = { scopeId: 'scope-a', runId: 'run-a', taskId: 'task-0', attemptId: 'attempt-a', generation: 1, layoutRevision: 'layout-a' };
+      const inspectTranscript = vi.fn(async () => 'ACTIVE-PROJECT-TRANSCRIPT'), cancelRun = vi.fn(async () => 'CANCELLED');
+      const source = (id: string, path: string, provider: string) => ({
+        id, path, kind: 'next-project' as const, status: 'available' as const, truncated: false, nextAfter: null,
+        workers: [{ taskId: attempt.taskId, identity: attempt, process: 'running' as const, provider, authority: 'next-ledger' as const,
+          workspace: null, handle: null, terminal: null, outputRecorded: false, patchRecorded: false, files: null, diagnostics: [] }],
+      });
+      const active = source('current', '/project-a', 'local-worker'), other = source('project-b', '/project-b', 'observed-worker');
+      let sources = [{ ...active, workers: [] }, other];
+      const ledger: WorklineLedgerPorts = { scopeId: attempt.scopeId,
+        listWorkers: async () => ({ schemaVersion: 1, observedAt: 1, scopeId: attempt.scopeId, sources, control: 'observe-only' }),
+        listRunIds: async () => [attempt.runId], inspectRun: async () => ({ runId: attempt.runId, scopeId: attempt.scopeId,
+          revision: 3, cancellationRequested: false, tasks: [{ id: attempt.taskId, phase: 'active' }], state: { kind: 'running' } }) as never,
+        inspectTranscript, cancelRun,
+      };
+      const view = mountWorkline({ pollMs: 20, ledger, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, unavailable: EN.unavailable } } });
+      mounted.push(view.instance);
+      await until(() => view.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && view.stdin.listenerCount('readable') > 0, 'English composer ready for input');
+      view.stdin.write('/tasks\r');
+      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'observed worker and the active Run');
+      view.stdin.write('\u001b[B');
+      await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run highlighted');
+      for (const workers of [1, 0]) {
+        if (workers === 0) sources = [{ ...active, workers: [] }];
+        await until(() => view.stdout.frame.includes(`${workers} workers · 1 runs`), 'Run without a local worker');
+        view.stdin.write('\r');
+        await until(() => view.stdout.frame.includes(EN.jobs!.transcriptTitle), 'Run transcript window without a local worker');
+        expect.soft(view.stdout.frame).toContain('No local worker record for this Run. If the work runs in another project, open that project.');
+        expect.soft(view.stdout.frame).not.toContain(EN.unavailable);
+        expect(inspectTranscript).not.toHaveBeenCalled();
+        view.stdin.write(ESC);
+        await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back to tasks after the unavailable transcript');
+      }
+      sources = [{ ...active, workers: [] }, other];
+      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'other project worker returns');
+      view.stdin.write('\u001b[A');
+      await until(() => />[^\n]*Task 1 · observed-worker/u.test(view.stdout.frame), 'other project worker explicitly selected');
+
+      const cancelRefusal = "Cancellation can't start from this worker row. Select the Run's row.";
+      view.stdin.write('x');
+      await until(() => view.stdout.text.includes(cancelRefusal) || view.stdout.frame.includes('C-PROMPT'), 'foreign worker cancellation response');
+      expect.soft(view.stdout.text).toContain(cancelRefusal);
+      expect(t('terminal.live.workerCancelUnavailable', {}, 'tr')).toBe('Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.');
+      expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+      expect(view.stdout.text).not.toContain('C-PROMPT');
+      expect(cancelRun).not.toHaveBeenCalled();
+
+      const beforeForeignEnter = view.stdout.text.length;
+      const transcriptRefusal = "This worker belongs to another project. Its transcript can't be opened here.";
+      view.stdin.write('\r');
+      await until(() => view.stdout.text.slice(beforeForeignEnter).includes(transcriptRefusal) || view.stdout.frame.includes(EN.jobs!.transcriptTitle), 'foreign worker transcript response');
+      expect.soft(inspectTranscript).not.toHaveBeenCalled();
+      expect.soft(view.stdout.text).toContain(transcriptRefusal);
+      expect(t('terminal.live.workerTranscriptUnavailable', {}, 'tr')).toBe('Bu işçi başka bir projeye ait. İşçi kaydı burada açılamaz.');
+      expect(view.stdout.frame).toContain(EN.live!.tasksHints!);
+      expect.soft(view.stdout.frame).not.toContain(EN.jobs!.transcriptTitle);
+      expect(view.stdout.text.slice(beforeForeignEnter)).not.toContain(EN.jobs!.transcriptTitle);
+      inspectTranscript.mockClear();
+
+      sources = [active, other];
+      await until(() => view.stdout.frame.includes('2 workers · 1 runs'), 'the same Attempt from both projects');
+      expect.soft(view.stdout.frame).toMatch(/>[^\n]*Task 2 · observed-worker/u);
+      sources = [active];
+      await until(() => view.stdout.frame.includes('1 workers · 1 runs'), 'the observed project disappears');
+      expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
+      const beforeLostInput = view.stdout.text.length;
+      view.stdin.write('\r');
+      await until(() => view.stdin.readableLength === 0, 'Enter consumed with no selection');
+      view.stdin.write('x');
+      await until(() => view.stdin.readableLength === 0, 'x consumed with no selection');
+      // The next selection proves the same key flow progressed past both lost-target actions.
+      view.stdin.write('\u001b[B');
+      await until(() => />[^\n]*local-worker/u.test(view.stdout.frame)
+        || view.stdout.frame.includes(EN.jobs!.transcriptTitle) || view.stdout.frame.includes('C-PROMPT'), 'selection after lost-target input');
+      const lostInputOutput = view.stdout.text.slice(beforeLostInput);
+      expect.soft(inspectTranscript).not.toHaveBeenCalled();
+      expect.soft(lostInputOutput).not.toContain(EN.jobs!.transcriptTitle);
+      expect.soft(lostInputOutput).not.toContain('C-PROMPT');
+      expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+      expect(cancelRun).not.toHaveBeenCalled();
+
+      inspectTranscript.mockClear();
+      expect(view.stdout.frame).toMatch(/>[^\n]*local-worker/u);
+      view.stdin.write('\r');
+      await until(() => view.stdout.frame.includes('ACTIVE-PROJECT-TRANSCRIPT'), 'active worker transcript');
+      expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempt);
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'back to tasks after the active transcript');
+      view.stdin.write('x');
+      await until(() => view.stdout.frame.includes('C-PROMPT'), 'active Run cancellation confirmation');
+      expect(cancelRun).not.toHaveBeenCalled();
+      view.stdin.write('y');
+      await until(() => cancelRun.mock.calls.length === 1, 'active Run cancelled after confirmation');
+      expect(cancelRun).toHaveBeenCalledExactlyOnceWith(attempt.runId, 3);
+
+      sources = [active, other];
+      await until(() => view.stdout.frame.includes('2 workers · 1 runs') && view.stdout.frame.includes(EN.live!.tasksHints!), 'both projects after the local confirmation');
+      inspectTranscript.mockClear();
+      view.stdin.write('\u001b[A');
+      await until(() => />[^\n]*run-a/u.test(view.stdout.frame), 'active Run row explicitly selected');
+      view.stdin.write('\r');
+      await until(() => view.stdout.frame.includes('ACTIVE-PROJECT-TRANSCRIPT'), 'Run transcript uses its own worker with both sources present');
+      expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempt);
+      expect(cancelRun).toHaveBeenCalledExactlyOnceWith(attempt.runId, 3);
+      inspectTranscript.mockClear();
+      for (const instance of mounted.splice(0)) instance.unmount();
+
+      // The visible Run may outlast its local worker between a snapshot read and Enter.
+      const snapshot = withSurfaceSnapshot({ ...ledger, async *followEvents(signal) {
+        yield { control: 'start', scopeId: attempt.scopeId, cursors: { approval: 0, run: 0, worker: 0 } };
+        await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
+      } }, async () => ({ binding: 'test-session', kinds: ['approval', 'run', 'worker'] }));
+      const tr = mountWorkline({ pollMs: 20, ledger: snapshot, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live, unavailable: TR.unavailable } } });
+      mounted.push(tr.instance);
+      await until(() => tr.stdout.frame.includes(WORKLINE_TEST_LABELS.statusReady) && tr.stdin.listenerCount('readable') > 0, 'Turkish composer ready for input');
+      tr.stdin.write('/tasks\r');
+      await until(() => tr.stdout.frame.includes('2 işçi · 1 iş'), 'both project sources through the Turkish snapshot');
+      tr.stdin.write('\u001b[B');
+      await until(() => />[^\n]*observed-worker/u.test(tr.stdout.frame), 'other project worker selected in Turkish');
+      tr.stdin.write('\u001b[B');
+      await until(() => />[^\n]*run-a/u.test(tr.stdout.frame), 'active Run highlighted in Turkish');
+      expect(inspectTranscript).not.toHaveBeenCalled();
+      sources = [{ ...active, workers: [] }, other];
+      tr.stdin.write('\r');
+      await until(() => /^│\s*İşçi kaydı(?:\s|│)/mu.test(tr.stdout.frame), 'Turkish Run transcript window after the local worker disappears');
+      expect.soft(tr.stdout.frame).toContain('Bu iş için bu projede işçi kaydı yok. İş başka bir projede çalışıyorsa o projeyi açın.');
+      expect.soft(tr.stdout.frame).not.toContain(TR.unavailable);
+      expect(inspectTranscript).not.toHaveBeenCalled();
+    }
   });
 
   it('refuses /tasks without a ledger and opens no window', async () => {
     const view = mountWorkline({}); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.text.includes('NO-LEDGER') || view.stdout.text.includes('UNWIRED'), 'refused');
     expect(view.stdout.frame).not.toContain(EN.live!.tasksTitle);
+  });
+
+  it('/tasks leaves Enter and x without a target when the selected worker disappears', async () => {
+    const attempts = ['a', 'b', 'c'].map(id => ({ scopeId: 'scope-a', runId: `run-${id}`, taskId: `task-${id}`, attemptId: `attempt-${id}` }));
+    let visible = attempts, legacy = false, legacySources = ['legacy-a'];
+    const inspectTranscript = vi.fn(async () => 'NEIGHBOUR-TRANSCRIPT'), cancelRun = vi.fn(async () => 'CANCELLED');
+    const ledger: WorklineLedgerPorts = { scopeId: 'scope-a',
+      listWorkers: async () => ({ scopeId: 'scope-a', sources: (legacy ? legacySources : ['current']).map(id => ({ id, workers: visible.map(identity =>
+        ({ taskId: identity.taskId, process: id === 'legacy-b' ? 'present-unverified' : 'running',
+          provider: legacy ? 'unknown' : 'docker', authority: legacy ? 'legacy-activity' : 'next-ledger', identity: legacy ? null : identity })) })) }) as never,
+      listRunIds: async () => attempts.map(item => item.runId), inspectRun: async runId =>
+        ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ id: 'task-c', phase: 'active' }], state: { kind: 'running' } }) as never,
+      inspectTranscript, cancelRun,
+    };
+    const view = mountWorkline({ pollMs: 20, ledger }); mounted.push(view.instance);
+    await settle(20); view.stdin.write('/tasks\r');
+    await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial live list');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT'), 'transcript of the initial selection');
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempts[0]);
+    view.stdin.write(ESC);
+    await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'return to the live list');
+    visible = [attempts[1]!, attempts[2]!];
+    await until(() => view.stdout.frame.includes('2 workers · 3 runs'), 'initially acted-on worker leaves');
+    expect.soft(view.stdout.frame).toContain('Selected item is no longer in the task list.');
+    visible = attempts;
+    await until(() => view.stdout.frame.includes('3 workers · 3 runs'), 'initial worker returns');
+    view.stdin.write('\u001b[A');
+    await until(() => />[^\n]*run-c/u.test(view.stdout.frame), 'cursor wraps to last Run');
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 1/u.test(view.stdout.frame), 'first worker explicitly reselected');
+    inspectTranscript.mockClear();
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 2/u.test(view.stdout.frame), 'middle worker selected');
+    visible = [attempts[0]!, attempts[2]!];
+    await until(() => view.stdout.frame.includes('2 workers · 3 runs'), 'selected worker leaves');
+    view.stdin.write('\r'); await settle(80);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    if (view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT')) {
+      view.stdin.write(ESC);
+      await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'tasks window after unexpected transcript');
+    }
+    view.stdin.write('x'); await settle(80);
+    expect.soft(view.stdout.frame).not.toContain('C-PROMPT');
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(view.stdout.frame).toContain('Selected item is no longer in the task list.');
+    view.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 1/u.test(view.stdout.frame), 'explicit new worker selection');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('NEIGHBOUR-TRANSCRIPT'), 'newly selected transcript');
+    expect(inspectTranscript).toHaveBeenCalledExactlyOnceWith(attempts[0]);
+    view.stdin.write(ESC);
+    await until(() => view.stdout.frame.includes(EN.live!.tasksHints!), 'return to the live list again');
+    legacy = true; visible = [attempts[2]!];
+    legacySources = ['legacy-a', 'legacy-b'];
+    const legacyView = mountWorkline({ pollMs: 20, ledger }); mounted.push(legacyView.instance);
+    await settle(20); legacyView.stdin.write('/tasks\r');
+    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs') && />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'first of two legacy observations selected');
+    legacyView.stdin.write('\u001b[B'); await settle(80);
+    expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 2 · unknown · present-unverified/u);
+    legacySources = ['legacy-b', 'legacy-a'];
+    await until(() => /Task 1 · unknown · present-unverified/u.test(legacyView.stdout.frame), 'legacy sources reordered');
+    expect.soft(legacyView.stdout.frame).toMatch(/>[^\n]*Task 1 · unknown · present-unverified/u);
+    legacySources = ['legacy-a'];
+    await until(() => legacyView.stdout.frame.includes('1 workers · 3 runs'), 'selected legacy source disappears');
+    expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
+    inspectTranscript.mockClear();
+    legacyView.stdin.write('x'); await settle(80);
+    expect.soft(legacyView.stdout.text).not.toContain("Cancellation can't start from this worker row.");
+    expect.soft(legacyView.stdout.frame).not.toContain('C-PROMPT');
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    expect.soft(cancelRun).not.toHaveBeenCalled();
+    legacyView.stdin.write('\r'); await settle(80);
+    expect.soft(legacyView.stdout.frame).not.toContain(EN.jobs!.transcriptTitle);
+    expect.soft(inspectTranscript).not.toHaveBeenCalled();
+    if (legacyView.stdout.frame.includes(EN.jobs!.transcriptTitle)) {
+      legacyView.stdin.write(ESC);
+      await until(() => legacyView.stdout.frame.includes(EN.live!.tasksHints!), 'return from unexpected unavailable window');
+    }
+    legacySources = ['legacy-a', 'legacy-b'];
+    await until(() => legacyView.stdout.frame.includes('2 workers · 3 runs'), 'both observation sources are back');
+    expect.soft(legacyView.stdout.frame).toContain('Selected item is no longer in the task list.');
+    legacyView.stdin.write('\u001b[B');
+    await until(() => />[^\n]*Task 1 · unknown/u.test(legacyView.stdout.frame), 'legacy worker explicitly selected');
+    const tr = mountWorkline({ pollMs: 20, ledger, labels: { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, jobs: TR.jobs, live: TR.live } } });
+    mounted.push(tr.instance);
+    await settle(20); tr.stdin.write('/tasks\r');
+    await until(() => />[^\n]*Task 1/u.test(tr.stdout.frame), 'Turkish session shows the worker');
+    for (const [screen, work, feedback] of [
+      [legacyView, EN, "Cancellation can't start from this worker row. Select the Run's row."],
+      [tr, TR, 'Bu işçi satırından iptal başlatılamaz. İşin kendi satırını seçin.'],
+    ] as const) {
+      screen.stdin.write('\r');
+      await until(() => screen.stdout.frame.includes(WORKLINE_TEST_LABELS.work!.unavailable) && screen.stdout.frame.includes(work.jobs!.transcriptTitle), 'transcript unavailable for a worker without an Attempt');
+      expect(inspectTranscript).not.toHaveBeenCalled();
+      screen.stdin.write(ESC);
+      await until(() => screen.stdout.frame.includes(work.live!.tasksHints!), 'return from unavailable transcript');
+      screen.stdin.write('x');
+      await settle(100);
+      expect.soft(screen.stdout.text).toContain(feedback);
+      expect(screen.stdout.frame).toContain(work.live!.tasksHints!);
+      expect(screen.stdout.frame).not.toContain('C-PROMPT');
+      expect(cancelRun).not.toHaveBeenCalled();
+      screen.stdin.write('\u001b[B');
+      await until(() => />[^\n]*Task 2 · unknown/u.test(screen.stdout.frame), 'second legacy source selected explicitly');
+      screen.stdin.write('\u001b[B');
+      await until(() => />[^\n]*run-a/u.test(screen.stdout.frame), 'Run row selected explicitly');
+      screen.stdin.write('x');
+      await until(() => screen.stdout.frame.includes('C-PROMPT'), 'Run cancellation approval still opens');
+      expect(cancelRun).not.toHaveBeenCalled();
+      screen.stdin.write('n');
+      await until(() => screen.stdout.text.includes('C-KEPT run-a'), 'Run kept after denial');
+    }
   });
 });
 
@@ -217,16 +465,27 @@ describe('/monitor window', () => {
     view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ deckent system · Monitor closed'), 'summary');
   });
 
-  it('an inactive monitor body ignores keys (a window below the top layer must not react)', async () => {
+  it('an inactive or covered monitor body ignores keys and retains the selected Run', async () => {
     const surface = await loadMonitorSurface(), closed = vi.fn();
     const stdout = new Screen(100, 30), stdin = keyboard();
-    const body = (active: boolean) => createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(surface.MonitorBody, {
-      load: async () => fullSnapshot, initial: fullSnapshot, intervalMs: 60_000, locale: 'en', ascii: false, palette: resolveWorklinePalette('none'), errorText: String,
-      active, onClose: closed, escapeCloses: true, minRows: 6, size: { columns: 96, rows: 12 } }) });
+    const body = (active: boolean, covered = false) => createElement(Fragment, null,
+      createElement(Box, { display: covered ? 'none' : 'flex' }, createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(surface.MonitorBody, {
+        load: async () => fullSnapshot, initial: fullSnapshot, intervalMs: 60_000, locale: 'en', ascii: false, palette: resolveWorklinePalette('none'), errorText: String,
+        active, covered, onClose: closed, escapeCloses: true, minRows: 6, size: { columns: 96, rows: 24 } }) })),
+      covered ? createElement(Window, { title: [span('COVERING-WINDOW')], hints: '', position: '', onInput: () => true }) : null);
     const instance = render(body(false), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
     mountedStandalone.push(instance);
     await settle(60); stdin.write('q'); stdin.write(ESC); await settle(80); expect(closed).not.toHaveBeenCalled();
-    instance.rerender(body(true)); await settle(60); closed.mockClear(); stdin.write('q'); await settle(60); expect(closed).toHaveBeenCalled();
+    instance.rerender(body(true)); await settle(60); closed.mockClear();
+    stdin.write('2'); await until(() => stdout.frame.includes('[2 Runs]'), 'Runs tab');
+    stdin.write('\u001b[B]'); await until(() => /›[ +*]│ run-broken-quiet\s/u.test(stdout.frame), 'second Run selected');
+    instance.rerender(body(true, true));
+    await until(() => stdout.frame.includes('COVERING-WINDOW'), 'cover visible');
+    expect(stdout.frame).not.toContain('[2 Runs]');
+    stdin.write('1'); stdin.write('q'); await settle(60); expect(closed).not.toHaveBeenCalled();
+    instance.rerender(body(true));
+    await until(() => /›[ +*]│ run-broken-quiet\s/u.test(stdout.frame), 'selection survives the cover');
+    stdin.write('q'); await settle(60); expect(closed).toHaveBeenCalled();
   });
 
   it('fits a short terminal: the window never exceeds the rows it was given', async () => {
