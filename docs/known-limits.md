@@ -1006,9 +1006,11 @@ in the policy file, as in every other audit record; do not put private text in r
   shared backup is also refused if the current registration is v3. An uninstall begun on beta.2.1 with its last step pending
   keeps its hold. A crash between the registration and identity writes can leave the installation unusable on beta.2 until
   beta.2.1 returns; a half-reconciled attached folder refuses with `PROJECT_ATTACHMENT_DENIED`. Re-running
-  `deckent init policy --scope <id> --apply` in an attached folder is refused with `INSTALLATION_PUBLICATION_CONFLICT` (exit 78)
-  on beta.2 and on beta.2.1 alike; the attached folder's route is `deckent terminal attach`, which is itself refused on a target
-  whose disk number was repaired. Going further back to beta.1.2 makes every invocation recorded
+  `deckent init policy --scope <id> --apply` in an attached folder whose first publication completed with a valid
+  shared-registration configuration is refused with `INSTALLATION_PUBLICATION_CONFLICT` (exit 78) on beta.2 and on beta.2.1 alike;
+  an interrupted publication can report another error. The attached folder's route is `deckent terminal attach`; applying the
+  attachment can also be refused on a target whose disk number was repaired, even where its preview succeeds.
+  Going further back to beta.1.2 makes every invocation recorded
   with plan-usage v2 fail on read with `MODEL_INVOCATION_CORRUPT`, whole audit pages with the new subjects fail with
   `AUDIT_INTEGRITY`, and worker transcripts containing `cli.observation` fail as a whole. Never prune the new audit records.
 

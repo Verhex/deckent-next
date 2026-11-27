@@ -536,7 +536,7 @@
   "error.INSTALLATION_RECOVERY_CHANGED": "Installation recovery material differs from the validated preparation.",
   "error.INSTALLATION_PUBLICATION_INVALID": "Explicit installation choices or recovery input are missing or invalid.",
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Installation conflicts with existing resources or another recorded transaction.",
-  "error.INSTALLATION_PUBLICATION_CONFLICT.attachedFolder": "This folder is attached to a registered installation, so its first-run policy is not installed again. For an attached folder, use `deckent terminal attach` instead; it can also be refused, for example after the disk number changed and was repaired.",
+  "error.INSTALLATION_PUBLICATION_CONFLICT.attachedFolder": "This folder is attached to a registered installation, so its first-run policy is not installed again. For an attached folder, use `deckent terminal attach` instead; applying the attachment can also be refused, for example after the disk number changed and was repaired.",
   "error.INSTALLATION_PUBLICATION_CHANGED": "Installation evidence or published state changed; completion was not accepted.",
   "error.INSTALLATION_PUBLICATION_CHANGED.governedPolicy": "After setup, deckent recorded approved changes to the installed policy. The initial template was not reapplied. Run `deckent policy status --scope <id>` to inspect the current policy.",
   "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Ledger migration requires complete, consistent Run creation evidence. The database was left unchanged.",

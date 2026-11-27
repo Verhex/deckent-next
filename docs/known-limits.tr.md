@@ -1008,10 +1008,11 @@ denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde 
   “Kurulumun konumu değiştiğinde” bölümündedir; bunlar için beta.2.1’e dönmek gerekir. beta.2.1’in ortak yedekleri beta.2’de
   geri yüklenemez; mevcut registration v3 ise daha eski ortak yedek de reddedilir. beta.2.1’de başlayıp son adımı bekleyen
   kaldırmanın engeli korunur. Registration ile kimlik yazımı arasında çöküp beta.2’ye dönülürse kurulum beta.2.1 geri gelene
-  kadar kullanılamayabilir; yarım uzlaştırılmış bağlı klasör `PROJECT_ATTACHMENT_DENIED` ile durur. Bağlı bir klasörde
-  `deckent init policy --scope <id> --apply` yeniden çalıştırıldığında beta.2 de beta.2.1 de `INSTALLATION_PUBLICATION_CONFLICT`
-  ile (çıkış kodu 78) reddeder; bağlı klasörün yolu `deckent terminal attach` komutudur ve disk numarası onarılmış bir hedefte
-  o da reddedilir. Daha da geriye, beta.1.2’ye dönmek, plan-usage v2
+  kadar kullanılamayabilir; yarım uzlaştırılmış bağlı klasör `PROJECT_ATTACHMENT_DENIED` ile durur. İlk yayını geçerli bir ortak
+  kayıt yapılandırmasıyla tamamlanmış bağlı bir klasörde `deckent init policy --scope <id> --apply` yeniden çalıştırıldığında
+  beta.2 de beta.2.1 de `INSTALLATION_PUBLICATION_CONFLICT` ile (çıkış kodu 78) reddeder; yarıda kalmış bir yayın başka bir hata
+  gösterebilir. Bağlı klasörün yolu `deckent terminal attach` komutudur; disk numarası onarılmış bir hedefte, önizleme başarılı
+  olsa bile bağlantıyı uygulamak reddedilebilir. Daha da geriye, beta.1.2’ye dönmek, plan-usage v2
   ile kaydedilmiş her çağrının okunurken `MODEL_INVOCATION_CORRUPT` vermesine, yeni konuları içeren denetim sayfalarının
   tamamının `AUDIT_INTEGRITY` ile ve `cli.observation` içeren işçi dökümlerinin tamamının durmasına neden olur.
   Yeni denetim kayıtlarını asla budamayın.

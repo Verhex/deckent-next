@@ -1,7 +1,7 @@
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js';
 import { lstat, readFile, stat } from 'node:fs/promises';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openReadOnlyAuditStore, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal, withSideEffectFreeSqliteReads } from '#adapters/index.js';
 import { createHash, randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, auditPolicyDigest, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, firstPublicationReferenceDigests, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type InstallationIdentityRead, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
@@ -35,10 +35,13 @@ async function prepare(projectRoot: string, scopeId: string, options: ConfigLoad
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) { const { prepared, service } = await prepare(projectRoot, scopeId, options); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, false) }); }
 /** Owner K1 (A3): the attached reference the read-only resolver verifies now for this person and scope (no write or repair port) with the
- * digest of its bytes as read, only in a form that still witnesses the retained first publication `first`; the same call twice brackets it. */
-async function witnessedReference(projectRoot: string, scopeId: string, options: ConfigLoadOptions, first: { readonly attachment: ReadableProjectAttachment; readonly digest: string }) {
-  const config = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true }), { issuer, subject } = readLocalOsIdentity();
-  const current = await configuredInstallationProjectContext(config, options, scopeId, { issuer, subject }), path = productResourcePath(config.productLayout, 'projectAttachment');
+ * digest of its bytes as read, only in a form that still witnesses the retained first publication `first`; the same call twice brackets it.
+ * Without a retained R0 only a folder that neither its config nor a local reference calls attached keeps its standalone history. */
+async function witnessedReference(projectRoot: string, scopeId: string, options: ConfigLoadOptions, first?: { readonly attachment: ReadableProjectAttachment; readonly digest: string }) {
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true }), path = productResourcePath(config.productLayout, 'projectAttachment');
+  if (!first) return config.installation.sharedRegistrationId || await lstat(path).then(() => true, (error: NodeJS.ErrnoException) => error.code !== 'ENOENT') ? null : 'standalone';
+  const { issuer, subject } = readLocalOsIdentity(); // the source ledger is read from a private copy: no live sidecar, lock or write (view.ts:9)
+  const current = await withSideEffectFreeSqliteReads(config.installation.packageMeasurement.maxTotalBytes, () => configuredInstallationProjectContext(config, options, scopeId, { issuer, subject }));
   const { digest } = await inspectInstallationFile({ root: dirname(path), path, maxBytes: config.installation.profileMaxBytes });
   return current.kind === 'attached' && current.attachment && digest !== null
     && firstPublicationReferenceDigests(first.attachment, current.attachment, { original: first.digest, written: createHash('sha256').update(serializeJsonDocument(current.attachment)).digest('hex') }) // FileProjectAttachmentStore.writeTarget's exact bytes
@@ -52,7 +55,7 @@ export async function verifiedFirstPublicationPolicy(projectRoot: string, scopeI
     const retained: unknown = record.recovery['firstSessionTargets'], held = Array.isArray(retained)
       ? (retained as { resource?: unknown; content: string; digest: string }[]).find(target => target?.resource === 'projectAttachment') : undefined;
     const first = held && { attachment: readableProjectAttachmentSchema.parse(JSON.parse(held.content)), digest: held.digest };
-    const seen = first && await witnessedReference(projectRoot, scopeId, options, first);
+    const seen = await witnessedReference(projectRoot, scopeId, options, first);
     if (seen === null) return null;
     const { prepared } = await prepare(projectRoot, scopeId, options, undefined, first?.attachment); // gate 1 gets R0 itself; X was compared above
     const origin = { scopeId: record.recovery['scopeId'], principal: record.recovery['principal'], template: record.recovery['template'] };
@@ -63,7 +66,7 @@ export async function verifiedFirstPublicationPolicy(projectRoot: string, scopeI
       || record.resources.length !== prepared.targets.length || prepared.targets.some(target => !record.resources.some(resource =>
         resource.resource === target.resource && resource.path === target.path && resource.targetDigest === target.digest))) return null;
     if (['policy', 'bindings'].some(name => !record.resources.some(resource => resource.resource === name && resource.preimageDigest === null))) return null;
-    if (first && await witnessedReference(projectRoot, scopeId, options, first) !== seen) return null;
+    if (await witnessedReference(projectRoot, scopeId, options, first) !== seen) return null;
     const root = prepared.resolvedPolicy;
     return (await observeBootstrapState(projectRoot)).generation === observed.generation ? root : null;
   } catch { return null; }
