@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnNotice, ChatTurnResult, ChatTurnSteer, ChatTurnSteerResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
-import { optionalField, ErrorRegistry, LOCALES, t, type ConfigLoadOptions } from '#platform/index.js';
+import { optionalField, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta, TurnSteer } from '#surfaces/core/terminal-kit/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
@@ -111,34 +111,13 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     if (result.answer !== null && result.answer.startsWith(roundText) && result.answer.length > roundText.length) {
       yield { kind: 'text', text: result.answer.slice(roundText.length) };
     }
-    const lines = result.steer;
-    const notices = result.notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` }));
-    const guidance = headlessTurnGuidance(result);
-    if (guidance) notices.push({ key: '', text: guidance }); // No deduplication key: this notice belongs to this live turn.
+    const { notices, steer: lines } = result;
     yield { kind: 'done', finish: result.finish, note: result.note, ...(lines.joined.length || lines.returned.length ? { steer: lines } : {}),
-      ...(notices.length ? { notices } : {}) };
+      ...(notices.length ? { notices: notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` })) } : {}) };
   } finally {
     signal.removeEventListener('abort', onAbort);
     if (!finished && !outcome) { local.abort(); await cancel(); }
   }
-}
-
-/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. A step only when the cause closed the
- * live turn: the whole note (after an optional policy-record warning) is the engine's failed-round closure with that diagnosis and this turn's
- * counts. A cancel, a service stop, a delivery failure or any added sentence replaces or extends that closure, so it gets no step. */
-function headlessTurnGuidance(result: ChatTurnResult): string | null {
-  const { note } = result;
-  if (result.replayed || result.finish !== 'error' || note === null) return null;
-  for (const locale of LOCALES) {
-    const audit = `${t('agent.policyTurn.auditFailed', {}, locale)} `, rest = note.startsWith(audit) ? note.slice(audit.length) : note;
-    const summary = result.toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, locale)
-      : t('agent.turn.outcome.tools', { calls: result.toolCalls, rounds: result.rounds }, locale);
-    const closes = (cause: string) => rest === t('agent.turn.outcome.failedDiagnosis', { diagnosis: cause, summary }, locale);
-    if (closes(t('error.headless.loginBusy.guard', {}, locale))) return t('headless.chat.loginBusyNext', {}, locale);
-    if (closes(t('error.headless.agentRunDispose', {}, locale)) || closes(t('error.headless.agentRunRemove', {}, locale)))
-      return t('headless.chat.runCleanupNext', {}, locale);
-  }
-  return null;
 }
 
 /** Tema L6: what makes an MCP notice new for the person — its kind, server and code (not its free detail), so a repeat is shown once. */

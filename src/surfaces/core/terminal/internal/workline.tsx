@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, cre
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
 import { cardCopy, CLIPBOARD_LIMITS, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
-  ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore, stepSpaceBefore } from '#surfaces/core/terminal-work/index.js';
+  ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { parseSlashLine, keepsTypedArgument, type LocalSlashCommand, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, surfaceFollowLine, type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion, WorklinePaletteProvider, useWorklinePalette, useWorklineWatch, useSurfacePushFeed } from '#surfaces/core/terminal-kit-ink/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
@@ -254,8 +254,6 @@ export function WorklineApp(props: WorklineProps) {
   const [activeDo, setActiveDo] = useState<ActiveDo | null>(null);
   const [stripFocused, setStripFocused] = useState(false), stripFocus = useRef(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
-  // The finished turn's keyless next step: drawn in the live slot (never a history row, the search or the exit dump) until the next turn starts.
-  const [steps, setSteps] = useState<readonly string[]>([]);
   const usages = useRef(new Map<string, SessionUsageView>());
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
@@ -416,7 +414,7 @@ export function WorklineApp(props: WorklineProps) {
   const turnSteer = useTurnSteer({ labels: labels.queue, push, errorText, submit: (text, mentions, entry) => submitRef.current(text, mentions, entry),
     restore: text => setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })), joined: text => push([chat('user', text)]) });
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
-    push([chat('user', text)]); setChatting(true); setSteps([]);
+    push([chat('user', text)]); setChatting(true);
     const startedAtMs = Date.now();
     const signal = execution.signal;
     const stream = panel.stream(execution);
@@ -462,7 +460,6 @@ export function WorklineApp(props: WorklineProps) {
             const line = await proposed.get(delta.callId); if (line) delta = { ...delta, preview: `${delta.preview}\n${line}` };
           }
           if (delta.kind === 'text') answer += delta.text; if (delta.kind === 'done' && delta.note) noted = true;
-          if (delta.kind === 'done') setSteps(delta.notices?.flatMap(item => item.key ? [] : [item.text]) ?? []);
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
             usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, { ...delta, identity: turnIdentity })); }
@@ -858,9 +855,7 @@ export function WorklineApp(props: WorklineProps) {
   const hintNode = copyRefused && copyFailure ? <Text {...palette.error} wrap="truncate-end">{fillTemplate(copyFailure, { bytes: copyRefused.bytes, max: CLIPBOARD_LIMITS.maxBytes })}</Text>
     : copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
-    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} />
-    : steps.length ? <Box flexDirection="column">{steps.map((text, index) => { const entry = systemSummaryEntry(text, 'warning');
-      return <LedgerEntryRow key={index} entry={entry} labels={ledgerLabels} spaceBefore={stepSpaceBefore(buffer.tail.at(-1), entry)} />; })}</Box> : null;
+    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>
     {othersOpen ? <TimingWindowFrame trace={executionTiming.current} /> : null}
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
