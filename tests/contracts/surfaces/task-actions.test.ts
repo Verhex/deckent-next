@@ -21,7 +21,12 @@ it('executes only the exact reserved identity and never presents process exit as
       'The native worker’s tool effects are unresolved. Inspect this Attempt and reconcile pending effects; do not repeat the work blindly.',
       'No process exit has been recorded'],
     ['tr', 'HEADLESS_CREDITS_REQUIRED', 'Bu denemenin son dağıtım kaydı yok, bu nedenle sonucu bilinmiyor; kaydedilen neden aşağıdadır.',
-      'Kayıtta HEADLESS_CREDITS_REQUIRED hata kodu var. Hatanın kesin nedeni belirlenemedi.', 'nothing was accepted'],
+      'Abonelik bu istek için ek kredi istiyor.', 'kesin nedeni belirlenemedi'],
+    ['en', 'HEADLESS_CREDITS_REQUIRED', 'This attempt has no final dispatch record, so its outcome is unknown; the recorded reason follows.',
+      'The subscription asks for extra credits for this request.', 'specific cause could not be determined'],
+    // An old record holding only the process exit keeps its exit sentence: no credits cause is inferred from exit 1.
+    ['en', 'HEADLESS_WORKER_RESULT__REASON_EXIT__1', 'This attempt has no final dispatch record, so its outcome is unknown; the recorded reason follows.',
+      'The launched isolation command exited with code 1.', 'extra credits'],
     ['tr', 'HEADLESS_WORKER_RESULT__REASON_EXIT__23', 'Bu denemenin son dağıtım kaydı yok, bu nedenle sonucu bilinmiyor; kaydedilen neden aşağıdadır.',
       'Başlatılan yalıtım komutu 23 koduyla sonlandı.', 'Süreç çıkışı henüz kaydedilmemiş'],
   ] as const) {

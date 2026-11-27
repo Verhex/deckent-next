@@ -5,9 +5,11 @@ import { ErrorRegistry } from './registry.js';
 
 /** Short failure codes whose registered sentence holds for every producer that can store them as a worker's or parked Run's reason. Not here:
  * NATIVE_AGENT_LOGIN_REQUIRED (readiness stores it when sign-in was only unobserved), NATIVE_WORKER_STOP_UNCONFIRMED (also without a stop
- * request), NATIVE_WORKER_OUTPUT_LIMIT (the parser bound also counts call arguments). */
+ * request), NATIVE_WORKER_OUTPUT_LIMIT (the parser bound also counts call arguments). HEADLESS_CREDITS_REQUIRED is written only from a
+ * provider's credits-required refusal (worker result, Brain planning), and its sentence names the recorded request. */
 const FAILURE_REASON_SENTENCES: ReadonlySet<string> = new Set(['NATIVE_CLI_WORKER_UNAVAILABLE', 'NATIVE_WORKER_DEADLINE_REACHED',
-  'NATIVE_WORKER_EFFECTS_UNKNOWN', 'NATIVE_WORKER_NOT_STARTED', 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED']);
+  'NATIVE_WORKER_EFFECTS_UNKNOWN', 'NATIVE_WORKER_NOT_STARTED', 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', 'NATIVE_WORKER_TOOL_SURFACE_UNEXPECTED',
+  'HEADLESS_CREDITS_REQUIRED']);
 /** A recorded failure identifier in words: an encoded diagnostic; an allowlisted code's sentence; any other registered code as the recorded code
  * whose cause was not determined; undefined for an unregistered value. */
 export function readFailureReasonText(value: string, locale: Locale): string | undefined {

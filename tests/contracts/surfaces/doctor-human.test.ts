@@ -56,9 +56,14 @@ describe('doctor rows (pure)', () => {
       const checks = doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code: 'HEADLESS_PREFLIGHT_FAILED__CHECK_LOCK_DIRECTORY_CREATE' }] }), locale);
       expect.soft(checks.find(row => row.id === 'work.stuckRun')?.text).toBe(expected);
     }
-    // C3: a registered short code outside the reason allowlist is named as the recorded code, its cause not determined.
-    expect(doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code: 'HEADLESS_CREDITS_REQUIRED' }] }), 'en').find(row => row.id === 'work.stuckRun')?.text)
-      .toBe('Run run-fixture is parked (HEADLESS_CREDITS_REQUIRED). The record contains the error code HEADLESS_CREDITS_REQUIRED. The specific cause could not be determined.');
+    // C3: a registered short code outside the reason allowlist is named as the recorded code, its cause not determined; the stored credits code
+    // shows its own sentence in both languages.
+    const parked = (code: string, locale: 'en' | 'tr') => doctorChecks(report, facts({ stuckRuns: [{ runId: 'run-fixture', code }] }), locale).find(row => row.id === 'work.stuckRun')?.text;
+    expect.soft(parked('SIWC_USAGE_UNAVAILABLE', 'en'))
+      .toBe('Run run-fixture is parked (SIWC_USAGE_UNAVAILABLE). The record contains the error code SIWC_USAGE_UNAVAILABLE. The specific cause could not be determined.');
+    expect.soft([parked('HEADLESS_CREDITS_REQUIRED', 'en'), parked('HEADLESS_CREDITS_REQUIRED', 'tr')]).toEqual([
+      'Run run-fixture is parked (HEADLESS_CREDITS_REQUIRED). The subscription asks for extra credits for this request.',
+      'run-fixture işi beklemede (HEADLESS_CREDITS_REQUIRED). Abonelik bu istek için ek kredi istiyor.']);
   });
   it('the Doctor command accepts a validated dotted version identifier without exposing malformed details', async () => {
     const root = await project();
