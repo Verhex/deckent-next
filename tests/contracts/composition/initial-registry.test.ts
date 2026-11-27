@@ -8,7 +8,7 @@ import { observeSetupPermissions, applySetupPermissions, configuredSetup } from 
 import { applyPolicyTemplateInstallation, openOwnPermissionMode, inspectPolicyTemplate } from '#composition/core/installation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
-import { withLocalPrincipalChannel } from '#adapters/index.js';
+import { createNativeCodingTemplate, withLocalPrincipalChannel } from '#adapters/index.js';
 import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { setupInitCommand, createSetupController } from '#surfaces/core/setup/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
@@ -67,6 +67,15 @@ it('U4C: an explicit image adds a second provider by preview/CAS while preservin
   expect(applied.status).toBe('applied'); expect(applied.registry.profiles).toHaveLength(2); expect(applied.registry.evaluators).toEqual(first.registry.evaluators);
   expect(f.auditCount()).toBe(audits + 1);
   await expect(addNativeCodingProfile(f.root, { ...next, apply: true, digest: preview.digest, expect: preview.expect }, f.options, deps)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  // Owner 114: a template bound to a connection records its host CLI, not the version inside the image it names; a Docker profile for that image measures it.
+  const image = `sha256:${'c'.repeat(64)}`, { executable, ...limits } = docker; void executable;
+  const bound = createNativeCodingTemplate({ ...limits, imageId: image }, { provider: 'codex', cliVersion: '0.170.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' },
+    { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque-subscription-fixture',
+      definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state', ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } });
+  await f.mutate(config => { const registry = (config['admission'] as { registry: { profiles: unknown[]; kinds: unknown[] } }).registry;
+    registry.profiles.push(bound); registry.kinds.push({ kind: 'connected', profile: { id: bound.id, version: bound.version } }); });
+  const measured = await addNativeCodingProfile(f.root, { provider: 'codex', kind: 'codex-image-c', image, apply: false }, f.options, { ...person, detect: async () => 'codex-cli 0.171.0' });
+  expect(measured.profile.parameters).toMatchObject({ docker: { imageId: image }, invocation: { cliVersion: 'codex-cli 0.171.0' } });
 });
 
 it('U4C: witnessed profile defaults resume a partially opened grant and persist the mode through the U5 owner with stale/AI refusals', async () => {

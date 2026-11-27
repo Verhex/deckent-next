@@ -4224,6 +4224,7 @@
     },
     "src/surfaces/core/cli-observe": {
       "dependencies": [
+        "src/engine/core/toolchain-currency",
         "src/domain/core/run",
         "src/domain/core/worker-event",
         "src/engine/core/scheduling",

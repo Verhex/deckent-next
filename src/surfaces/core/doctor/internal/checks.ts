@@ -67,6 +67,8 @@ export interface DoctorCheckFacts {
   /** `connection` (R8b): execution is configured without Docker, so work runs on a connected subscription. */
   readonly firstJob?: Readonly<{ execution: boolean; registry: boolean; connection?: boolean }> | null;
   readonly toolchainUpdateEnabled: boolean;
+  /** Owner 114: a service start reruns the image refresh here (mode, start trigger and Docker settings allow it); absent or false: no rerun is promised. */
+  readonly imageRefreshRestarts?: boolean;
   /** PRE-34: the configured worker image (evidence when the refresh marker names no version); null when no execution section sets one. */
   readonly imageId?: string | null;
   /** BR1 1c: whether the daemon has the configured image (read-only `image inspect`); null when not checked (no image, Docker not ready). */
@@ -224,7 +226,8 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   const image = r.imageRefresh;
   // Owner 114: a failed refresh names its code and never offers `toolchains update` (a manual build re-pins nothing); the summary is not "ready".
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
-    ? { ...row('work', 'work.image', 'warning', t('doctor.check.image.failed', { reason: terminalSafeText(image.reason ?? '-') }, l), t('doctor.check.image.failed.next', {}, l)), needsAttention: true }
+    ? { ...row('work', 'work.image', 'warning', t('doctor.check.image.failed', { reason: terminalSafeText(image.reason ?? '-') }, l),
+      f.imageRefreshRestarts && !registry.imageRefreshRepeats.includes(image.reason ?? '') ? t('doctor.check.image.failed.next', {}, l) : undefined), needsAttention: true }
     : row('work', 'work.image', 'ok', image.status === 'updating' ? t('doctor.check.image.updating', {}, l)
       : image.imageVersion || shortImageId(f.imageId) ? t('doctor.check.image.current', { version: image.imageVersion ?? shortImageId(f.imageId)! }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
   rows.push(executionRow(f, l));

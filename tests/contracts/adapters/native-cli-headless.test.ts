@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort, headlessConnectionAdapter, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort, headlessConnectionAdapter, readHeadlessLogins, readHeadlessSealedVersion } from '#adapters/core/native-cli-headless/index.js';
 import { ErrorRegistry, snapshotKnownSecrets, type DeckentError } from '#platform/index.js';
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -96,6 +96,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     await utimes(c.executable, new Date(), new Date(Date.now() + 9000));
     await expect(c.call()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
     expect(JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0' });
+    // R8 (owner 114): the service's strict read takes only the identity-bound record form; the legacy form (no program identity) is never its evidence.
+    const sealed = c.profile.adapter.definition as Parameters<typeof readHeadlessSealedVersion>[0], recordPath = join(c.root, 'state', 'preflight.json'), modern = JSON.parse(await readFile(recordPath, 'utf8'));
+    expect(await readHeadlessSealedVersion(sealed, c.profile.protocol.family, true)).toBe('9.3.0');
+    await writeFile(recordPath, JSON.stringify({ ...modern, revision: modern.revision.slice(0, modern.revision.lastIndexOf(':')) }));
+    expect(await readHeadlessSealedVersion(sealed, c.profile.protocol.family)).toBe('9.3.0'); expect(await readHeadlessSealedVersion(sealed, c.profile.protocol.family, true)).toBeNull();
+    await writeFile(recordPath, JSON.stringify(modern));
     // S7 (owner 2026-10-31): a self-update moves the symlink A → B and deletes A. One new preflight opens B and records the measured transition in v1.
     // Doctor shows the open channel. A path that leads nowhere gives the typed "CLI missing — reconnect" refusal before any spawn.
     const linked = await connection({ steps: happy() }), link = join(linked.root, 'codex'), binB = join(linked.root, 'release-b');

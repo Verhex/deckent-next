@@ -15,6 +15,9 @@
   "nativePluginRowsShown": 5,
   "pendingRoleRowsShown": 5,
   "headlessRefusedHostsShown": 5,
+  "imageRefreshRepeats": [
+    "WORKER_IMAGE_CONSENT_MISSING"
+  ],
   "fixes": [
     {
       "id": "toolchain-update",

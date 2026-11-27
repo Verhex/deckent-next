@@ -39,7 +39,7 @@ async function project(config: unknown = {}) {
 }
 const facts = (extra: Partial<DoctorCheckFacts> = {}): DoctorCheckFacts => ({ scopeId: 'live', toolchainsRequested: false, identityProfile: { state: 'missing' },
   backupPassphraseStored: true, retiringModels: [{ modelId: 'model-x', channelId: 'codex-cli', state: 'deprecated', date: '2026-12-01' }], poolStatus: 'ready',
-  toolchainUpdateEnabled: true, ...extra });
+  toolchainUpdateEnabled: true, imageRefreshRestarts: true, ...extra });
 const report = {
   platform: 'wsl', status: 'ready' as const, node: { version: 'v26.10.0', floor: '24.22.0', status: 'supported' as const },
   host: { cpuCores: 16, totalMemMB: 36081, recommendedMaxWorkers: 15 }, company: { companyId: 'default' }, principal: { id: 'me' },
@@ -170,6 +170,9 @@ describe('doctor rows (pure)', () => {
       .toBe('Worker image is current (v7)');
     for (const locale of ['en', 'tr'] as const) { const failed = doctorChecks(report, facts({ imageId: id }), locale).find(row => row.id === 'work.image')!; expect(failed.fix).toBeUndefined(); // owner 114
       expect(failed).toMatchObject({ state: 'warning', needsAttention: true, next: expect.stringMatching(/deckent runtime restart$/u), text: locale === 'en' ? 'The last worker image refresh failed (BUILD_FAILED); task kinds keep the image they pin' : 'Son işçi imajı yenilemesi başarısız (BUILD_FAILED); iş türleri sabitledikleri imajı korur' }); }
+    // ...and promises a rerun only where a service start runs one and the code is not one that repeats (registry data): otherwise no step.
+    const consent = { ...report, imageRefresh: { status: 'failed', reason: 'WORKER_IMAGE_CONSENT_MISSING', imageVersion: null } };
+    for (const [input, extra] of [[report, { imageRefreshRestarts: false }], [consent, {}]] as const) expect(doctorChecks(input, facts(extra), 'en').find(row => row.id === 'work.image')!.next).toBeUndefined();
   });
   it('PRE-34: the verbose pool line names the pool row and capacity it read, never a bare "(-)"', () => {
     const pool = { schemaVersion: 1, poolId: 'live', capacity: { executionSlots: 4, inFlightSlots: 6 } } as never;

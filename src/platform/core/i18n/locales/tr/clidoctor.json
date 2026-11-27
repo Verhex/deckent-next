@@ -151,7 +151,7 @@
   "doctor.check.image.currentUnnamed": "İşçi imajı güncel",
   "doctor.check.image.updating": "İşçi imajı arka planda güncelleniyor; işler mevcut imajı kullanır",
   "doctor.check.image.failed": "Son işçi imajı yenilemesi başarısız ({reason}); iş türleri sabitledikleri imajı korur",
-  "doctor.check.image.failed.next": "Kodun belirttiği sebebi giderin; servis yenilemeyi bir sonraki açılışında ya da kontrol aralığında yeniden çalıştırır, hemen şimdi: deckent runtime restart",
+  "doctor.check.image.failed.next": "Kodun belirttiği sebebi giderin, ardından yenilemeyi yeniden çalıştırın: deckent runtime restart",
   "doctor.check.docker.unknown": "Docker durumu okunamadı",
   "doctor.check.docker.notNeeded": "Docker gerekmez: işler bağlı aboneliğinle bu bilgisayarda deckent'in korumalı alanında çalışır.",
   "doctor.check.delivery": "{profile} profilinin ({model}) model yanıtları yanıt sınırını aşabilir",

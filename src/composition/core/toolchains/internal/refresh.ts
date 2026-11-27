@@ -7,7 +7,7 @@ import { CodedError, loadConfig, inspectProductDirectory, prepareProductDirector
 import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, reviseRegistryForConnections, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
-import { isNativeCodingTemplate, nativeCliWorkerBindingSchema, readHeadlessSealedVersion, type NativeCliWorkerBinding } from '#adapters/index.js';
+import { isNativeCodingTemplate, nativeCliHeadlessDefinitionSchema, nativeCliWorkerBindingSchema, readHeadlessSealedVersion, type NativeCliHeadlessDefinition, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
@@ -40,18 +40,49 @@ export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencie
   /** R8: the CLI version a bound connection's own last check proved (verified record, no spawn); null keeps the record. */
   readonly observed?: (worker: NativeCliWorkerBinding) => Promise<string | null>;
 }
-/** R8 (owner 114): each kind-pointed connected template whose own connection proved another CLI version than it records; a read failure observes nothing. */
-async function connectionVersions(registry: unknown, observe: (worker: NativeCliWorkerBinding) => Promise<string | null>) {
-  const parsed = executionRegistrySchema.safeParse(registry), kinds = parsed.success ? parsed.data.kinds : [];
-  const bound = parsed.data?.profiles.filter(row => isNativeCodingTemplate(row) && kinds.some(kind => kind.profile.id === row.id && kind.profile.version === row.version)) ?? [];
-  return (await Promise.all(bound.map(async row => { const worker = nativeCliWorkerBindingSchema.safeParse(row.parameters['worker']);
-    const version = worker.success ? await observe(worker.data).catch(() => null) : null, recorded = (row.parameters['invocation'] as { cliVersion?: unknown } | undefined)?.cliVersion;
-    return version !== null && version !== recorded ? [{ profile: { id: row.id, version: row.version }, cliVersion: version }] : []; }))).flat();
+const scopeIdOf = (effective: { service: { identity: { scopeId: string } | null } }) => effective.service.identity?.scopeId ?? (effective as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
+const layerGuard = (snapshot: { global: Record<string, unknown> }) => { if (registryLayerHold({ global: snapshot.global, project: {} }) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw new CodedError('TOOLCHAIN_REGISTRY_LAYER_HOLD'); };
+/** R8 (owner 114): the kind-pointed connected templates whose OWN connection proved another CLI version than they record. Only a record tied to a present
+ * connection profile of this scope with the same login and state dir, which no other definition shares, counts; read one at a time; a failure observes nothing. */
+async function connectionVersions(registry: unknown, effective: Readonly<Record<string, unknown>>, scopeId: string, observe: (worker: NativeCliWorkerBinding) => Promise<string | null>) {
+  const parsed = executionRegistrySchema.safeParse(registry); if (!parsed.success) return [];
+  const login = (definition: NativeCliHeadlessDefinition) => JSON.stringify([definition.executable, definition.configDir, definition.stateDir, definition.ownerUid]);
+  const profiles = ((effective['provider_invocation_profiles'] as { profiles?: { scopeId?: unknown; adapter?: { definition?: unknown } }[] } | undefined)?.profiles ?? [])
+    .flatMap(row => { const definition = nativeCliHeadlessDefinitionSchema.safeParse(row.adapter?.definition); return definition.success ? [{ scopeId: row.scopeId, definition: definition.data }] : []; });
+  const bound = parsed.data.profiles.flatMap(row => { const worker = isNativeCodingTemplate(row) && parsed.data.kinds.some(kind => kind.profile.id === row.id && kind.profile.version === row.version)
+    ? nativeCliWorkerBindingSchema.safeParse(row.parameters['worker']) : null; return worker?.success ? [{ row, worker: worker.data }] : []; });
+  const definitions = [...profiles.map(row => row.definition), ...bound.map(entry => entry.worker.definition)], observed = [];
+  for (const { row, worker } of bound) {
+    const own = login(worker.definition);
+    if (!profiles.some(entry => entry.scopeId === scopeId && login(entry.definition) === own) || definitions.some(entry => entry.stateDir === worker.definition.stateDir && login(entry) !== own)) continue;
+    const version = await observe(worker).catch(() => null), recorded = (row.parameters['invocation'] as { cliVersion?: unknown } | undefined)?.cliVersion;
+    if (version !== null && version !== recorded) observed.push({ profile: { id: row.id, version: row.version }, cliVersion: version });
+  }
+  return observed;
+}
+/** R8 write, apart from the image outcome: observed from each compare-and-set attempt's own document; anything it cannot write keeps the record and
+ * leaves the refresh result as it was. Returns the profile versions written. */
+async function recordConnectionVersions(projectRoot: string, options: ConfigLoadOptions, dependencies: ToolchainRefreshDependencies, startedAt: string): Promise<number> {
+  const observe = dependencies.observed ?? (worker => readHeadlessSealedVersion(worker.definition, worker.protocolFamily, true));
+  for (let attempt = 1; attempt <= REGISTRY_WRITE_ATTEMPTS && !dependencies.signal?.aborted; attempt++) {
+    const read = await snapshotConfiguredConfig(projectRoot, options, 'project'), effective = await loadConfig(projectRoot, { ...options, force: true }), scopeId = scopeIdOf(effective);
+    const current = (read.document as { admission?: { registry?: unknown } }).admission?.registry;
+    const revision = !registryLayerHold(read) && scopeId ? reviseRegistryForConnections(current, await connectionVersions(current, effective, scopeId, observe)) : null;
+    if (!revision) return 0;
+    const principal = await resolveConfiguredConfigPrincipal(projectRoot, scopeId!, options);
+    await dependencies.beforeRegistryWrite?.(attempt);
+    try {
+      await createConfiguredConfigApplication(projectRoot, options, layerGuard).set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project', principal, scopeId: scopeId!,
+        commandId: `toolchain-refresh-${startedAt}-connections-${attempt}`, expect: read.digest });
+      return revision.applied.length;
+    } catch (error) { if (failureCode(error) !== 'CONFIG_CONCURRENT_REVISION_HOLD') return 0; }
+  }
+  return 0;
 }
 /**
  * One refresh: policy gate, durable `updating` marker, the existing update path with apply (plan, daemon preflight, build, receipt, proposal),
- * then the proposal and each connected kind's re-recorded CLI version (R8) applied as one governed `admission.registry` config write (new profile
- * versions only; old versions and every admitted Run stay as they were). Every attempt leaves an audit record under `toolchains/refreshes`; a failure keeps the previous registry and image.
+ * then the proposal applied as a governed `admission.registry` config write (new profile versions only; old versions and every admitted Run
+ * stay as they were); each connected kind's CLI version is re-recorded apart from it (R8). Every attempt leaves an audit record under `toolchains/refreshes`; a failure keeps the previous registry and image.
  */
 export function refreshConfiguredToolchains(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions = {},
   dependencies: ToolchainRefreshDependencies = {}, observer: ToolchainRefreshObserver = {}): Promise<ToolchainRefreshOutcome> {
@@ -88,21 +119,16 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
       await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: plan.next?.imageVersion ?? null, imageId: null, staleProviders: plan.staleProviders, appliedProfiles: 0, reason: null });
       await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
     } });
-    const proposal = result.decision === 'built' ? result.proposal : null;
-    const observed = await connectionVersions(config.admission?.registry, dependencies.observed ?? (worker => readHeadlessSealedVersion(worker.definition, worker.protocolFamily)));
-    if (proposal || observed.length) {
+    if (result.decision === 'built' && result.proposal) {
       if (dependencies.signal?.aborted) throw new CodedError('REFRESH_STOPPED');
       // Compare-and-set on one consistent read: the project document and its digest come from the same bytes, the revision is derived from that
       // document alone (never from the merged view), and the write carries the digest as `expect` while a guard under the write lock refuses it
       // if a global layer now contributes a registry. A concurrent change is a typed hold: re-read and re-derive (bounded), never overwrite.
-      const scopeIdOf = (effective: { service: { identity: { scopeId: string } | null } }) => effective.service.identity?.scopeId ?? (effective as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
-      const layerGuard = (snapshot: { global: Record<string, unknown> }) => { if (registryLayerHold({ global: snapshot.global, project: {} }) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw new CodedError('TOOLCHAIN_REGISTRY_LAYER_HOLD'); };
       for (let attempt = 1; ; attempt++) {
         const read = await snapshotConfiguredConfig(projectRoot, options, 'project');
         const hold = registryLayerHold(read);
         if (hold) throw new CodedError(hold);
-        const current = (read.document as { admission: { registry: unknown } }).admission.registry, connections = reviseRegistryForConnections(current, observed);
-        const image = proposal ? reviseRegistryForProposal(connections?.registry ?? current, proposal) : null, revision = image ?? connections;
+        const revision = reviseRegistryForProposal((read.document as { admission: { registry: unknown } }).admission.registry, result.proposal);
         if (!revision) break;
         const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
         if (!scopeId) throw new CodedError('TERMINAL_SCOPE_REQUIRED');
@@ -111,11 +137,12 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         try {
           configWrite = await createConfiguredConfigApplication(projectRoot, options, layerGuard).set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project', principal, scopeId,
             commandId: `toolchain-refresh-${startedAt}-${attempt}`, expect: read.digest });
-          applied = (connections?.applied.length ?? 0) + (image?.applied.length ?? 0); break;
+          applied = revision.applied.length; break;
         } catch (error) { if (failureCode(error) !== 'CONFIG_CONCURRENT_REVISION_HOLD' || attempt >= REGISTRY_WRITE_ATTEMPTS) throw error; }
       }
     }
   } catch (error) { code = dependencies.signal?.aborted ? 'REFRESH_STOPPED' : failureCode(error); } // a build ended by the stop is a stop, not a build fault
+  applied += await recordConnectionVersions(projectRoot, options, dependencies, startedAt).catch(() => 0); // R8: counted only when written; never the outcome
   const finishedAt = now();
   const imageId = result?.build?.imageId ?? null, imageVersion = result?.plan?.next?.imageVersion ?? null;
   const unverified = code ? null : result?.plan ? unverifiedReason(result.plan.report) : null;

@@ -23,6 +23,10 @@ const nativeProfile = (id: string, provider: 'codex' | 'claude', cliVersion: str
 /** The shipped history owner, so the fake daemon answers and refuses exactly what the real builder does (held revision, counter guard, history chain). */
 const historyOwner = async () => await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as {
   heldVersion(tags: string[]): string | null; assertVersionAdvances(version: string, tags: string[]): void; parseVersionHistory(dockerfile: string, recipe: unknown): unknown[] };
+/** R8: a configured subscription connection profile of the fixture scope with the given login definition (the record's owner). */
+const connectionProfile = (id: string, definition: object) => ({ schemaVersion: 1, id, version: 1, scopeId: 'installation', reference: { providerId: 'fixture', providerVersion: 1, modelId: `model-${id}`, modelVersion: 1 },
+  bindingDigest: 'c'.repeat(64), protocol: { family: 'claude-code-stream-json', version: '1' }, adapter: { id: 'native-cli-headless', version: 1, definition },
+  allocation: { id: id, maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65536, responseMaxBytes: 65536, timeoutMs: 1000 } });
 const ok = (requestId: string) => ({ schemaVersion: 1 as const, requestId, started: true, reason: 'exit' as const, exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
 
 /** A real policy/ledger installation (config writes are governed), a stale codex pin, and a fake builder; Docker is never reached. */
@@ -105,6 +109,17 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     await write(); // the same old registry pins, now attested by the layered receipt
     expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
     expect(f.state.builds).toBe(2);
+    // Owner 114, no consent rule change: a two-provider consent is stored as one record per provider (one provider each), so the consent HEAD's view
+    // matched (claude's Docker pin stale too) still covers the narrower codex-only build without receipts; claude's record alone never covers codex.
+    const recipe = (await readWorkerImageSources(process.cwd())).recipe;
+    const consented = (provider: string) => ({ operation: 'worker-image.consent@1', id: `consent-${provider}`, person: { id: 'fixture', issuer: 'local-os', subject: 'fixture' }, scopeId: 'installation',
+      ...workerConsentBinding({ recipe, providers: [provider], npmRegistry: document.toolchains.currency.registryEndpoint, sources: {} }), createdAt: new Date().toISOString() });
+    await rm(receiptPath); f.latest['@anthropic-ai/claude-code'] = '2.1.300';
+    document.toolchains.image = { consents: [consented('claude')] }; await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+    document.toolchains.image = { consents: [consented('claude'), consented('codex')] }; await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(3); expect(await readToolchainRefreshState(f.root, f.options)).toMatchObject({ staleProviders: ['codex'] });
   });
 
   it('a stale install starts the refresh in the background without delaying the caller, then revises only the active profile version', async () => {
@@ -145,6 +160,7 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
       resourceKey: 'opaque-subscription-fixture', definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'no-state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } };
     const connected = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: '0.150.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding);
     document.admission.registry.profiles.push(connected); document.admission.registry.kinds.push({ kind: 'connected-codex', profile: { id: connected.id, version: connected.version } });
+    document.provider_invocation_profiles = { schemaVersion: 1, profiles: [connectionProfile('bound-connection', binding.definition)] };
     await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); f.latest['@anthropic-ai/claude-code'] = '2.1.300';
     expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
     expect(f.state.builds).toBe(1);
@@ -170,6 +186,39 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     const after = await f.registry(); f.state.builds = 0; f.latest['@openai/codex'] = '0.157.0';
     const second = await refreshConfiguredToolchains(f.root, 'interval', f.options, proved, f.observer);
     expect(second.outcome).toBe('current'); expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(after);
+  });
+
+  it('R8 writes only the bound connection\'s own proved version, read from the document it writes, and never changes the refresh outcome', async () => {
+    const f = await fixture(); f.latest['@openai/codex'] = '0.155.1'; // nothing to build: only the connection record can change
+    const document = JSON.parse(await readFile(f.path, 'utf8')), { executable, ...limits } = document.execution.docker; void executable;
+    const definition = { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'state-a'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null };
+    const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque', definition };
+    const invocation = { provider: 'codex', cliVersion: '0.150.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' };
+    const connected = createNativeCodingTemplate(limits, invocation, binding);
+    document.admission.registry.profiles.push(connected); document.admission.registry.kinds.push({ kind: 'connected', profile: { id: connected.id, version: 1 } });
+    document.provider_invocation_profiles = { schemaVersion: 1, profiles: [connectionProfile('a', definition)] };
+    const save = async (value: unknown) => { await writeFile(f.path, JSON.stringify(value)); clearConfigCache(); }; await save(document);
+    const seen: string[] = [], proof = (extra: object = {}) => ({ ...f.deps, ...extra, observed: async (worker: { definition: { stateDir: string } }) => { seen.push(worker.definition.stateDir); return '0.152.0'; } });
+    const kept = async () => expect((await f.registry()).profiles.filter(profile => profile.id === connected.id).map(profile => (profile.parameters as unknown as { invocation: { cliVersion: string } }).invocation.cliVersion)).toEqual(['0.150.0']);
+    // B3: a connection record the service cannot write stays as it was and the refresh reports what it would without it (no failure, nothing applied).
+    expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, proof({ beforeRegistryWrite: () => { throw Object.assign(new Error('denied'), { code: 'POLICY_DENIED' }); } })))
+      .toMatchObject({ outcome: 'current', event: { appliedProfiles: 0, code: null } });
+    await kept(); expect(seen).toEqual([definition.stateDir]);
+    // B1: an authorized edit between the observation and the write (same profile id and version, another connection) is observed again from the
+    // document the write goes to; the first connection's version is never written into it.
+    const other = { ...definition, configDir: '/fixture/login-b', stateDir: join(f.root, 'state-b') }; let edited = false; seen.length = 0;
+    const edit = async () => { if (edited) return; edited = true; const current = JSON.parse(await readFile(f.path, 'utf8'));
+      current.admission.registry.profiles = current.admission.registry.profiles.map((profile: { id: string; parameters: object }) => profile.id === connected.id
+        ? { ...profile, parameters: { ...profile.parameters, worker: { ...binding, definition: other } } } : profile);
+      current.provider_invocation_profiles.profiles.push(connectionProfile('b', other)); await save(current); };
+    const observeOther = { ...f.deps, beforeRegistryWrite: edit, observed: async (worker: { definition: { stateDir: string } }) => { seen.push(worker.definition.stateDir); return worker.definition.stateDir === definition.stateDir ? '0.152.0' : null; } };
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, observeOther)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 0 } });
+    await kept(); expect(seen).toEqual([definition.stateDir, other.stateDir]);
+    // B2: two definitions sharing one program and one record (another login dir, the same state dir) prove neither connection: nothing is read or written.
+    const shared = JSON.parse(await readFile(f.path, 'utf8')); seen.length = 0;
+    shared.provider_invocation_profiles.profiles.push(connectionProfile('twin', { ...other, configDir: '/fixture/login-c' })); await save(shared);
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, proof())).toMatchObject({ outcome: 'current', event: { appliedProfiles: 0 } });
+    await kept(); expect(seen).toEqual([]); await expect(loadConfig(f.root, { ...f.options, force: true })).resolves.toBeTruthy(); // the shared state was a valid config
   });
 
   it('concurrent triggers join one build', async () => {

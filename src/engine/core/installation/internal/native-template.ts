@@ -2,7 +2,7 @@ import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, NATIVE_NODE_DEPENDENCY_LAYOUT, persi
 import { isCodedError, ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
+import { imageToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
 import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
 import type { NativeCliWorkerBinding } from '#capabilities/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
@@ -63,7 +63,8 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const bound = registry.data.kinds.find(entry => entry.kind === request.kind);
   const discoveryMode = request.discovery ?? (worker ? 'disabled' : undefined);
   if (worker && discoveryMode !== 'disabled') refuse('CODING_TEMPLATE_CONNECTION_DISCOVERY_UNSUPPORTED');
-  const pins = affectedToolchainProfiles({ admission: { registry: registry.data } }).filter(pin => pin.provider === request.provider && pin.imageId === imageId
+  // Owner 114: the version inside an image comes from image pins only, never from a connected template's host CLI record.
+  const pins = imageToolchainProfiles({ admission: { registry: registry.data } }, () => false).filter(pin => pin.provider === request.provider && pin.imageId === imageId
     && (!(request.connection || request.detach) || !bound || pin.profile.id === bound.profile.id && pin.profile.version === bound.profile.version));
   const candidates = discovered ? [discovered] : [];
   for (const pin of discovered ? [] : pins) {
@@ -106,7 +107,7 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   if (hold) refuse(hold);
   const existing = executionRegistrySchema.safeParse(read.effective.admission?.registry);
   if (!existing.success) refuse('CODING_TEMPLATE_REGISTRY_INVALID');
-  const pins = affectedToolchainProfiles(read.effective).filter(pin => pin.provider === request.provider && pin.imageId === request.image);
+  const pins = imageToolchainProfiles(read.effective, () => false).filter(pin => pin.provider === request.provider && pin.imageId === request.image); // image pins only (owner 114)
   const cliVersion = pins[0]?.cliVersion ?? await ports.detect(request.provider, { ...settings, imageId: request.image });
   const { executable, ...resources } = settings; void executable;
   const candidate = ((): ExecutionProfileDefinition => { try { return ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
