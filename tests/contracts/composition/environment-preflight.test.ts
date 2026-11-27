@@ -3,9 +3,10 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync, StatementSync } from 'node:sqlite';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
-import { DockerSupervisor, readLocalOsIdentity } from '#adapters/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { DockerSupervisor, prepareMonitorInstall, readLocalOsIdentity } from '#adapters/index.js';
+import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { applyConfiguredRunLifecycle, createConfiguredRun, deliverConfiguredRunCancellation, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
@@ -115,6 +116,63 @@ it('after the operator fixes the environment and resumes, a new attempt is check
     expect(run.previousBindings).toEqual([expect.objectContaining({ identity: first, observedKind: 'launch-refused' })]);
     expect(run.bindings).toEqual([expect.objectContaining({ identity: second, observedKind: 'exited' })]);
     expect(await preflightContainers(probe)).toBe('');
+    // A past Attempt's close-owner failure row is read alone, for its full identity, and reaches the shown reading only after its
+    // read-output decision (here the moved first Attempt; the row is placed directly, the read path is what is checked).
+    await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: first, sealedAt: 1, outcome: 'unverified' });
+    const config = await loadConfig(f.project, f.options);
+    for (const permit of [true, false]) {
+      const shown = await (await prepareMonitorInstall(config, f.options.env, async () => permit)).readShown([first, { ...first, generation: 3 }]);
+      expect(shown.runs[0]!.previousTranscripts ?? []).toEqual(permit ? [{ identity: first, transcript: { state: 'unverified', excerpt: [], truncated: false } }] : []);
+      expect(shown.runs[0]!.attempts).toHaveLength(1);
+    }
+    // One capture serves repeated refreshes (each reports into its own diagnostics), each past identity's read-output failure stays its own,
+    // and only the admitted identities are read. Three past Attempts of a fresh Run, both refused by a probe answered `unmet` (no container).
+    const g = await fixture(context, REQUIREMENTS);
+    try {
+      vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValue('unmet');
+      const moved: Awaited<ReturnType<typeof reserve>>[] = [];
+      for (const round of [1, 2, 3]) {
+        const next = await reserve(g, (await g.store.loadRun('s', 'r'))!.revision, `reserve-g${round}`);
+        await expect(executeConfiguredTask(g.project, next, g.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
+        await applyConfiguredRunLifecycle(g.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: `resume-g${round}`, action: 'resume',
+          expectedRevision: (await g.store.loadRun('s', 'r'))!.revision }, g.options);
+        moved.push(next);
+      }
+      expect((await g.store.loadRun('s', 'r'))!.previousBindings?.map(row => row.identity)).toEqual(moved);
+      // A row is tied to its own key first: a (malformed) row under the first Attempt's key that names the second labels neither.
+      const gConfig = await loadConfig(g.project, g.options), ledger = new DatabaseSync(productResourcePath(gConfig.productLayout, 'ledger'));
+      try { ledger.prepare('INSERT INTO worker_event_logs(scope_id,attempt_id,record) VALUES(?,?,?)').run('s', moved[0]!.attemptId,
+        JSON.stringify({ schemaVersion: 1, identity: moved[1], sealedAt: 1, outcome: 'unverified' })); } finally { ledger.close(); }
+      expect((await (await prepareMonitorInstall(gConfig, g.options.env, async () => true)).readShown(moved)).runs[0]!.previousTranscripts).toBeUndefined();
+      const cleared = new DatabaseSync(productResourcePath(gConfig.productLayout, 'ledger'));
+      try { cleared.prepare('DELETE FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').run('s', moved[0]!.attemptId); } finally { cleared.close(); }
+      for (const identity of moved) await g.store.saveWorkerEventLog({ schemaVersion: 1, identity, sealedAt: 1, outcome: 'unverified' });
+      let failing = true;
+      const capture = await prepareMonitorInstall(gConfig, g.options.env, async identity => {
+        if (failing && identity.attemptId === moved[0]!.attemptId) throw Object.assign(new Error('policy'), { code: 'POLICY_UNAVAILABLE' });
+        return true;
+      });
+      for (const refresh of [1, 2]) {
+        const shown = await capture.readShown(moved);
+        expect(shown.runs[0]!.previousTranscripts, `refresh ${refresh}`).toEqual([moved[1], moved[2]].map(identity => ({ identity, transcript: { state: 'unverified', excerpt: [], truncated: false } })));
+        expect(shown.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[0]!.attemptId}:POLICY_UNAVAILABLE`]);
+      }
+      failing = false;
+      const label = (identity: (typeof moved)[number]) => ({ identity, transcript: { state: 'unverified', excerpt: [], truncated: false } });
+      expect((await capture.readShown(moved)).runs[0]!.previousTranscripts).toEqual(moved.map(label));
+      // With a Monitor page of one there are three chunks and the middle query fails: the first and third keep their labels and only the middle
+      // identity is named (its chunk's own failure; the transaction still answers, so nothing is left unsent).
+      const all = StatementSync.prototype.all; let selects = 0;
+      const middle = vi.spyOn(StatementSync.prototype, 'all').mockImplementation(function (this: StatementSync, ...args: Parameters<StatementSync['all']>) {
+        if (this.sourceSQL.includes('JOIN worker_event_logs') && ++selects === 2) throw Object.assign(new Error('disk I/O error'), { code: 'ERR_SQLITE_ERROR' });
+        return all.apply(this, args);
+      });
+      try {
+        const paged = await (await prepareMonitorInstall({ ...gConfig, inspection: { ...gConfig.inspection, maxPageSize: 1 } }, g.options.env, async () => true)).readShown(moved);
+        expect(selects).toBe(3); expect(paged.runs[0]!.previousTranscripts).toEqual([moved[0]!, moved[2]!].map(label));
+        expect(paged.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[1]!.attemptId}:ERR_SQLITE_ERROR`]);
+      } finally { middle.mockRestore(); }
+    } finally { g.store.close(); }
   } finally { f.store.close(); }
 }, 120_000);
 

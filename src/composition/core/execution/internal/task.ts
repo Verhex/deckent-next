@@ -151,7 +151,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | null | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
       let worker: Extract<Awaited<ReturnType<typeof prepareNativeCliWorker>>, { state: 'ready' }> | undefined;
-      let nativeEvents: ReturnType<typeof createNativeWorkerEvents> | undefined;
+      let nativeEvents: ReturnType<typeof createNativeWorkerEvents> | undefined, app: DispatchApplication | undefined;
       function prepareNativeWorkerBackend() {
         return {
           async prepare() {
@@ -251,7 +251,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const preparedBackend = await backend.open();
       if ('reason' in preparedBackend) return await waiting(preparedBackend.reason);
       const { supervisor } = preparedBackend;
-      const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
+      app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const observation = await startConfiguredWorkerObservation({ store, app, supervisor, request, backend: native ? NATIVE_CLI_WORKER_ADAPTER.id : 'docker',
         provider: profile.nativeSubscription?.provider ?? 'docker', heartbeatMs: config.inspection.workers.heartbeatMs, maxFileBytes: config.inspection.workers.maxFileBytes,
@@ -268,12 +268,20 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       if (result.kind === 'terminal' && worker && !worker.supervisor.offeredObservation()) await worker.supervisor.release(request);
       } finally {
-        await connection?.close(); await relay?.close();
-        // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
-        const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
-        sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
-          offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
-        if (offered) try { if (outcome?.status === 'terminal') await worker!.supervisor.release(request); } finally { await worker!.supervisor.close(); }
+        // An opened sink is closed even when an earlier clean-up rejects; that rejection stays the caller's error (the drain's own is dropped).
+        let sinkReached = false;
+        try {
+          await connection?.close(); await relay?.close();
+          // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
+          const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
+          // Only the invocation that acquired the durable claim (an in-call fact) seals the Attempt log: from then on the identity
+          // never runs again. Any other end (a wait or refusal before the claim, the loser of a claim race) can be followed by the real run: drain only.
+          sinkReached = true;
+          if (!app?.acquiredClaim()) await events?.close();
+          else sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
+            offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
+          if (offered) try { if (outcome?.status === 'terminal') await worker!.supervisor.release(request); } finally { await worker!.supervisor.close(); }
+        } finally { if (!sinkReached) await events?.close().catch(() => undefined); }
       }
       // Only a sealing failure is reported: the replay of a settled execution (above) keeps the same shape as a successful first call.
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, ...outcome, ...(sealing.status === 'failed' ? { eventLog: sealing } : {}) }) });

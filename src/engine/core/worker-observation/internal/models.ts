@@ -2,14 +2,15 @@ import { readWorkerModelPin, summarizeWorkerEvents, viewWorkerModels, workerEven
   type VerifiedPrincipal, type WorkerEvent, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import { WorkerObservationError, type WorkerEventLogStore, type WorkerUsageEvidence } from './contract.js';
+import { sealedWorkerEventLog, WorkerObservationError, type WorkerEventLogStore, type WorkerUsageEvidence } from './contract.js';
 import type { WorkerEventArtifacts } from './transcript.js';
 
 type SealedLogs = Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
 const denied = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && isAuthorizationRefusal(error.code, { include: PERSON_AUTHORIZATION_REFUSALS });
-/** Sealed, redacted events of one attempt, or null without a sealed log. A log that is not an event stream of this attempt is invalid. */
+/** Sealed, redacted events of one attempt, or null without a sealed log (no row, or the close owner's failure row). A log that is not an event
+ * stream of this attempt is invalid. */
 export async function readSealedWorkerEvents(store: SealedLogs, artifacts: WorkerEventArtifacts, identity: AttemptIdentity): Promise<readonly WorkerEvent[] | null> {
-  const log = await store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
+  const log = sealedWorkerEventLog(await store.loadWorkerEventLog(identity.scopeId, identity.attemptId));
   if (!log) return null;
   if (JSON.stringify(log.identity) !== JSON.stringify(identity)) throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
   try {

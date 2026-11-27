@@ -60,8 +60,16 @@ export async function closeAndSealAttemptWorkerEvents(identity: AttemptIdentity,
   if (!input.offered) return seal(await sink?.close());
   const deadline = performance.now() + input.deadlineMs;
   const drained = await Promise.resolve().then(() => sink?.close(input.deadlineMs)).then(closed => ({ closed }), () => null);
+  let sealing: WorkerEventSealing;
   try {
     if (!drained) throw new Error('unverified');
-    return await seal(drained.closed, { observation: input.held?.(), deadline });
-  } catch { return Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
+    sealing = await seal(drained.closed, { observation: input.held?.(), deadline });
+  } catch { sealing = Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
+  // The close owner records that this Attempt's log could not be verified; only a successful insert makes that durable. The store keeps
+  // the first row of either shape (a sealed log is never replaced): its refusal (WORKER_OBSERVATION_INVALID, a first row exists) is expected and
+  // silent. Any other write failure is named in the returned failure's `cause`, the existing diagnostic path (a code-less one keeps the cause
+  // already at hand); nothing new is stored or refused.
+  if (sealing.status !== 'failed') return sealing;
+  try { await store.saveWorkerEventLog({ schemaVersion: 1, identity, sealedAt: Date.now(), outcome: 'unverified' }); return sealing; }
+  catch (error) { return causeOf(error) === 'WORKER_OBSERVATION_INVALID' ? sealing : Object.freeze({ ...sealing, cause: causeOf(error) ?? sealing.cause }); }
 }

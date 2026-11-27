@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { sameAttemptIdentity, TaskEvaluationError, operationEvidenceBindingSchema, attemptIdentitySchema,
   type AttemptIdentity, type TaskEvaluation, type RunSnapshot } from '#domain/index.js';
 import { readAcceptedOperationSettlements } from '#adapters/core/sqlite-ledger/index.js';
-import { workerEventLogSchema, bindUsedOperationEvidence, selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/index.js';
+import { workerEventLogSchema, sealedWorkerEventLog, bindUsedOperationEvidence, selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/index.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { SqliteEffectJournal } from '#adapters/core/sqlite-effect-store/index.js';
 /** The immutable admission row owns Run authority; dispatch grant owns execution authority and start time. */
@@ -25,9 +25,10 @@ export function bindOperationEvidenceUse(db: DatabaseSync, run: RunSnapshot, eva
 export function readEvaluationDigests(db: DatabaseSync, identity: AttemptIdentity) {
   const { dispatch } = readRunBoundDispatch(db, identity);
   const row = db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-  const log = row ? workerEventLogSchema.parse(JSON.parse(String(row.record))) : null;
-  if (log && !sameAttemptIdentity(log.identity, identity)) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
-  return { output: dispatch?.output?.digest, seal: log?.events.digest, patch: readRunBoundTask(db, identity).workInput ? dispatch?.patch?.digest : undefined };
+  const stored = row ? workerEventLogSchema.parse(JSON.parse(String(row.record))) : null;
+  if (stored && !sameAttemptIdentity(stored.identity, identity)) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
+  // A failure row carries no seal digest.
+  return { output: dispatch?.output?.digest, seal: sealedWorkerEventLog(stored)?.events.digest, patch: readRunBoundTask(db, identity).workInput ? dispatch?.patch?.digest : undefined };
 }
 export function assertEvaluationDigests(db: DatabaseSync, evaluation: TaskEvaluation) {
   const current = readEvaluationDigests(db, evaluation.identity), effects = new SqliteEffectJournal(db), { run, dispatch } = readRunBoundDispatch(db, evaluation.identity);

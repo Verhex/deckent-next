@@ -52,8 +52,13 @@ it('never retries an unknown launch and refuses release without terminal evidenc
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
+  expect(app.acquiredClaim()).toBe(false);
   await expect(app.execute(f.request)).rejects.toThrow('transport interrupted');
+  expect(app.acquiredClaim()).toBe(true); // The in-call claim fact survives the throw after the claim.
   const unresolved = await app.execute(f.request); expect(unresolved.kind).toBe('unresolved'); expect(unresolved.record.launch).toBe('granted'); expect(calls).toBe(1);
+  // Another application meeting the existing record (a second invocation) never holds it.
+  const other = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
+  expect((await other.execute(f.request)).kind).toBe('unresolved'); expect(other.acquiredClaim()).toBe(false); expect(calls).toBe(1);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
 });
 it.skipIf(!imageId)('reconciles real terminal container after failed journal write without granting a new launch', async () => {

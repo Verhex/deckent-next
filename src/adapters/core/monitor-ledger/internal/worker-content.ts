@@ -48,6 +48,8 @@ export function summarizeMonitorWorkerEvent(event: WorkerEvent, locale: Locale) 
 export async function readMonitorWorkerContent(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles, namespace = '', locale: Locale = resolveLocale()): Promise<MonitorWorkerContent> {
   const result: { -readonly [K in keyof MonitorWorkerContent]: MonitorWorkerContent[K] } = { ...emptyWorkerContent('missing') };
   const eventsReceipt = files.events, patchReceipt = files.patch, outputReceipt = files.output;
+  // The close owner's failure row is a not-verified transcript, never a sealed excerpt.
+  if (!eventsReceipt && files.unverified) result.transcript = { state: 'unverified', excerpt: [], truncated: false };
   if (eventsReceipt) {
     try {
       Object.assign(result, await readArtifact(files, `${namespace}:${locale}`, 'events', async () => {

@@ -9,6 +9,7 @@ import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { FileArtifactStore, compileNativeCodingDockerProfile, openSqliteAttemptStore } from '#adapters/index.js';
 import * as adapters from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
+import { sealedWorkerEventLog } from '#engine/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 
@@ -150,12 +151,17 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     ['no sealed log', null],
     ['a sealed log without a host verdict (no session end)', [started(SONNET)]],
     ['a sealed unverified verdict (usage without the pinned model)', [started(SONNET), ended(), verdict('unverified', [SONNET])]],
+    // The close owner's stored failure row is no sealed evidence: the session-events model stays unknown, never accepted on the row.
+    ['the close owner\'s failure row', 'failure-row'],
   ] as const)('parks a pinned Claude attempt with %s for a human decision, never plain verified acceptance', async (_label, events) => {
     const f = await fixture();
-    if (events) await f.seal(events);
+    if (events === 'failure-row') {
+      const writer = await f.open();
+      try { await writer.saveWorkerEventLog({ schemaVersion: 1, identity: f.identity, sealedAt: 1, outcome: 'unverified' }); } finally { writer.close(); }
+    } else if (events) await f.seal(events);
     const result = await f.evaluate();
     expect(result.evaluation.run.tasks[0]!.phase).toBe('awaiting-decision');
-    expect(result.evaluation.model).toMatchObject({ verdict: events ? 'unverified' : 'unverified', evidence: events ? 'sealed' : 'absent' });
+    expect(result.evaluation.model).toMatchObject({ verdict: 'unverified', evidence: events && events !== 'failure-row' ? 'sealed' : 'absent' });
   });
   it('refuses real evidence-less reevaluation and records a human SDK decision with visible unverified acceptance', async () => {
     const f = await fixture();
@@ -192,7 +198,8 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     const store = await f.open();
     try {
       const receipt = JSON.parse((await store.loadRunReceipt('s', 'later'))!.command);
-      const seal = await store.loadWorkerEventLog('s', 'a');
+      // The stored row is a union (sealed log or failure row); narrow to the sealed variant before reading its events receipt.
+      const seal = sealedWorkerEventLog(await store.loadWorkerEventLog('s', 'a'));
       expect(receipt.evaluation.returnEvidence).toEqual({ kind: 'model-seal', digest: seal!.events.digest });
     } finally { store.close(); }
     expect(await f.evaluate('later', 3)).toEqual(accepted);

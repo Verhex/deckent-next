@@ -31,15 +31,20 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     const sink = (projectionComplete: boolean) => ({ close: vi.fn<(remainingMs?: number) => Promise<{ events: (typeof event)[]; projectionComplete: boolean }>>(async () => ({ events: [event], projectionComplete })) });
     const files = { async put(_scope: string, bytes: Uint8Array) { stored.push(bytes); return receipt; }, async read() { return stored.at(-1)!; } };
     const later = () => vi.spyOn(performance, 'now').mockReturnValue(Number.MAX_VALUE), base = { maxBytes: 65536, deadlineMs: 60_000 };
+    // Every failure on the offered path also stores the close owner's failure row (no events receipt); the no-offer path stores none.
+    const failureRow = { schemaVersion: 1, identity, sealedAt: expect.any(Number), outcome: 'unverified' };
     const plain = sink(true); saved.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, plain, base)).toEqual({ status: 'sealed', eventCount: 1 });
     expect(plain.close).toHaveBeenCalledWith(); saved.length = 0; stored.length = 0;
+    // The close owner writes the failure row only for an offered observation; an un-offered close whose artifact write fails writes none.
+    expect(await closeAndSealAttemptWorkerEvents(identity, full, store, sink(true), base)).toEqual({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: 'ENOSPC' });
+    expect(saved).toEqual([]);
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, offered: true })).toEqual(failed); expect(stored).toEqual([]);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read() { return Buffer.from('other'); } }, store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     expect(await closeAndSealAttemptWorkerEvents(identity, { put: () => new Promise<never>(() => {}) }, store, sink(true), { ...base, offered: true, held: () => observation, deadlineMs: 1 })).toEqual(failed);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async put(scope: string, bytes: Uint8Array) { later(); return files.put(scope, bytes); } },
       store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
-    vi.restoreAllMocks(); expect(saved).toEqual([]);
+    vi.restoreAllMocks(); expect(saved).toEqual([failureRow, failureRow, failureRow, failureRow]); saved.length = 0;
     const slow = { async saveWorkerEventLog(record: never) { later(); saved.push(record); return record; } }, partial = sink(false);
     expect(await closeAndSealAttemptWorkerEvents(identity, files, slow, partial, { ...base, offered: true, held: () => observation })).toEqual({ status: 'sealed', eventCount: 2 });
     vi.restoreAllMocks(); expect(partial.close).toHaveBeenCalledWith(60_000); expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
@@ -58,7 +63,17 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     expect(drained.close).toHaveBeenCalledWith(60_000);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, read(): never { throw Object.assign(new Error('corrupt'), { code: 'ARTIFACT_CORRUPT' }); } },
       store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
-    expect(saved).toEqual([]); expect(await closeAndSealAttemptWorkerEvents(identity, files, store, null, { ...base, source })).toEqual({ status: 'sealed', eventCount: 1 });
+    expect(saved).toEqual([failureRow, failureRow, failureRow, failureRow]); saved.length = 0;
+    // A refused failure row (the Attempt already holds a row: a sealed log is never downgraded) leaves the typed failure as the result, never a throw.
+    const refusing = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('row'), { code: 'WORKER_OBSERVATION_INVALID' }); } };
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, refusing, sink(true), { ...base, offered: true })).toEqual(failed);
+    // A failure row that could not be written (not an existing first row) is named in the returned failure's `cause`; nothing is durable then.
+    const unwritable = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('io'), { code: 'ERR_SQLITE_ERROR' }); } };
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, unwritable, sink(true), { ...base, offered: true })).toEqual({ ...failed, cause: 'ERR_SQLITE_ERROR' });
+    // A code-less write failure keeps the cause already at hand (here the artifact write's own code).
+    const codeless = { async saveWorkerEventLog(): Promise<never> { throw new Error('io'); } };
+    expect(await closeAndSealAttemptWorkerEvents(identity, full, codeless, sink(true), { ...base, offered: true, held: () => observation })).toEqual({ ...failed, cause: 'ENOSPC' });
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, store, null, { ...base, source })).toEqual({ status: 'sealed', eventCount: 1 });
     expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
   });
 });

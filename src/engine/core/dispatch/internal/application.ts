@@ -18,6 +18,10 @@ export interface DispatchIdentityAuthorization {
  */
 export class DispatchApplication {
   private readonly owner: string;
+  private acquired = false;
+  /** Whether THIS application acquired the durable dispatch claim, known in the call (never inferred from the ledger afterwards):
+   * from then on the Attempt identity is never dispatched again, whatever follows (a prevented or failed grant, a supervisor that never ran). */
+  acquiredClaim(): boolean { return this.acquired; }
   constructor(private readonly store: DispatchStore, private readonly supervisor: ExecutionSupervisor & SupervisorProfileSource,
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore,
     private readonly now: () => number = Date.now, private readonly resources?: ResourceExecutionObserver) {
@@ -36,6 +40,7 @@ export class DispatchApplication {
     const existing = await this.store.readDispatch(request);
     if (existing) return Object.freeze({ kind: existing.launch === 'prevented-before-launch' ? 'prevented' : existing.terminal ? 'terminal' : 'unresolved', record: existing });
     const claimed = await this.store.claimDispatch({ ...claim, profile: await this.supervisor.captureProfile() });
+    if (claimed.acquired) this.acquired = true;
     if (!claimed.acquired) return Object.freeze({ kind: claimed.record.launch === 'prevented-before-launch' ? 'prevented' : claimed.record.terminal ? 'terminal' : 'unresolved', record: claimed.record });
     const grant = await this.store.grantLaunch({ claim, principal, now: this.now() });
     if (grant.kind === 'prevented') return Object.freeze({ kind: 'prevented', record: grant.record });

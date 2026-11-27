@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, attemptIdentitySchema, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, RUN_OPEN_PHASES, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema, MonitorApplication,
+import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema, sealedWorkerEventLog, MonitorApplication,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerIndex, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { aggregateDelivery, monitorRunKey, readDeliveryReceipts } from './receipt-observation.js';
 
@@ -14,6 +14,8 @@ const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, CATALOG_VERSION 
 export interface MonitorAttemptFiles {
   readonly identity: AttemptIdentity; readonly patch?: ArtifactReceipt | null; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
   readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
+  /** The close owner recorded that this Attempt's log could not be verified (a failure row, no events). */
+  readonly unverified?: boolean;
 }
 
 const OPEN_PHASES = `(${[...RUN_OPEN_PHASES].map(phase => `'${phase}'`).join(',')})`;
@@ -143,6 +145,40 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
     })) });
 }
 
+/** Of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
+ * One read-only transaction, primary-key reads in chunks of `chunk` identities; a row counts only when its own key is the requested one and its
+ * stored identity is that key and then the full requested identity (a sealed, corrupt or other-identity row is ignored). A failed chunk is reported
+ * for its own identities (`failed`) and the read goes on while the transaction still answers; once it does not, the chunks not sent are `unsent`.
+ * A failure to open or begin the read (or of its final commit) still throws: nothing was read for any identity. */
+export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[], chunk: number) {
+  type Unread = Readonly<{ identities: readonly AttemptIdentity[]; reason: 'failed' | 'unsent'; error: unknown }>;
+  const result = (unverified: readonly AttemptIdentity[], unread: readonly Unread[]) => Object.freeze({ unverified: Object.freeze(unverified), unread: Object.freeze(unread) });
+  if (!identities.length) return result([], []);
+  let db: DatabaseSync;
+  try { db = openLedgerDatabase(path, { readOnly: true, timeout: busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
+  try { return ledgerTransaction(db, () => {
+    const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+    if (!Number.isSafeInteger(version) || version < WORKER_EVENT_LOG_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return result([], []);
+    const select = db.prepare(`SELECT w.scope_id,w.attempt_id,w.record FROM json_each(?) j JOIN worker_event_logs w ON w.scope_id=json_extract(j.value,'$[0]') AND w.attempt_id=json_extract(j.value,'$[1]')`);
+    const failed = new Map<string, AttemptIdentity>(), key = (scopeId: unknown, attemptId: unknown) => JSON.stringify([scopeId, attemptId]), unread: Unread[] = [];
+    const size = Math.max(1, chunk);
+    for (let at = 0; at < identities.length; at += size) {
+      const part = identities.slice(at, at + size);
+      try {
+        for (const row of select.all(JSON.stringify(part.map(id => [id.scopeId, id.attemptId])))) {
+          const parsed = workerEventLogSchema.safeParse(json(row.record));
+          if (parsed.success && !sealedWorkerEventLog(parsed.data) && key(parsed.data.identity.scopeId, parsed.data.identity.attemptId) === key(row.scope_id, row.attempt_id))
+            failed.set(key(row.scope_id, row.attempt_id), parsed.data.identity);
+        }
+      } catch (error) {
+        unread.push({ identities: part, reason: 'failed', error });
+        try { db.prepare('SELECT 1').get(); } catch (unusable) { unread.push({ identities: identities.slice(at + size), reason: 'unsent', error: unusable }); break; }
+      }
+    }
+    return result(identities.filter(id => { const row = failed.get(key(id.scopeId, id.attemptId)); return !!row && sameAttemptIdentity(row, id); }), unread.filter(row => row.identities.length));
+  }, { mode: 'read' }); } finally { db.close(); }
+}
+
 function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['snapshot']['bindings'][number], reservedAtMs: number | null,
   evaluated: WorkerModelView | null, parameters: unknown, files: MonitorAttemptFiles[]): MonitorLedgerAttempt {
   const { scopeId, runId, attemptId, generation } = binding.identity;
@@ -152,18 +188,18 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const evaluationObserved = version >= INTENT_LEDGER_VERSION && binding.observedRevision !== null && !!db.prepare(`SELECT 1 FROM task_evaluation_observations
     WHERE scope_id=? AND run_id=? AND attempt_id=? AND attempt_revision=?`).get(scopeId, runId, attemptId, binding.observedRevision);
   const log = version >= WORKER_EVENT_LOG_LEDGER_VERSION ? db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId) : undefined;
-  const sealed = log ? workerEventLogSchema.parse(json(log.record)) : null;
+  const stored = log ? workerEventLogSchema.parse(json(log.record)) : null, sealed = sealedWorkerEventLog(stored);
   const receipt = db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, handoffEventCommandId(binding.identity));
   const handoffStart = receipt ? handoffStartRecordSchema.parse(json(receipt.command)) : null;
   if (handoffStart && (!sameAttemptIdentity(handoffStart.identity, binding.identity) || !sameAttemptIdentity((json(receipt!.snapshot) as { identity: AttemptIdentity }).identity, binding.identity))) throw new Error();
-  if (sealed && !sameAttemptIdentity(sealed.identity, binding.identity)) throw new Error();
+  if (stored && !sameAttemptIdentity(stored.identity, binding.identity)) throw new Error();
   const excludedRow = db.prepare('SELECT command FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, workerTreeExclusionCommandId(binding.identity));
   const treeExclusions = excludedRow ? workerTreeExclusionRecordSchema.parse(json(excludedRow.command)) : null;
   if (treeExclusions && !sameAttemptIdentity(treeExclusions.identity, binding.identity)) throw new Error();
   const terminal = record?.terminal ?? null, pin = readWorkerModelPin(parameters);
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
   files.push(Object.freeze({ identity: binding.identity, patch: record?.patch ?? null, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
-    workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed }));
+    workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed, unverified: !!stored && !sealed }));
   const evidenceModel = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
   // Selection belongs to the frozen profile, independently of evaluation/usage evidence. Legacy pins remain absent.
   const model = evidenceModel && pin?.reasoningEffort ? Object.freeze({ ...evidenceModel, reasoningEffort: pin.reasoningEffort }) : evidenceModel;

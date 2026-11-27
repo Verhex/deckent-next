@@ -125,6 +125,9 @@ export class MonitorApplication {
       }));
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt, dismissed });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
+    // A shown past Attempt's not-verified transcript, keyed by its full identity (admitted scopes only).
+    const past = new Map(reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId))
+      .flatMap(run => (run.previousTranscripts ?? []).map(row => [MonitorApplication.attemptKey(row.identity), row.transcript] as const)));
     const enrich = (value: WorkerObservation): MonitorWorker => {
       const id = value.identity;
       const bound = id ? ledger.get(MonitorApplication.attemptKey(id)) : undefined;
@@ -146,7 +149,7 @@ export class MonitorApplication {
             ...(known && projected?.evaluation.reason ? { reason: projected.evaluation.reason } : {}) }, content?.finalReport ?? null, record.delivery ?? null) } : {}), title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
           evaluation: known ? projected?.evaluation.verdict ?? null : null,
           ...(known && projected?.evaluation.reason ? { evaluationReason: projected.evaluation.reason } : {}),
-          transcript: content?.transcript ?? { state: 'missing', excerpt: [], truncated: false },
+          transcript: content?.transcript ?? (!known && id ? past.get(MonitorApplication.attemptKey(id)) : undefined) ?? { state: 'missing', excerpt: [], truncated: false },
           patch: content?.patch ?? { state: 'missing', files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: content?.finalReport ?? null,
           startedAtMs: known?.dispatch?.grantedAtMs ?? null, endedAtMs: known?.sealedAtMs ?? known?.observedEndAtMs ?? null,
           endedAtSource: known?.sealedAtMs != null ? 'sealed' : known?.observedEndAtMs != null ? 'observed' : null } };

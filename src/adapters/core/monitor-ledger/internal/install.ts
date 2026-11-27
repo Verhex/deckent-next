@@ -11,7 +11,7 @@ import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent, summarizeMonitorWorkerEvent } from './worker-content.js';
 import { monitorRecoveryRollout } from './recovery.js';
-import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import { indexMonitorLedger, readPastFailureLogs, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
@@ -29,7 +29,8 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
 export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
   expected?: { revision: number; layoutRevision: string }, scope?: MonitorReadScope) {
   const layout = config.productLayout, locale = resolveLocale(undefined, env, config.language);
-  const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
+  const ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
+  const scan = scanMonitorLedger(ledger,
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}), ...(scope ? { scope } : {}) }, retained);
   // Reject stale/future result views before any output decision or read, including receipt observations.
   const scoped = expected ? { ...scan.reading, runs: scan.reading.runs.filter(value => value.snapshot.revision === expected.revision
@@ -44,7 +45,8 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     const among = (list: readonly AttemptIdentity[], files: MonitorAttemptFiles) => list.some(identity => sameAttemptIdentity(identity, files.identity));
     const selected = scan.files.filter(files => among(identities, files) || (files.failed && among(failures, files)));
     type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
-    const extra = new Map<string, SelectedContent>();
+    // Each call reports into its own list: the shared one stays the capture's, and a frozen result list is never pushed to again.
+    const extra = new Map<string, SelectedContent>(), notes = [...diagnostics];
     for (const files of selected) {
       const key = MonitorApplication.attemptKey(files.identity);
       try {
@@ -65,15 +67,35 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (sidecars?.refusalAuditLoss) found.diagnostics = [sidecars.refusalAuditLoss];
         if (needsEnd) found.observedEndAtMs = observedEnd(files, sidecars);
         if (Object.keys(found).length) extra.set(key, found);
-      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
+      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); notes.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
+    // A shown past Attempt (`previousBindings`) carries only its not-verified label. Shown identities are matched through a keyed
+    // set; each read-output decision (and its failure) is per identity; the admitted ones are read in chunks of the monitor page size in one read-only
+    // transaction, and an SQL failure is reported only for the identities sent to it. Each failure is this stage's existing per-attempt diagnostic.
+    const shown = new Set(identities.map(identity => MonitorApplication.attemptKey(identity))), permitted: AttemptIdentity[] = [];
+    const unavailable = (identity: AttemptIdentity, error: unknown) => notes.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`);
+    // `delete` admits each identity once, so none can land in two chunks and get both a label and a read error.
+    for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.delete(MonitorApplication.attemptKey(identity))) {
+      try { if (await readOutput(identity)) permitted.push(identity); } catch (error) { unavailable(identity, error); }
+    }
+    // A failed chunk names its own identities; chunks never sent (the transaction stopped answering) and a read that could not run at all name theirs.
+    let failed = new Set<string>();
+    try {
+      const read = readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted, config.inspection.maxPageSize);
+      failed = new Set(read.unverified.map(identity => MonitorApplication.attemptKey(identity)));
+      for (const unread of read.unread) for (const identity of unread.identities) unavailable(identity, unread.error);
+    } catch (error) { for (const identity of permitted) unavailable(identity, error); }
     // The ledger reader projects each attempt from the binding at the same index.
-    const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map((value, index) => {
-      const identity = run.snapshot.bindings[index]?.identity;
-      const found = identity && extra.get(MonitorApplication.attemptKey(identity));
-      return found ? Object.freeze({ ...value, ...found }) : value;
-    })) }));
-    return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
+    const runs = reading.runs.map(run => {
+      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => failed.has(MonitorApplication.attemptKey(identity))
+        ? [Object.freeze({ identity, transcript: Object.freeze({ state: 'unverified' as const, excerpt: [], truncated: false }) })] : []);
+      return Object.freeze({ ...run, ...(previousTranscripts.length ? { previousTranscripts: Object.freeze(previousTranscripts) } : {}), attempts: Object.freeze(run.attempts.map((value, index) => {
+        const identity = run.snapshot.bindings[index]?.identity;
+        const found = identity && extra.get(MonitorApplication.attemptKey(identity));
+        return found ? Object.freeze({ ...value, ...found }) : value;
+      })) });
+    });
+    return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(notes) }), readOutput);
   } };
 }
 /** M-VIS: the ledger's scope and pool ids (no Run, occupancy or holder), read before the monitor decides admission. */

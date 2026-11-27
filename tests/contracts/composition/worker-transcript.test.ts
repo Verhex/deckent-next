@@ -81,6 +81,33 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
     expect(JSON.parse(out.join('')).events.find((event: { kind: string }) => event.kind === 'cli.observation').observation.builtinPlugins).toEqual({ names: [], omitted: 3 });
   } finally { reopened.store.close(); }
   expect(await inspectConfiguredWorkerTranscript(f.project, { ...identity, attemptId: 'other' }, f.options)).toMatchObject({ sealed: null, summary: null });
+  // The close owner's failure row is the Attempt's not-verified state, never a sealed log. The first row wins in both
+  // directions (no downgrade of a sealed log, no silent replacement of a failure row); a partial projection renders the corrected sentence.
+  const unverified = { ...identity, attemptId: 'a-unverified' }, partial = { ...identity, attemptId: 'a-partial' };
+  const failure = { schemaVersion: 1 as const, identity: unverified, sealedAt: 2, outcome: 'unverified' as const }, ledger = await openConfiguredAttemptStore(f.project, f.options);
+  try {
+    const sealedRow = (await ledger.store.loadWorkerEventLog('s', 'a-1'))!;
+    expect(await ledger.store.saveWorkerEventLog(failure)).toEqual(failure); expect(await ledger.store.saveWorkerEventLog(failure)).toEqual(failure);
+    await expect(ledger.store.saveWorkerEventLog({ ...sealedRow, identity: unverified })).rejects.toMatchObject({ code: 'WORKER_OBSERVATION_INVALID' });
+    await expect(ledger.store.saveWorkerEventLog({ ...failure, identity })).rejects.toMatchObject({ code: 'WORKER_OBSERVATION_INVALID' });
+    await ledger.store.saveWorkerEventLog({ ...sealedRow, identity: partial, projection: 'partial' });
+  } finally { ledger.store.close(); }
+  expect(await inspectConfiguredWorkerTranscript(f.project, unverified, f.options)).toMatchObject({ sealed: null, summary: null, events: [], logFailure: 'unverified' });
+  expect(await inspectConfiguredWorkerTranscript(f.project, identity, f.options)).not.toHaveProperty('logFailure');
+  // The row is keyed by scope and Attempt id; another generation, run, task or layout of that id keeps the no-record view (no new refusal).
+  for (const changed of [{ generation: 2 }, { runId: 'other' }, { taskId: 'other' }, { layoutRevision: 'other' }]) {
+    const other = await inspectConfiguredWorkerTranscript(f.project, { ...unverified, ...changed }, f.options);
+    expect(other).toMatchObject({ sealed: null, summary: null, events: [] }); expect(other).not.toHaveProperty('logFailure');
+  }
+  const transcriptText = async (attemptId: string, locale: string) => { out.length = 0;
+    expect(await cliMain(['task', 'transcript', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', attemptId, '--generation', '1', '--layout-revision', 'layout', '--lang', locale],
+      { root: f.project, env: f.options.env, stdout: { write: value => { out.push(String(value)); } }, inspectWorkerTranscript: inspectConfiguredWorkerTranscript })).toBe(0);
+    return out.join(''); };
+  expect(await transcriptText('a-unverified', 'en')).toContain("This Attempt's worker log could not be verified.");
+  expect(await transcriptText('a-unverified', 'tr')).toContain('Bu denemenin işçi günlüğü doğrulanamadı.');
+  // The partial sentence is true whether a write failed, the file never opened or only its close failed.
+  expect(await transcriptText('a-partial', 'en')).toContain('The live worker.events file could not be confirmed complete; this sealed transcript may not hold every event the worker reported.');
+  expect(await transcriptText('a-partial', 'tr')).toContain('Canlı `worker.events` dosyasının eksiksiz olduğu doğrulanamadı; bu mühürlü kayıt işçinin bildirdiği her olayı içermeyebilir.');
   await f.policy(['execute']);
   await expect(inspectConfiguredWorkerTranscript(f.project, identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });

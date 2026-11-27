@@ -1,7 +1,7 @@
-import { readWorkerFinalReport, attemptIdentitySchema, summarizeWorkerEvents, workerActivityPhase, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
+import { readWorkerFinalReport, attemptIdentitySchema, sameAttemptIdentity, summarizeWorkerEvents, workerActivityPhase, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { parseRetainedOutputEnvelope, type RunBoundDispatchStore, type DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
-import type { WorkerEventLogStore } from './contract.js';
+import { sealedWorkerEventLog, type WorkerEventLogStore } from './contract.js';
 import { projectAttemptWorkerModels, readSealedWorkerEvents } from './models.js';
 export interface WorkerEventArtifacts { read(scopeId: string, receipt: ArtifactReceipt): Promise<Uint8Array> }
 /** Sealed, redacted worker-reported events of one attempt with a deterministic summary and last activity. Evidence for interpretation:
@@ -13,7 +13,7 @@ export class WorkerTranscriptApplication {
   async inspect(input: AttemptIdentity, principal: VerifiedPrincipal) {
     const identity = attemptIdentitySchema.parse(input);
     await this.authorization.authorizeIdentity('read-output', identity, principal);
-    const log = await this.store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
+    const stored = await this.store.loadWorkerEventLog(identity.scopeId, identity.attemptId), log = sealedWorkerEventLog(stored);
     let finalReport = readWorkerFinalReport('');
     try {
       const dispatch = await this.store.loadBoundDispatch(identity);
@@ -25,7 +25,10 @@ export class WorkerTranscriptApplication {
     // Requested → init → usage → verdict of a pinned worker task (WORKER-CURRENCY-2); null for other tasks.
     const run = await this.store.loadRun(identity.scopeId, identity.runId);
     const model = run ? projectAttemptWorkerModels(run, identity.taskId, events) : null;
-    if (!log || !events) return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: null, summary: null, activity: null, events: Object.freeze([]), model });
+    // The close owner's failure row is this Attempt's not-verified state (`logFailure`), never a sealed log; only for the row's own
+    // full identity (the store keys rows by scope and Attempt id alone), any other query keeps the no-record view.
+    if (!log || !events) return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: null, summary: null, activity: null, events: Object.freeze([]), model,
+      ...(stored && !log && sameAttemptIdentity(stored.identity, identity) ? { logFailure: 'unverified' as const } : {}) });
     return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: Object.freeze({ eventCount: log.eventCount, sealedAt: log.sealedAt, projection: log.projection ?? 'complete' }),
       summary: summarizeWorkerEvents(events), activity: workerActivityPhase(events), events: Object.freeze(events.map(event => {
         if (event.kind !== 'cli.observation' || !event.observation.builtinPlugins) return event;
