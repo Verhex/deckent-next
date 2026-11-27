@@ -43,10 +43,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     // every other kind keeps the model-use check of the existing profile (R6). The person-only observer uses the snapshot's scope context.
     const facts = kind?.connect?.personOnly && kind.connect.chatPath === null ? { modelUse: false } as const : {};
     // As at the base, the listing behind `catalogHas` and `registered` reads with the same rule: for an ordinary kind each declared catalog
-    // model's chat state, with its inspect and model-use checks (R6). The worker comparisons keep the plain cached view.
+    // model's chat state, with its inspect and model-use checks (R6). Each logical read is fresh, as at the base; only calls of one batch that
+    // run at the same time share the listing in flight. The worker comparisons keep the plain cached view.
     const listings = new Map<string, Promise<Awaited<ReturnType<typeof inspectConfiguredModelCatalog>>['channels'][number] | undefined>>();
     const listed = (channelId: string) => listings.get(channelId) ?? listings.set(channelId, inspectConfiguredModelCatalog(projectRoot,
-      { schemaVersion: 1, scopeId, channelId }, options, facts).then(result => result.channels[0])).get(channelId)!;
+      { schemaVersion: 1, scopeId, channelId }, options, facts).then(result => result.channels[0]).finally(() => listings.delete(channelId))).get(channelId)!;
     const activationContext = { context: async () => authority!.initial() } as Parameters<typeof inspectConfiguredModelActivation>[4];
     if (command && kind?.connect?.adapter === SIWC_INFERENCE.adapter.id) siwc = configuredSiwcConnect(projectRoot, command, options, host.siwcPresentation);
     const siwcModels = async () => (await siwc!.models()).map(row => row.slug);

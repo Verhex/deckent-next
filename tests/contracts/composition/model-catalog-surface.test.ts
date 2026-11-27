@@ -10,6 +10,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { admitModelActivation, applyModelCatalog, inspectModelActivation, inspectModelBinding, inspectModelCatalog } from '../../../src/index.js';
+import { activateConfiguredWorkerModel } from '#composition/core/model-activation/index.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
 import { main } from '../../../src/surfaces/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
@@ -448,6 +449,28 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     });
     try { await expect.soft(asPerson(fresh('direct-broken', 9))).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); }
     finally { broken.mockRestore(); }
+    // The third stage: the writer is the first to see the child receipt (another delivery of the same named-worker command completed the
+    // children after this one planned them). Completed without writing is reported as not written; a target closed meanwhile is a conflict.
+    remove('');
+    const worker = (commandId: string) => () => activateConfiguredWorkerModel(direct.project, 's', direct.reference, commandId, direct.options);
+    const openWorkerStore = witnessAdapters.openSqliteModelCatalogStore;
+    let fired = false, firstWrote: boolean | undefined;
+    const behind = (commandId: string, after?: () => Promise<unknown>) => vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      if (!running && !fired) {
+        fired = running = true;
+        try { firstWrote = await worker(commandId)(); await after?.(); } finally { running = false; }
+      }
+      return openWorkerStore(...args);
+    });
+    let writer = behind('worker-behind');
+    try { await expect.soft(asPerson(worker('worker-behind'))).resolves.toBe(false); } finally { writer.mockRestore(); }
+    expect.soft(firstWrote).toBe(true);
+    remove(''); fired = false;
+    writer = behind('worker-closed', () => applyModelCatalog(direct.project, { schemaVersion: 1, commandId: 'close-meanwhile', scopeId: 's', action: 'deactivate',
+      channelId: SEED_CHANNEL, modelId: f.model.nativeId, expectedRevision: 1 }, direct.options));
+    try { await expect.soft(asPerson(worker('worker-closed'))).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' }); } finally { writer.mockRestore(); }
+    const closed = await inspectModelCatalog(direct.project, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, direct.options);
+    expect.soft(closed.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: f.model.nativeId, activation: { state: 'inactive', revision: 2 } })]) });
   });
 
   it('settles missing catalog children after interruption, then replays their receipts without another write', async () => {
