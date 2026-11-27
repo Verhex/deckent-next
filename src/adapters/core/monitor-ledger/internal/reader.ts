@@ -145,26 +145,37 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
     })) });
 }
 
-/** N0 R6/R7 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
+/** N0 R6-R8 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
  * One read-only transaction, primary-key reads in chunks of `chunk` identities; a row counts only when its own key is the requested one and its
- * stored identity is that key and then the full requested identity (a sealed, corrupt or other-identity row is ignored). */
-export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[], chunk: number): readonly AttemptIdentity[] {
-  if (!identities.length) return [];
+ * stored identity is that key and then the full requested identity (a sealed, corrupt or other-identity row is ignored). A failed chunk is reported
+ * for its own identities (`failed`) and the read goes on while the transaction still answers; once it does not, the chunks not sent are `unsent`.
+ * A failure to open or begin the read (or of its final commit) still throws: nothing was read for any identity. */
+export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[], chunk: number) {
+  type Unread = Readonly<{ identities: readonly AttemptIdentity[]; reason: 'failed' | 'unsent'; error: unknown }>;
+  const result = (unverified: readonly AttemptIdentity[], unread: readonly Unread[]) => Object.freeze({ unverified: Object.freeze(unverified), unread: Object.freeze(unread) });
+  if (!identities.length) return result([], []);
   let db: DatabaseSync;
   try { db = openLedgerDatabase(path, { readOnly: true, timeout: busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
   try { return ledgerTransaction(db, () => {
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
-    if (!Number.isSafeInteger(version) || version < WORKER_EVENT_LOG_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return [];
+    if (!Number.isSafeInteger(version) || version < WORKER_EVENT_LOG_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return result([], []);
     const select = db.prepare(`SELECT w.scope_id,w.attempt_id,w.record FROM json_each(?) j JOIN worker_event_logs w ON w.scope_id=json_extract(j.value,'$[0]') AND w.attempt_id=json_extract(j.value,'$[1]')`);
-    const failed = new Map<string, AttemptIdentity>(), key = (scopeId: unknown, attemptId: unknown) => JSON.stringify([scopeId, attemptId]);
-    for (let at = 0; at < identities.length; at += Math.max(1, chunk)) {
-      for (const row of select.all(JSON.stringify(identities.slice(at, at + Math.max(1, chunk)).map(id => [id.scopeId, id.attemptId])))) {
-        const parsed = workerEventLogSchema.safeParse(json(row.record));
-        if (parsed.success && !sealedWorkerEventLog(parsed.data) && key(parsed.data.identity.scopeId, parsed.data.identity.attemptId) === key(row.scope_id, row.attempt_id))
-          failed.set(key(row.scope_id, row.attempt_id), parsed.data.identity);
+    const failed = new Map<string, AttemptIdentity>(), key = (scopeId: unknown, attemptId: unknown) => JSON.stringify([scopeId, attemptId]), unread: Unread[] = [];
+    const size = Math.max(1, chunk);
+    for (let at = 0; at < identities.length; at += size) {
+      const part = identities.slice(at, at + size);
+      try {
+        for (const row of select.all(JSON.stringify(part.map(id => [id.scopeId, id.attemptId])))) {
+          const parsed = workerEventLogSchema.safeParse(json(row.record));
+          if (parsed.success && !sealedWorkerEventLog(parsed.data) && key(parsed.data.identity.scopeId, parsed.data.identity.attemptId) === key(row.scope_id, row.attempt_id))
+            failed.set(key(row.scope_id, row.attempt_id), parsed.data.identity);
+        }
+      } catch (error) {
+        unread.push({ identities: part, reason: 'failed', error });
+        try { db.prepare('SELECT 1').get(); } catch (unusable) { unread.push({ identities: identities.slice(at + size), reason: 'unsent', error: unusable }); break; }
       }
     }
-    return Object.freeze(identities.filter(id => { const row = failed.get(key(id.scopeId, id.attemptId)); return !!row && sameAttemptIdentity(row, id); }));
+    return result(identities.filter(id => { const row = failed.get(key(id.scopeId, id.attemptId)); return !!row && sameAttemptIdentity(row, id); }), unread.filter(row => row.identities.length));
   }, { mode: 'read' }); } finally { db.close(); }
 }
 

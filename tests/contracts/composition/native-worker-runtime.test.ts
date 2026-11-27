@@ -263,6 +263,9 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       // N0 R7 (owner D4+D5, a declared cost): capacity wait -> resume of the same Attempt -> terminal end whose offered observation cannot be verified (it
       // precedes the provider's start). HEAD's wait had sealed a readable verdict-only row first, so custody's log check passed; now the wait writes
       // nothing and the close owner's failure row is the first: custody reads no sealed log (custody.ts `unsealed`) and holds `events-unsealed`.
+      // Accepted scope of this hold: any Attempt for which HEAD had the early readable row and whose real run leaves NO readable seal: this failed offered
+      // seal; an offer-less terminal end whose `supervisor.close()` fails before the seal (pinned with the clean-up case below); and the inner race where at
+      // HEAD the loser's verdict-only row had taken the first slot and the winner's seal then fails (rests on reading: task.ts:280, worker-events.ts:17).
       const rewaited = await reserveRun('rewaited');
       expect((await executeConfiguredTask(project, rewaited, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } })).execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
@@ -286,7 +289,13 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       expect((await store.loadSealedWorkerEvents(unstartedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['model.verification']);
       await finish(unstarted);
       // N0 R5: a rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
+      // N0 R8 (the hold's scope above): this Attempt first waited for capacity and was resumed, so at HEAD its wait had left a readable row; now its
+      // terminal, offer-less end whose close fails before the seal leaves no readable seal at all.
       const cleanup = await reserveRun('cleanup'), sinkClose = vi.fn(async () => ({ events: [], projectionComplete: true }));
+      expect((await executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } })).execution).toMatchObject({ waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
+      await applyConfiguredRunLifecycle(project, { schemaVersion: 1, scopeId: 's', runId: 'cleanup', commandId: 'resume-cleanup', action: 'resume',
+        expectedRevision: (await store.loadRun('s', 'cleanup'))!.revision }, options);
       vi.spyOn(adapterExports, 'prepareNativeCliWorker').mockImplementationOnce(async (...args: Parameters<typeof prepare>) => {
         const ready = await prepare(...args); if (ready.state !== 'ready') return ready;
         ready.supervisor.close = async () => { throw ErrorRegistry.createError('NATIVE_WORKER_CUSTODY_UNKNOWN'); }; return ready; });
@@ -294,6 +303,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       await expect(executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } })).rejects.toMatchObject({ code: 'NATIVE_WORKER_CUSTODY_UNKNOWN' });
       expect(sinkClose).toHaveBeenCalledOnce(); expect(await store.loadWorkerEventLog('s', 'cleanup')).toBeNull();
+      expect((await store.loadBoundDispatch(cleanup))?.terminal).toMatchObject({ exitCode: 0 });
       await finish(cleanup);
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
@@ -344,7 +354,8 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       await expect(executeConfiguredTask(project, ungranted, { ...options, nativeCliWorker: { projectionRetired: true, ports: own(never) } })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
       grant.mockRestore();
       for (const claimed of [prevented, ungranted]) {
-        expect(await store.loadWorkerEventLog('s', claimed.attemptId)).toMatchObject({ identity: claimed, eventCount: 1, events: expect.any(Object) });
+        const claimedRow = (await store.loadWorkerEventLog('s', claimed.attemptId))!; expect(claimedRow).toMatchObject({ identity: claimed, eventCount: 1, events: expect.any(Object) });
+        expect((await store.loadSealedWorkerEvents(claimedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['model.verification']);
         expect(await store.loadBoundDispatch(claimed)).not.toBeNull();
       }
       expect(run).toHaveBeenCalledTimes(2);

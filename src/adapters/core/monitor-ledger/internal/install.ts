@@ -77,9 +77,13 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.has(MonitorApplication.attemptKey(identity))) {
       try { if (await readOutput(identity)) permitted.push(identity); } catch (error) { unavailable(identity, error); }
     }
+    // A failed chunk names its own identities; chunks never sent (the transaction stopped answering) and a read that could not run at all name theirs.
     let failed = new Set<string>();
-    try { failed = new Set(readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted, config.inspection.maxPageSize).map(identity => MonitorApplication.attemptKey(identity))); }
-    catch (error) { for (const identity of permitted) unavailable(identity, error); }
+    try {
+      const read = readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted, config.inspection.maxPageSize);
+      failed = new Set(read.unverified.map(identity => MonitorApplication.attemptKey(identity)));
+      for (const unread of read.unread) for (const identity of unread.identities) unavailable(identity, unread.error);
+    } catch (error) { for (const identity of permitted) unavailable(identity, error); }
     // The ledger reader projects each attempt from the binding at the same index.
     const runs = reading.runs.map(run => {
       const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => failed.has(MonitorApplication.attemptKey(identity))

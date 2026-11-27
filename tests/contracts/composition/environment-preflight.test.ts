@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, StatementSync } from 'node:sqlite';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { DockerSupervisor, prepareMonitorInstall, readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
@@ -126,12 +126,12 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       expect(shown.runs[0]!.attempts).toHaveLength(1);
     }
     // N0 R7: one capture serves repeated refreshes (each reports into its own diagnostics), each past identity's read-output failure stays its own,
-    // and only the admitted identities are read. Two past Attempts of a fresh Run, both refused by a probe answered `unmet` (no container).
+    // and only the admitted identities are read. Three past Attempts of a fresh Run, both refused by a probe answered `unmet` (no container).
     const g = await fixture(context, REQUIREMENTS);
     try {
       vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValue('unmet');
       const moved: Awaited<ReturnType<typeof reserve>>[] = [];
-      for (const round of [1, 2]) {
+      for (const round of [1, 2, 3]) {
         const next = await reserve(g, (await g.store.loadRun('s', 'r'))!.revision, `reserve-g${round}`);
         await expect(executeConfiguredTask(g.project, next, g.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
         await applyConfiguredRunLifecycle(g.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: `resume-g${round}`, action: 'resume',
@@ -154,11 +154,23 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       });
       for (const refresh of [1, 2]) {
         const shown = await capture.readShown(moved);
-        expect(shown.runs[0]!.previousTranscripts, `refresh ${refresh}`).toEqual([{ identity: moved[1], transcript: { state: 'unverified', excerpt: [], truncated: false } }]);
+        expect(shown.runs[0]!.previousTranscripts?.map(row => row.identity), `refresh ${refresh}`).toEqual([moved[1], moved[2]]);
         expect(shown.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[0]!.attemptId}:POLICY_UNAVAILABLE`]);
       }
       failing = false;
       expect((await capture.readShown(moved)).runs[0]!.previousTranscripts?.map(row => row.identity)).toEqual(moved);
+      // N0 R8: with a Monitor page of one there are three chunks and the middle query fails: the first and third keep their labels and only the middle
+      // identity is named (its chunk's own failure; the transaction still answers, so nothing is left unsent).
+      const all = StatementSync.prototype.all; let selects = 0;
+      const middle = vi.spyOn(StatementSync.prototype, 'all').mockImplementation(function (this: StatementSync, ...args: Parameters<StatementSync['all']>) {
+        if (this.sourceSQL.includes('JOIN worker_event_logs') && ++selects === 2) throw Object.assign(new Error('disk I/O error'), { code: 'ERR_SQLITE_ERROR' });
+        return all.apply(this, args);
+      });
+      try {
+        const paged = await (await prepareMonitorInstall({ ...gConfig, inspection: { ...gConfig.inspection, maxPageSize: 1 } }, g.options.env, async () => true)).readShown(moved);
+        expect(selects).toBe(3); expect(paged.runs[0]!.previousTranscripts?.map(row => row.identity)).toEqual([moved[0], moved[2]]);
+        expect(paged.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[1]!.attemptId}:ERR_SQLITE_ERROR`]);
+      } finally { middle.mockRestore(); }
     } finally { g.store.close(); }
   } finally { f.store.close(); }
 }, 120_000);
