@@ -49,19 +49,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   // BeUser D-12: the graph file's contract (JSON Schema), without a project; a bad graph names its field and points here.
   if (action === 'create' && argv.includes('--schema')) { emit(renderInputSchema(projectInputSchema(taskGraphSchema as never)), { json: false, ...(context.stdout ? { stdout: context.stdout } : {}) }); return; }
   const control = action === 'cancel' || action === 'close' || action === 'hold' || action === 'resume';
-  const allowed = action === 'list' ? ['--scope', '--limit', '--lang'] : action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(control ? ['--reason'] : []), ...(action === 'resume' ? ['--task', '--answer', '--quota'] : [])];
-  const values = new Map<string, string>(); let json = false, verbose = false;
-  for (let i = 2; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (arg === '--json') { if (json) throw usage(); json = true; continue; }
-    if (arg === '--verbose' && action === 'inspect') { if (verbose) throw usage(arg); verbose = true; continue; }
-    if (arg === '--no-color') continue;
-    if (!allowed.includes(arg)) throw usage();
-    if (values.has(arg)) throw usage(arg);
-    const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
-  }
-  if (verbose && json) throw usage('--verbose');
+  const { values, json, verbose } = runFlags(argv, action, control, usage);
   const locale = commandLocale(context, values.get('--lang'));
   if (action === 'list') {
     const limit = values.get('--limit');
@@ -139,9 +127,10 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     if (quota !== undefined && (action !== 'resume' || answer !== undefined)) throw usage('--quota');
     if (action === 'hold' && !holdReason?.trim()) throw usage('--reason');
     if (action === 'resume' && ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim()))) throw usage('--answer');
+    const repaired = action !== 'close' && !quota && answer === undefined ? context.repairedRunControlBinding : undefined;
     const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId,
       action: quota ? 'quota-answer' : answer === undefined ? action : 'answer', ...(quota ? { choice: quota } : {}), ...(holdReason === undefined ? {} : { holdReason }),
-      ...(answer === undefined ? {} : { answer, taskId }), expectedRevision: Number(revision) }), { env: context.env ?? process.env });
+      ...(answer === undefined ? {} : { answer, taskId }), expectedRevision: Number(revision) }), { env: context.env ?? process.env }, ...(repaired === undefined ? [] : [repaired]));
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => data ? t('cli.run.lifecycle.result', { run: runId, revision: data.lifecycle.run.revision,
       state: data.lifecycle.run.state.kind, reason: 'reason' in data.lifecycle.run.state ? data.lifecycle.run.state.reason : '—' }, locale) : '' }); return;
   }
@@ -154,6 +143,45 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     return runCancellationExitCode(result);
   }
   throw usage();
+}
+
+function runFlags(argv: readonly string[], action: string | undefined, control: boolean, usage: (flag?: string) => Error) {
+  const allowed = action === 'list' ? ['--scope', '--limit', '--lang'] : action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(control ? ['--reason'] : []), ...(action === 'resume' ? ['--task', '--answer', '--quota'] : [])];
+  const values = new Map<string, string>(); let json = false, verbose = false;
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--json') { if (json) throw usage(); json = true; continue; }
+    if (arg === '--verbose' && action === 'inspect') { if (verbose) throw usage(arg); verbose = true; continue; }
+    if (arg === '--no-color') continue;
+    if (!allowed.includes(arg)) throw usage();
+    if (values.has(arg)) throw usage(arg);
+    const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
+  }
+  if (verbose && json) throw usage('--verbose');
+  return { values, json, verbose };
+}
+/**
+ * The scope of a local `run hold|resume` the CLI entry may repair a proven binding move for first (owner 2026-11-27), read with this handler's own
+ * parse: scope and Run named, and either every typed flag valid or a person's card. A resume answer (`--task --answer`, `--quota`) is no control;
+ * it, the picker without `--id` and every incomplete form keep the entry's refusal.
+ */
+export function runControlRepairScope(argv: readonly string[], context: RunCommandContext): string | undefined {
+  const action = argv[1];
+  if (argv[0] !== 'run' || (action !== 'hold' && action !== 'resume')) return undefined;
+  let flags;
+  try { flags = runFlags(argv, action, true, () => new Error()); } catch { return undefined; }
+  const { values, json } = flags, scopeId = values.get('--scope'), commandId = values.get('--command-id'), revision = values.get('--expected-revision'), reason = values.get('--reason');
+  if (!scopeId || !values.has('--id') || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
+  const card = commandId === undefined && revision === undefined;
+  if (card ? cliMode(context, json).mode !== 'interactive' : commandId === undefined || revision === undefined || !/^(0|[1-9][0-9]*)$/.test(revision)
+    || !Number.isSafeInteger(Number(revision)) || (action === 'hold' ? !reason?.trim() : reason !== undefined)) return undefined;
+  // Every value that needs no Run passes the control schema first; the card's command id and revision are the system's (placeholders here).
+  const holdReason = action === 'hold' ? { holdReason: card ? reason?.trim() || 'held' : reason } : {};
+  try {
+    return runLifecycleCommandSchema.safeParse({ schemaVersion: 1, commandId: commandId ?? `cli-run-${action}-entry`, scopeId, runId: values.get('--id'), action, ...holdReason,
+      expectedRevision: card ? 0 : Number(revision) }).success ? scopeId : undefined;
+  } catch { return undefined; }
 }
 
 /** `run inspect` (CLI review §run): read scope rule; a short id resolves; on a person's terminal without --id, the Run is picked. */

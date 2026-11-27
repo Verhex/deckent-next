@@ -4,11 +4,13 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
-import { readLocalOsIdentity } from '#adapters/index.js';
+import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
-import { RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
+import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
+import { main as cliMain } from '#composition/core/cli/index.js';
+import * as monitor from '#composition/core/monitor/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
@@ -16,6 +18,7 @@ import { openConfiguredAttemptStore } from '../support/configured-open.js';
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   clearConfigCache();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -55,12 +58,12 @@ async function fixture() {
     } finally { database.close(); }
   });
   const errors: string[] = [];
-  const cli = (args: string[], tty: boolean, locale: 'en' | 'tr') => main(args, {
+  const cli = (args: string[], tty: boolean, locale: 'en' | 'tr', entry: object = {}) => main(args, {
     root, env: options.env, locale, stdin: { isTTY: tty },
     stdout: { isTTY: tty, write: () => true }, stderr: { write: (line: string) => { errors.push(line); return true; } },
     applyRunLifecycle, inspectSurfaceRunIds: async () => [runId],
     inspectRun: inspectConfiguredRun,
-    inspectRunControl: (project: string, query: RunQuery, config: ConfigLoadOptions) => inspectConfiguredRun(project, query, config, true),
+    inspectRunControl: (project: string, query: RunQuery, config: ConfigLoadOptions) => inspectConfiguredRun(project, query, config, true), ...entry,
   } as Parameters<typeof main>[1]);
   return { root, options, configure, state, cli, errors };
 }
@@ -86,6 +89,41 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     await f.configure('attached');
     return decision;
   });
+  // The first read is refused for a reason a repair may resolve and the project then points to another healthy installation with the same
+  // scope, Run and revision. The SDK keeps its read-only refusal; the real CLI entry (owner 2026-11-27 repair path) stops with the binding
+  // change before any write in either installation.
+  const relocatedOnce = () => vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => {
+    await f.configure('attached');
+    throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
+  });
+  let relocated = relocatedOnce();
+  await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+  expect(relocated).toHaveBeenCalled();
+  relocated.mockRestore();
+  expect(f.state()).toEqual(before);
+  await f.configure('selected');
+  vi.spyOn(process, 'cwd').mockReturnValue(f.root);
+  for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+  let output = '';
+  const writes = [process.stdout, process.stderr].map(stream => vi.spyOn(stream, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof stream.write));
+  relocated = relocatedOnce();
+  try { expect(await cliMain([...argv, '--command-id', command.commandId, '--expected-revision', '1', '--reason', command.holdReason, '--lang', 'en'])).toBe(1); }
+  finally { writes.forEach(write => write.mockRestore()); }
+  expect(relocated).toHaveBeenCalled();
+  relocated.mockRestore();
+  expect(output).toContain(english);
+  expect(f.state()).toEqual(before);
+  await f.configure('selected');
+  // The entry's repaired binding reaches the control: one the control does not find stops the typed hold and the card before any write.
+  const repairedElsewhere = { loadInstallationIdentity: async () => ({}), preflightRunControl: async () => 'repaired:elsewhere' };
+  const asked = vi.spyOn(cards, 'askCliCard').mockResolvedValue('no');
+  for (const [args, tty] of [[[...argv, '--command-id', command.commandId, '--expected-revision', '1', '--reason', command.holdReason], false], [argv, true]] as const) {
+    await expect(f.cli([...args], tty, 'en', repairedElsewhere)).resolves.toBe(1);
+    expect(f.errors.splice(0).join('')).toContain(english);
+    expect(f.state()).toEqual(before);
+  }
+  expect(asked).not.toHaveBeenCalled();
+  asked.mockRestore();
   const sdk = switchAfterDecision();
   await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code });
   sdk.mockRestore();
@@ -100,4 +138,24 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     expect(f.errors.splice(0).join('')).toContain(turkish);
     expect(f.state()).toEqual(before);
   }
+  // A short id after a real entry repair resolves only under the repaired binding: a list read while the project points elsewhere stops the
+  // call, even when the project points back before the control. Runs, receipts and audit rows stay as they were in both databases (the
+  // repair's own scope pin is the accepted cost, so it runs last).
+  await f.configure('selected');
+  const kept = () => f.state().map(tables => tables.slice(0, 3));
+  const rows = kept(), listIds = monitor.inspectSurfaceRunIds;
+  relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
+  const listed = vi.spyOn(monitor, 'inspectSurfaceRunIds').mockImplementationOnce(async (...args: Parameters<typeof listIds>) => {
+    await f.configure('attached');
+    try { return await listIds(...args); } finally { await f.configure('selected'); }
+  });
+  output = '';
+  const captured = [process.stdout, process.stderr].map(stream => vi.spyOn(stream, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof stream.write));
+  try { expect(await cliMain(['run', 'hold', '--scope', scopeId, '--id', 'run-fix', '--command-id', 'hold-prefix', '--expected-revision', '1', '--reason', 'wait', '--lang', 'en'])).toBe(1); }
+  finally { captured.forEach(write => write.mockRestore()); }
+  expect(relocated).toHaveBeenCalled();
+  expect(listed).toHaveBeenCalledOnce();
+  relocated.mockRestore(); listed.mockRestore();
+  expect(output).toContain(english);
+  expect(kept()).toEqual(rows);
 });

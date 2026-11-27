@@ -3,12 +3,12 @@ import { timedAsync } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
 import { ErrorRegistry, inspectProductFile, isCodedError, productResourcePath, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
-import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { attachmentLifecycle, FileProjectAttachmentStore, openSqliteAuditStore, openReadOnlyAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, localPrincipalChannel, inspectFilesystemIdentity, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { type InstallationIdentityChoice } from '#domain/index.js';
 import { AuditApplication, ProjectAttachmentError, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError,
   sameProjectAttachmentAuthority, type ScopeAccess, type SourceRepairKind } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { configuredInstallationProjectContext } from './installation-context.js';
+import { configuredInstallationProjectContext, inspectConfiguredInstallationSource } from './installation-context.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 import { admitInstallationRebinding, plainMacosRebinding } from './rebind.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
@@ -18,6 +18,8 @@ type ScopeReadInputs = Readonly<{ config: ResolvedConfig; document: Awaited<Retu
   inspectSource: NonNullable<Parameters<typeof configuredInstallationProjectContext>[4]> }>;
 type CheckRunControlLocation = (location: string) => void;
 const bindingDigest = (fields: readonly unknown[]) => createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+const controlLocation = (config: ResolvedConfig) => bindingDigest([config.projectRoot, config.company.id, config.installation.sharedRegistrationId, config.approvals.keyFile,
+  ...(['installationIdentity', 'ledger', 'policy', 'bindings', 'approvals'] as const).map(resource => productResourcePath(config.productLayout, resource))]);
 export const loadConfiguredScopeContext = (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess, inspected?: ScopeReadInputs, checkLocation?: CheckRunControlLocation) =>
   timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, access, inspected, undefined, checkLocation);
 export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => {
@@ -28,9 +30,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   access: ScopeAccess, inspected?: ScopeReadInputs, onSourceRepair?: (kind: SourceRepairKind) => void, checkLocation?: CheckRunControlLocation) {
   const reading = access === 'read' ? inspected : undefined;
   const config = reading?.config ?? await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout, ownerUid = userInfo().uid;
-  const controlLocation = () => bindingDigest([config.projectRoot, config.company.id, config.installation.sharedRegistrationId, config.approvals.keyFile,
-    ...(['installationIdentity', 'ledger', 'policy', 'bindings', 'approvals'] as const).map(resource => productResourcePath(layout, resource))]);
-  checkLocation?.(controlLocation());
+  checkLocation?.(controlLocation(config));
   const loadPolicy = async () => {
     try { return await contextPolicySource({ layout, config, ownerUid }).load(); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
@@ -68,7 +68,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   const { installation, project } = await accessIdentities(access);
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
   return Object.freeze({ config, layout, installationLayout: installationContext.installationLayout, ownerUid, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
-    runControlBinding: () => `${controlLocation()}:${bindingDigest([installationId, projectId, principal.id, principal.issuer, principal.subject, principal.assurance])}`,
+    runControlBinding: () => `${controlLocation(config)}:${bindingDigest([installationId, projectId, principal.id, principal.issuer, principal.subject, principal.assurance])}`,
     // Complete write admission on this context's layout, company, policy and principal.
     async admitWrite() { await accessIdentities('write'); },
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
@@ -151,6 +151,23 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
     }) : keep();
   }, choice);
 }
+/** The CLI entry's read for a parsed local `deckent run hold|resume` naming its scope and Run (owner 2026-11-27): the same read every installation-bound
+ * command takes. Only a refusal a binding repair may resolve then takes the interactive terminal's own repair for that scope, on the location the
+ * refused read saw (a moved location stops with the existing binding-changed refusal before any write); any other failure keeps the read's own
+ * refusal. Returns the repaired binding the control must still find, or undefined when nothing was repaired. */
+export async function preflightConfiguredRunControl(root: string, scopeId: string, options: ConfigLoadOptions) {
+  const config = await loadComposedConfig(root, { ...options, heal: false }), location = controlLocation(config);
+  try { await loadConfiguredInstallationIdentity(root, options, { config, inspectSource: inspectConfiguredInstallationSource }); return undefined; }
+  catch (error) {
+    // PROJECT_ATTACHMENT_UNAVAILABLE is left out: it also stands for a transient source read failure, which no repair proves.
+    if (localPrincipalChannel() || !['PROJECT_ATTACHMENT_CHANGED', 'PROJECT_ATTACHMENT_DENIED', 'INSTALLATION_IDENTITY_RELOCATED'].some(code => isCodedError(error, code))) throw error;
+    try {
+      return (await admitTerminalContext(root, scopeId, options, undefined, seen => {
+        if (seen !== location) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
+      })).runControlBinding();
+    } catch (repair) { throw isCodedError(repair, 'RUN_CONTROL_BINDING_CHANGED') ? repair : error; }
+  }
+}
 /** Only an interactive terminal writer defers a potentially repairable registered attachment observation. */
 export async function preflightConfiguredTerminalIdentity(root: string, options: ConfigLoadOptions, scopeId?: string) {
   try {
@@ -177,11 +194,15 @@ export async function preflightConfiguredTerminalIdentity(root: string, options:
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
 export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions, onSourceRepair?: (kind: SourceRepairKind) => void) {
+  const { installationId, projectId } = await admitTerminalContext(root, scopeId, options, onSourceRepair);
+  return Object.freeze({ installationId, projectId });
+}
+async function admitTerminalContext(root: string, scopeId: string, options: ConfigLoadOptions, onSourceRepair?: (kind: SourceRepairKind) => void, checkLocation?: CheckRunControlLocation) {
   await preflightConfiguredTerminalIdentity(root, options, scopeId);
-  const { installationId, projectId } = await timedScopeContext(root, scopeId, options, readLocalOsIdentity, 'write', undefined, onSourceRepair);
+  const { installationId, projectId, runControlBinding } = await timedScopeContext(root, scopeId, options, readLocalOsIdentity, 'write', undefined, onSourceRepair, checkLocation);
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
-  return Object.freeze({ installationId, projectId });
+  return { installationId, projectId, runControlBinding };
 }
 
 const timedScopeContext = timedAsync('scope-context', loadScopeContext);
