@@ -99,8 +99,14 @@ export const scopeLine = (scope: ScopeResolution, locale: Locale): string[] => s
 export async function readScopeRuns(context: RunCommandContext, scopeId: string, observed?: (data: Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>) => void,
   answerTaskId?: string): Promise<readonly RunView[]> {
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, inspect = context.inspectRun;
-  const ids = await listRunIds(context, root, scopeId, options);
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, repaired = context.repairedRunControlBinding;
+  // After an entry repair the list and each Run are read only under the repaired binding (owner decision on the picker).
+  const ids = repaired === undefined ? await listRunIds(context, root, scopeId, options) : await context.inspectSurfaceRunIds?.(root, scopeId, options, repaired) ?? [];
+  const inspect: NonNullable<RunCommandContext['inspectRun']> = repaired === undefined || !context.inspectRunControl ? context.inspectRun : async (...args) => {
+    const data = await context.inspectRunControl!(...args);
+    if (data.controlBinding !== undefined && data.controlBinding !== repaired) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
+    return data;
+  };
   const views = await mapBounded(ids, HOST_LIMITS_REGISTRY.observationConcurrency, async id => {
     const data = await inspect(root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId: id }), options, answerTaskId);
     observed?.(data);

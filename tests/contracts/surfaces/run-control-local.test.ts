@@ -81,6 +81,39 @@ it.skipIf(process.platform === 'win32')('refuses a CLI picker card when the proj
   expect(ask.mock.calls[1]![0].body!.join('\n')).toContain('State running · revision 1');
   expect(f.errors.join('')).toContain(english);
   expect(f.state()).toEqual(before);
+  // The same picker through the real CLI after a real entry repair (owner decision): the scope's Runs are listed under the repaired binding,
+  // the person picks, the card shows the Run and a project that moved meanwhile stops it with the binding change; no Run row changes.
+  await f.configure('selected');
+  const { issuer, subject } = readLocalOsIdentity(), principals = [{ issuer, subject }];
+  for (const data of ['attached', 'selected']) { // listing a scope's Runs reads its output collection
+    await f.configure(data);
+    await writeFile(productResourcePath((await loadComposedConfig(f.root, f.options)).productLayout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'local-control',
+      restrictions: [], grants: [{ id: 'run', effect: 'allow', principals, scopes: [scopeId], actions: ['inspect', 'cancel'], resource: { kind: 'run', ids: [runId] } },
+        { id: 'collection', effect: 'allow', principals, scopes: [scopeId], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] }), { mode: 0o600 });
+  }
+  vi.spyOn(process, 'cwd').mockReturnValue(f.root);
+  for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+  for (const key of [...(await loadComposedConfig(f.root, f.options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  const rows = f.state().map(tables => tables.slice(0, 3));
+  const relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
+  const listed = vi.spyOn(monitor, 'inspectSurfaceRunIds');
+  ask.mockReset();
+  ask.mockImplementationOnce(async () => 'run-fixture').mockImplementationOnce(async () => {
+    await f.configure('attached');
+    return 'yes';
+  });
+  let output = '';
+  const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
+  const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
+    vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
+  try { expect(await cliMain([...argv.slice(0, 4), '--lang', 'en'])).toBe(1); }
+  finally { stdio.forEach(spy => spy.mockRestore()); }
+  expect(relocated).toHaveBeenCalled();
+  expect(listed.mock.calls[0]?.[3]).toEqual(expect.any(String));
+  expect(ask).toHaveBeenCalledTimes(2);
+  expect(ask.mock.calls[1]![0].body!.join('\n')).toContain('State running · revision 1');
+  expect(output).toContain(english);
+  expect(f.state().map(tables => tables.slice(0, 3))).toEqual(rows);
 });
 
 it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold when the installation changes after the decision', async () => {
