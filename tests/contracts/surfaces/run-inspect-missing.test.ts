@@ -38,4 +38,13 @@ it.each(['en', 'tr'] as const)('shows the durable progression failure code and d
   // The parked reason alone supplies no resume instruction or custody claim.
   expect(out.join('')).toContain(locale === 'en' ? 'The record contains the error code SUPERVISOR_OPTIONS_INVALID. The specific cause could not be determined.'
     : 'Kayıtta SUPERVISOR_OPTIONS_INVALID hata kodu var. Hatanın kesin nedeni belirlenemedi.');
+  // A stored credits code shows its own sentence after the progression line, never the undetermined-cause sentence.
+  const credits: string[] = [];
+  expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], {
+    env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(text: string) { credits.push(text); } }, stderr: { write() {} },
+    async inspectRun() { return { schemaVersion: 1, layout, run: { ...run, state: { ...state, failureCode: 'HEADLESS_CREDITS_REQUIRED' } } }; },
+  } as never)).toBe(0);
+  expect.soft(credits.join('')).toContain(locale === 'en' ? 'Progression failure: HEADLESS_CREDITS_REQUIRED.\nThe subscription asks for extra credits for this request.'
+    : 'İlerleme hatası: HEADLESS_CREDITS_REQUIRED.\nAbonelik bu istek için ek kredi istiyor.');
+  expect(credits.join('')).not.toMatch(/specific cause could not be determined|kesin nedeni belirlenemedi/u);
 });

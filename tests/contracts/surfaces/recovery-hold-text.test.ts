@@ -63,6 +63,8 @@ it('run inspect, the terminal /runs detail and the monitor blocker show the hold
   expect(blockerDetailText(blocker.detail!, 'en')).toContain('not approved here'); expect(blockerDetailText(blocker.detail!, 'tr')).toContain('kalıcı onay yok');
   // C3: an allowlisted worker reason is its sentence with the identifier beside it; any other registered code is the recorded code.
   expect(blockerDetailText('NATIVE_WORKER_DEADLINE_REACHED', 'en')).toBe('The native worker reached its time limit. (NATIVE_WORKER_DEADLINE_REACHED)');
+  expect.soft([blockerDetailText('HEADLESS_CREDITS_REQUIRED', 'en'), blockerDetailText('HEADLESS_CREDITS_REQUIRED', 'tr')]).toEqual([
+    'The subscription asks for extra credits for this request. (HEADLESS_CREDITS_REQUIRED)', 'Abonelik bu istek için ek kredi istiyor. (HEADLESS_CREDITS_REQUIRED)']);
   expect(blockerDetailText('NATIVE_AGENT_LOGIN_REQUIRED', 'tr')).toBe('Kayıtta NATIVE_AGENT_LOGIN_REQUIRED hata kodu var. Hatanın kesin nedeni belirlenemedi.');
   for (const code of ['NATIVE_WORKER_TERMINATION_UNKNOWN', 'NATIVE_WORKER_CUSTODY_UNKNOWN', 'APPROVAL_EXPIRED',
     'SIWC_USAGE_UNAVAILABLE', 'SIWC_SERVICE_UNAVAILABLE', 'HEADLESS_PLAN_UNAVAILABLE']) {
