@@ -25,7 +25,7 @@ export class WorkerTranscriptApplication {
     // Requested → init → usage → verdict of a pinned worker task (WORKER-CURRENCY-2); null for other tasks.
     const run = await this.store.loadRun(identity.scopeId, identity.runId);
     const model = run ? projectAttemptWorkerModels(run, identity.taskId, events) : null;
-    // Owner D4: the close owner's failure row is this Attempt's not-verified state (`logFailure`), never a sealed log; N0 R5: only for the row's own
+    // The close owner's failure row is this Attempt's not-verified state (`logFailure`), never a sealed log; only for the row's own
     // full identity (the store keys rows by scope and Attempt id alone), any other query keeps the no-record view.
     if (!log || !events) return Object.freeze({ schemaVersion: 2 as const, identity, finalReport, sealed: null, summary: null, activity: null, events: Object.freeze([]), model,
       ...(stored && !log && sameAttemptIdentity(stored.identity, identity) ? { logFailure: 'unverified' as const } : {}) });

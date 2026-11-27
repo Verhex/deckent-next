@@ -894,7 +894,7 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
   expect(deniedText).toContain('politika izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
-  // N0 R4 (owner D4): a failure row reads as this Attempt's not-verified log, in both languages, instead of "no transcript record".
+  // A failure row reads as this Attempt's not-verified log, in both languages, instead of "no transcript record".
   for (const [locale, text] of [['tr', 'Bu denemenin işçi günlüğü doğrulanamadı.'], ['en', "This Attempt's worker log could not be verified."]] as const) {
     const unverified = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'unverified' as const, excerpt: [], truncated: false } } }] }] };
     const unverifiedText = surface.renderMonitorText(unverified, { locale, width: 80, ascii: true, verbose: true });

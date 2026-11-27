@@ -27,7 +27,7 @@ export function readEvaluationDigests(db: DatabaseSync, identity: AttemptIdentit
   const row = db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
   const stored = row ? workerEventLogSchema.parse(JSON.parse(String(row.record))) : null;
   if (stored && !sameAttemptIdentity(stored.identity, identity)) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
-  // Owner D4: a failure row carries no seal digest.
+  // A failure row carries no seal digest.
   return { output: dispatch?.output?.digest, seal: sealedWorkerEventLog(stored)?.events.digest, patch: readRunBoundTask(db, identity).workInput ? dispatch?.patch?.digest : undefined };
 }
 export function assertEvaluationDigests(db: DatabaseSync, evaluation: TaskEvaluation) {

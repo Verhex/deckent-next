@@ -45,7 +45,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     const among = (list: readonly AttemptIdentity[], files: MonitorAttemptFiles) => list.some(identity => sameAttemptIdentity(identity, files.identity));
     const selected = scan.files.filter(files => among(identities, files) || (files.failed && among(failures, files)));
     type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
-    // N0 R7: each call reports into its own list (the shared one stays the capture's; a frozen result list is never pushed to again).
+    // Each call reports into its own list: the shared one stays the capture's, and a frozen result list is never pushed to again.
     const extra = new Map<string, SelectedContent>(), notes = [...diagnostics];
     for (const files of selected) {
       const key = MonitorApplication.attemptKey(files.identity);
@@ -69,12 +69,12 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (Object.keys(found).length) extra.set(key, found);
       } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); notes.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
-    // N0 R6/R7 (owner D4): a shown past Attempt (`previousBindings`) carries only its not-verified label. Shown identities are matched through a keyed
+    // A shown past Attempt (`previousBindings`) carries only its not-verified label. Shown identities are matched through a keyed
     // set; each read-output decision (and its failure) is per identity; the admitted ones are read in chunks of the monitor page size in one read-only
     // transaction, and an SQL failure is reported only for the identities sent to it. Each failure is this stage's existing per-attempt diagnostic.
     const shown = new Set(identities.map(identity => MonitorApplication.attemptKey(identity))), permitted: AttemptIdentity[] = [];
     const unavailable = (identity: AttemptIdentity, error: unknown) => notes.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`);
-    // N0 R9: `delete` admits each identity once (no identity can land in two chunks and get both a label and a read error).
+    // `delete` admits each identity once, so none can land in two chunks and get both a label and a read error.
     for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.delete(MonitorApplication.attemptKey(identity))) {
       try { if (await readOutput(identity)) permitted.push(identity); } catch (error) { unavailable(identity, error); }
     }

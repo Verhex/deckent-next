@@ -125,7 +125,7 @@ export class MonitorApplication {
       }));
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt, dismissed });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
-    // N0 R5 (owner D4): a shown past Attempt's not-verified transcript, keyed by its full identity (admitted scopes only).
+    // A shown past Attempt's not-verified transcript, keyed by its full identity (admitted scopes only).
     const past = new Map(reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId))
       .flatMap(run => (run.previousTranscripts ?? []).map(row => [MonitorApplication.attemptKey(row.identity), row.transcript] as const)));
     const enrich = (value: WorkerObservation): MonitorWorker => {

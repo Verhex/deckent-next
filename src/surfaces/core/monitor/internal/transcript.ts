@@ -6,7 +6,7 @@ import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
   schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
   summary: WorkerEventSummary | null; events: readonly WorkerEvent[]; model?: WorkerModelView | null;
-  /** Owner D4: the close owner recorded that this Attempt's log could not be verified (no sealed log). */ logFailure?: 'unverified' }>>;
+  /** The close owner recorded that this Attempt's log could not be verified (no sealed log). */ logFailure?: 'unverified' }>>;
 export const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
   const labels: Record<WorkerPhase, string> = {

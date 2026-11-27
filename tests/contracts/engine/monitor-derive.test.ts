@@ -399,7 +399,7 @@ it('H1 binds title/usage/result to the full attempt identity; another generation
     const value = { ...worker('a', 'fresh'), identity: { ...identity('a'), ...changed } };
     const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); }, ...allPools,
       indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
-      // N0 R5 (owner D4): a shown past Attempt (here generation 2 of `a`) carries its not-verified transcript only under its own full identity.
+      // A shown past Attempt (here generation 2 of `a`) carries its not-verified transcript only under its own full identity.
       readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [{ ...evidence(run, [exited('a', { content, evaluationObserved: true })]).run,
         previousTranscripts: [{ identity: { ...identity('a'), generation: 2 }, transcript: { state: 'unverified' as const, excerpt: [], truncated: false } }] }] }),
       observeScope: async () => ({ access: 'admitted', workers: [value], workerStatus: 'available', truncated: false }) });

@@ -133,7 +133,7 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     const observed = f.app({ observed: () => true });
     expect(await observed.release(none)).toEqual({ schemaVersion: 1, status: 'held', reason: 'events-unsealed', code: null });
     expect(await f.app({ observed: () => { throw new Error('profile'); } }).release(none)).toMatchObject({ reason: 'events-unsealed' });
-    // N0 R4 (owner D4): the close owner's failure row is not a sealed stream: the work area still waits for a real seal.
+    // The close owner's failure row is not a sealed stream: the work area still waits for a real seal.
     await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: none, sealedAt: 1, outcome: 'unverified' });
     expect(await observed.release(none)).toEqual({ schemaVersion: 1, status: 'held', reason: 'events-unsealed', code: null });
     // Valid metadata whose blob is gone, corrupted in place (same size), not an event stream, or bound to another generation of the attempt.

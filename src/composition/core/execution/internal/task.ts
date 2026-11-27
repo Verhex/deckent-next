@@ -268,13 +268,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       if (result.kind === 'terminal' && worker && !worker.supervisor.offeredObservation()) await worker.supervisor.release(request);
       } finally {
-        // N0 R5: an opened sink is closed even when an earlier clean-up rejects; that rejection stays the caller's error (the drain's own is dropped).
+        // An opened sink is closed even when an earlier clean-up rejects; that rejection stays the caller's error (the drain's own is dropped).
         let sinkReached = false;
         try {
           await connection?.close(); await relay?.close();
           // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
           const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
-          // Owner D5 (N0 R7): only the invocation that acquired the durable claim (in-call fact) seals the Attempt log, as HEAD did; from then on the identity
+          // Only the invocation that acquired the durable claim (an in-call fact) seals the Attempt log: from then on the identity
           // never runs again. Any other end (a wait or refusal before the claim, the loser of a claim race) can be followed by the real run: drain only.
           sinkReached = true;
           if (!app?.acquiredClaim()) await events?.close();

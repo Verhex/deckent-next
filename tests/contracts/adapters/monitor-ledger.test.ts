@@ -78,7 +78,7 @@ async function assertDeliveryModes(path: string, commit: string) {
 describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   it('reads every scope, never-dispatched Runs, attempts, evaluations, pools and holds with ledger-proven times, without changing the ledger', async () => {
     const f = await fixture();
-    // N0 R4 (owner D4): r1-a's close owner recorded that its log could not be verified: not a sealed log, no sealed end time.
+    // r1-a's close owner recorded that its log could not be verified: not a sealed log, no sealed end time.
     await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: identity('s', 'r1', 'a'), sealedAt: 7000, outcome: 'unverified' });
     const before = await files(f.path);
     const reading = await read(f.path);
@@ -293,7 +293,7 @@ it('reads retained observation excerpts as count/paid words in the selected lang
   await writeFile(join(root, 'worker.events'), JSON.stringify({ receivedAt: 1, event: observation }) + '\n', { mode: 0o600 });
   const live = await readWorkerEventTail(root, 'worker', 10000);
   expect(live).toHaveLength(1);
-  // N0 R4 (owner D4): a failure row is the not-verified transcript state, never a sealed excerpt.
+  // A failure row is the not-verified transcript state, never a sealed excerpt.
   expect((await readMonitorWorkerContent(reader, { ...files, events: null, sealed: false, unverified: true }, root, 'en')).transcript).toEqual({ state: 'unverified', excerpt: [], truncated: false });
   for (const locale of ['tr', 'en', 'tr'] as const) {
     const view = await readMonitorWorkerContent(reader, files, root, locale), text = JSON.stringify(view);

@@ -54,7 +54,7 @@ it('never retries an unknown launch and refuses release without terminal evidenc
   expect(await f.store.readDispatch(f.request)).toBeNull();
   expect(app.acquiredClaim()).toBe(false);
   await expect(app.execute(f.request)).rejects.toThrow('transport interrupted');
-  expect(app.acquiredClaim()).toBe(true); // N0 R7 (owner D5): the in-call claim fact survives the throw after the claim.
+  expect(app.acquiredClaim()).toBe(true); // The in-call claim fact survives the throw after the claim.
   const unresolved = await app.execute(f.request); expect(unresolved.kind).toBe('unresolved'); expect(unresolved.record.launch).toBe('granted'); expect(calls).toBe(1);
   // Another application meeting the existing record (a second invocation) never holds it.
   const other = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);

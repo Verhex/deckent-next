@@ -222,14 +222,14 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
           driver: vi.fn(async input => ({ tools: input.tools, run: () => { for (const row of fault === 'unheld' ? [reported[1], reported[0]] : reported) input.onEvents?.([row]); return once(); },
             close: async () => undefined })) } } });
         expect(lost.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null } });
-        // N0 R4 (owner D4): the unverifiable record leaves the close owner's failure row, never a sealed log.
+        // The unverifiable record leaves the close owner's failure row, never a sealed log.
         const failureRow = await store.loadWorkerEventLog('s', fault);
         expect(failureRow).toMatchObject({ identity: faulted, outcome: 'unverified' }); expect(failureRow).not.toHaveProperty('events');
         expect(settled).toHaveBeenCalledOnce(); expect(once).toHaveBeenCalledOnce(); expect(closes).toHaveBeenCalledOnce();
         await store.cancelRun({ commandId: `cancel-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: (await store.loadRun('s', fault))!.revision });
         await store.settleCancelledAttempt(faulted);
       }
-      // N0 R4-R6 (owner D5): an invocation after which the same Attempt can still be dispatched (here: login capacity busy, the Run parks) seals neither
+      // An invocation after which the same Attempt can still be dispatched (here: login capacity busy, the Run parks) seals neither
       // a verdict-only nor a failure row; the parked Run is resumed by command (no wait) and the same Attempt's real start and close then seal ITS log.
       const artifactReader = adapterExports.FileArtifactStore.reader(async () => productResourcePath(opened.layout, 'artifacts'), 65536);
       const reserveRun = async (runId: string, poolId = 'pool') => {
@@ -260,12 +260,12 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       // What custody reads (custody.ts `unsealed`): the Attempt's own sealed stream, read back.
       expect((await store.loadSealedWorkerEvents(waitedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['session.started', 'model.verification']);
       await finish(waited);
-      // N0 R7 (owner D4+D5, a declared cost): capacity wait -> resume of the same Attempt -> terminal end whose offered observation cannot be verified (it
-      // precedes the provider's start). HEAD's wait had sealed a readable verdict-only row first, so custody's log check passed; now the wait writes
+      // A declared cost: capacity wait -> resume of the same Attempt -> terminal end whose offered observation cannot be verified (it
+      // precedes the provider's start). If the wait had sealed a readable verdict-only row first, custody's log check would pass; the wait writes
       // nothing and the close owner's failure row is the first: custody reads no sealed log (custody.ts `unsealed`) and holds `events-unsealed`.
-      // Accepted scope of this hold: any Attempt for which HEAD had the early readable row and whose real run leaves NO readable seal: this failed offered
-      // seal; an offer-less terminal end whose `supervisor.close()` fails before the seal (pinned with the clean-up case below); and the inner race where at
-      // HEAD the loser's verdict-only row had taken the first slot and the winner's seal then fails (rests on reading: task.ts:280, worker-events.ts:17).
+      // Scope of this hold: any Attempt whose wait would have left an early readable row and whose real run leaves NO readable seal: this failed offered
+      // seal; an offer-less terminal end whose `supervisor.close()` fails before the seal (pinned with the clean-up case below); and an inner race where
+      // the loser's verdict-only row would take the first slot and the winner's seal then fails (only the claim owner seals; the store keeps the first row).
       const rewaited = await reserveRun('rewaited');
       expect((await executeConfiguredTask(project, rewaited, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } })).execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
@@ -278,8 +278,8 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const rewaitedRow = (await store.loadWorkerEventLog('s', 'rewaited'))!;
       expect(rewaitedRow).toMatchObject({ identity: rewaited, outcome: 'unverified' }); expect(await store.loadSealedWorkerEvents(rewaitedRow.identity, artifactReader)).toBeNull();
       await finish(rewaited);
-      // N0 R6 (owner D5): a cancel during the driver's preflight (before any process) is terminal for the Attempt (its claim never launches again), so it
-      // seals what HEAD sealed: the host verdict alone. Custody reads it as sealed (custody.ts `unsealed` is false): releasable as at HEAD.
+      // A cancel during the driver's preflight (before any process) is terminal for the Attempt (its claim never launches again), so it
+      // seals the host verdict alone. Custody reads it as sealed (custody.ts `unsealed` is false): releasable.
       // The fake returns exactly what the real driver returns for a preflight cancel (driver.ts:52) and reports no event.
       const unstarted = await reserveRun('unstarted');
       const settledQuiet = await executeConfiguredTask(project, unstarted, { ...options, nativeCliWorker: { projectionRetired: true,
@@ -288,8 +288,8 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const unstartedRow = (await store.loadWorkerEventLog('s', 'unstarted'))!; expect(unstartedRow).toMatchObject({ identity: unstarted, eventCount: 1, events: expect.any(Object) });
       expect((await store.loadSealedWorkerEvents(unstartedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['model.verification']);
       await finish(unstarted);
-      // N0 R5: a rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
-      // N0 R8 (the hold's scope above): this Attempt first waited for capacity and was resumed, so at HEAD its wait had left a readable row; now its
+      // A rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
+      // The hold's scope above: this Attempt first waited for capacity and was resumed, so its wait leaves no readable row; its
       // terminal, offer-less end whose close fails before the seal leaves no readable seal at all.
       const cleanup = await reserveRun('cleanup'), sinkClose = vi.fn(async () => ({ events: [], projectionComplete: true }));
       expect((await executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
@@ -342,7 +342,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       expect.soft(text).not.toContain('No process exit has been recorded');
       expect(await store.loadBoundDispatch(heldIdentity)).toEqual(heldDispatch);
       expect(await store.loadRun('s', 'held')).toEqual(heldRun);
-      // N0 R7 (owner D5): the invocation that acquired the durable claim seals as HEAD did, whatever follows it: a cancel that prevents the launch grant,
+      // The invocation that acquired the durable claim seals the log, whatever follows it: a cancel that prevents the launch grant,
       // or a grant that fails after the claim was written. Neither identity is dispatched again (replay) and neither supervisor ran. (Their own pool: their claims keep its slots.)
       const storeType = Object.getPrototypeOf(store) as typeof store, grantLaunch = storeType.grantLaunch, grant = vi.spyOn(storeType, 'grantLaunch');
       await store.createExecutionPool({ schemaVersion: 1, poolId: 'claims', capacity: { executionSlots: 2, inFlightSlots: 2 } });

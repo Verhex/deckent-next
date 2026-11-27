@@ -151,7 +151,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     ['no sealed log', null],
     ['a sealed log without a host verdict (no session end)', [started(SONNET)]],
     ['a sealed unverified verdict (usage without the pinned model)', [started(SONNET), ended(), verdict('unverified', [SONNET])]],
-    // N0 R5 (owner D4): the close owner's stored failure row is no sealed evidence: the session-events model stays unknown, never accepted on the row.
+    // The close owner's stored failure row is no sealed evidence: the session-events model stays unknown, never accepted on the row.
     ['the close owner\'s failure row', 'failure-row'],
   ] as const)('parks a pinned Claude attempt with %s for a human decision, never plain verified acceptance', async (_label, events) => {
     const f = await fixture();
@@ -198,7 +198,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     const store = await f.open();
     try {
       const receipt = JSON.parse((await store.loadRunReceipt('s', 'later'))!.command);
-      // N0 R5: the stored row is a union (sealed log or failure row); narrow to the sealed variant before reading its events receipt.
+      // The stored row is a union (sealed log or failure row); narrow to the sealed variant before reading its events receipt.
       const seal = sealedWorkerEventLog(await store.loadWorkerEventLog('s', 'a'));
       expect(receipt.evaluation.returnEvidence).toEqual({ kind: 'model-seal', digest: seal!.events.digest });
     } finally { store.close(); }

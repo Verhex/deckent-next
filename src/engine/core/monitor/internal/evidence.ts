@@ -55,7 +55,7 @@ export interface MonitorLedgerRun {
   /** `create-run` receipt `now`, else `run_execution_intents.admitted_at`. */
   readonly createdAtMs: number | null;
   readonly attempts: readonly MonitorLedgerAttempt[];
-  /** N0 R5 (owner D4): a shown past Attempt's (`previousBindings`) not-verified transcript, read after its read-output decision; bound to its full identity. */
+  /** A shown past Attempt's (`previousBindings`) not-verified transcript, read after its read-output decision; bound to its full identity. */
   readonly previousTranscripts?: readonly Readonly<{ identity: AttemptIdentity; transcript: MonitorWorkerContent['transcript'] }>[];
   readonly delivery?: import('#engine/core/runs/index.js').ResultBrief['runDelivery'];
   /** Internal producer custody, stripped before public projection; malformed/missing identity grants no output access. */

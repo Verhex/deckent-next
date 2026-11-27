@@ -116,7 +116,7 @@ it('after the operator fixes the environment and resumes, a new attempt is check
     expect(run.previousBindings).toEqual([expect.objectContaining({ identity: first, observedKind: 'launch-refused' })]);
     expect(run.bindings).toEqual([expect.objectContaining({ identity: second, observedKind: 'exited' })]);
     expect(await preflightContainers(probe)).toBe('');
-    // N0 R5 (owner D4): a past Attempt's close-owner failure row is read alone, for its full identity, and reaches the shown reading only after its
+    // A past Attempt's close-owner failure row is read alone, for its full identity, and reaches the shown reading only after its
     // read-output decision (here the moved first Attempt; the row is placed directly, the read path is what is checked).
     await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: first, sealedAt: 1, outcome: 'unverified' });
     const config = await loadConfig(f.project, f.options);
@@ -125,7 +125,7 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       expect(shown.runs[0]!.previousTranscripts ?? []).toEqual(permit ? [{ identity: first, transcript: { state: 'unverified', excerpt: [], truncated: false } }] : []);
       expect(shown.runs[0]!.attempts).toHaveLength(1);
     }
-    // N0 R7: one capture serves repeated refreshes (each reports into its own diagnostics), each past identity's read-output failure stays its own,
+    // One capture serves repeated refreshes (each reports into its own diagnostics), each past identity's read-output failure stays its own,
     // and only the admitted identities are read. Three past Attempts of a fresh Run, both refused by a probe answered `unmet` (no container).
     const g = await fixture(context, REQUIREMENTS);
     try {
@@ -160,7 +160,7 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       failing = false;
       const label = (identity: (typeof moved)[number]) => ({ identity, transcript: { state: 'unverified', excerpt: [], truncated: false } });
       expect((await capture.readShown(moved)).runs[0]!.previousTranscripts).toEqual(moved.map(label));
-      // N0 R8: with a Monitor page of one there are three chunks and the middle query fails: the first and third keep their labels and only the middle
+      // With a Monitor page of one there are three chunks and the middle query fails: the first and third keep their labels and only the middle
       // identity is named (its chunk's own failure; the transaction still answers, so nothing is left unsent).
       const all = StatementSync.prototype.all; let selects = 0;
       const middle = vi.spyOn(StatementSync.prototype, 'all').mockImplementation(function (this: StatementSync, ...args: Parameters<StatementSync['all']>) {

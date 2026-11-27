@@ -77,7 +77,7 @@ const sealedWorkerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1),
   eventCount: stamp(), sealedAt: stamp(),
   /** 'partial' when the live worker.events projection could not be confirmed complete (a write or the file close failed, or the sink never opened). */
   projection: z.enum(['complete', 'partial']).optional() }).readonly();
-/** N0 (owner D4): the close owner's record that this Attempt's log could not be verified. Not a sealed log (no events receipt): every sealed-log
+/** The close owner's record that this Attempt's log could not be verified. Not a sealed log (no events receipt): every sealed-log
  * reader treats it as absent; the store keeps the first row of either shape, so it never replaces a sealed log nor is replaced by one. */
 const unverifiedWorkerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, sealedAt: stamp(), outcome: z.literal('unverified') }).readonly();
 export const workerEventLogSchema = z.union([sealedWorkerEventLogSchema, unverifiedWorkerEventLogSchema]);

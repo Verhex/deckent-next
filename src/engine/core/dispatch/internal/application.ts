@@ -19,7 +19,7 @@ export interface DispatchIdentityAuthorization {
 export class DispatchApplication {
   private readonly owner: string;
   private acquired = false;
-  /** N0 R7 (owner D5): whether THIS application acquired the durable dispatch claim, known in the call (never inferred from the ledger afterwards):
+  /** Whether THIS application acquired the durable dispatch claim, known in the call (never inferred from the ledger afterwards):
    * from then on the Attempt identity is never dispatched again, whatever follows (a prevented or failed grant, a supervisor that never ran). */
   acquiredClaim(): boolean { return this.acquired; }
   constructor(private readonly store: DispatchStore, private readonly supervisor: ExecutionSupervisor & SupervisorProfileSource,

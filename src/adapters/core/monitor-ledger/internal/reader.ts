@@ -14,7 +14,7 @@ const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, CATALOG_VERSION 
 export interface MonitorAttemptFiles {
   readonly identity: AttemptIdentity; readonly patch?: ArtifactReceipt | null; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
   readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
-  /** Owner D4: the close owner recorded that this Attempt's log could not be verified (a failure row, no events). */
+  /** The close owner recorded that this Attempt's log could not be verified (a failure row, no events). */
   readonly unverified?: boolean;
 }
 
@@ -145,7 +145,7 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
     })) });
 }
 
-/** N0 R6-R8 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
+/** Of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
  * One read-only transaction, primary-key reads in chunks of `chunk` identities; a row counts only when its own key is the requested one and its
  * stored identity is that key and then the full requested identity (a sealed, corrupt or other-identity row is ignored). A failed chunk is reported
  * for its own identities (`failed`) and the read goes on while the transaction still answers; once it does not, the chunks not sent are `unsent`.
