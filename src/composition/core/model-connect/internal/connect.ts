@@ -9,7 +9,7 @@ import { inspectModelBinding } from '#composition/core/provider-catalog/index.js
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-import { activateConfiguredWorkerModel, carryConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { activateConfiguredWorkerModel, carryConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
 import { headlessConnectPorts } from './headless.js';
 import { connectAuthority } from './connect-authority.js';
@@ -42,6 +42,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     // As at the base, only a person-only CLI connection reads the activation without its model use (a legacy profile is repaired there);
     // every other kind keeps the model-use check of the existing profile (R6). The person-only observer uses the snapshot's scope context.
     const facts = kind?.connect?.personOnly && kind.connect.chatPath === null ? { modelUse: false } as const : {};
+    // As at the base, the listing behind `catalogHas` and `registered` reads with the same rule: for an ordinary kind each declared catalog
+    // model's chat state, with its inspect and model-use checks (R6). The worker comparisons keep the plain cached view.
+    const listings = new Map<string, Promise<Awaited<ReturnType<typeof inspectConfiguredModelCatalog>>['channels'][number] | undefined>>();
+    const listed = (channelId: string) => listings.get(channelId) ?? listings.set(channelId, inspectConfiguredModelCatalog(projectRoot,
+      { schemaVersion: 1, scopeId, channelId }, options, facts).then(result => result.channels[0])).get(channelId)!;
     const activationContext = { context: async () => authority!.initial() } as Parameters<typeof inspectConfiguredModelActivation>[4];
     if (command && kind?.connect?.adapter === SIWC_INFERENCE.adapter.id) siwc = configuredSiwcConnect(projectRoot, command, options, host.siwcPresentation);
     const siwcModels = async () => (await siwc!.models()).map(row => row.slug);
@@ -145,11 +150,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         return rebound?.status === 'declared' && profile && rebound.binding.digest !== profile.bindingDigest ? { reboundProfile: profile.reference } : null;
       },
       async catalogHas(channelId, nativeId) {
-        const row = await authority!.inspect(channelId);
+        const row = await listed(channelId);
         return row?.access === 'allowed' && row.models.some(entry => entry.model.nativeId === nativeId);
       },
       async registered(channelId, nativeId) {
-        const channel = await authority!.inspect(channelId);
+        const channel = await listed(channelId);
         if (channel?.access !== 'allowed') return null;
         const entry = channel.models.find(item => item.model.nativeId === nativeId);
         if (entry) refuseRetiredModelActivation(channel.models, entry.modelId, Date.now());

@@ -2,6 +2,7 @@ import * as witnessAdapters from '#adapters/index.js';
 import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
 import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -407,6 +408,46 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     try { await expect.soft(asPerson(fresh('direct-concurrent', 7))).resolves.toMatchObject({ replayed: true, receipt: { record: { revision: 8 } } }); }
     finally { concurrent.mockRestore(); }
     expect.soft(direct.tables()).toEqual(afterFirst);
+    // The other order: the second delivery looks the child receipt up before the first delivery writes the child, then reads the new revision.
+    // The same command's verified receipt and the row agree, so it also succeeds without writing the child again.
+    remove('');
+    let delivered = false, lateFirst: unknown;
+    const reordered = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogReader').mockImplementation(async (...args) => {
+      const reader = await openChildReader(...args), lookup = reader.loadReceipt?.bind(reader);
+      if (lookup && !running && !delivered) reader.loadReceipt = async (scope, id) => {
+        const found = await lookup(scope, id);
+        if (!found && id.startsWith('model-state-') && !delivered) {
+          delivered = running = true;
+          try { await fresh('direct-late-order', 8)(); } finally { running = false; }
+          lateFirst = direct.tables();
+        }
+        return found;
+      };
+      return reader;
+    });
+    try { await expect.soft(asPerson(fresh('direct-late-order', 8))).resolves.toMatchObject({ replayed: true, receipt: { record: { revision: 9 } } }); }
+    finally { reordered.mockRestore(); }
+    expect.soft(direct.tables()).toEqual(lateFirst);
+    // A child receipt used as evidence of completion is verified: with its changes emptied it is broken evidence, not a completed child.
+    remove('');
+    opened = 0;
+    const children = [0, 1].map(index => `model-state-${createHash('sha256').update('direct-broken').digest('hex')}-${index}`);
+    const broken = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogReader').mockImplementation(async (...args) => {
+      if (!running && ++opened === 2) {
+        running = true;
+        try { await fresh('direct-broken', 9)(); } finally { running = false; }
+        const db = new DatabaseSync(direct.path);
+        try {
+          for (const id of children) {
+            const row = db.prepare('SELECT record FROM model_catalog_receipts WHERE command_id=?').get(id)!;
+            db.prepare('UPDATE model_catalog_receipts SET record=? WHERE command_id=?').run(JSON.stringify({ ...JSON.parse(String(row['record'])), changes: [] }), id);
+          }
+        } finally { db.close(); }
+      }
+      return openChildReader(...args);
+    });
+    try { await expect.soft(asPerson(fresh('direct-broken', 9))).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); }
+    finally { broken.mockRestore(); }
   });
 
   it('settles missing catalog children after interruption, then replays their receipts without another write', async () => {

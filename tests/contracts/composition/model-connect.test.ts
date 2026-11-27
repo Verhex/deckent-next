@@ -107,6 +107,26 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect.soft(await readFile(f.path, 'utf8')).toBe(leasedText);
     await writeFile(f.path, configText, { mode: 0o600 }); clearConfigCache();
     expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
+    // R6, the listing too: the catalog listing behind the connect's catalog lookups reads each declared catalog model's chat state with its
+    // model-use check, as at the base, so a leased profile of ANOTHER model of the channel stops the connect before any write.
+    const sibling = (await readProviderConnectSeed('openai-api')).providers[0]!.models.find(row => row.nativeId === 'gpt-6.1-sol')!;
+    const siblingRef = { providerId: 'openai-api', providerVersion: 1, modelId: sibling.id, modelVersion: sibling.version };
+    const declared = JSON.parse(configText) as Config, siblingId = 'vendor-one.openai-api.sibling.1';
+    (declared.provider_catalog.providers.find(row => row.id === 'openai-api') as unknown as { models: unknown[] }).models
+      .push({ id: sibling.id, version: sibling.version, nativeId: sibling.nativeId, protocols: sibling.protocols });
+    await writeFile(f.path, JSON.stringify(declared), { mode: 0o600 }); clearConfigCache();
+    const siblingBinding = await inspectModelBinding(f.project, siblingRef, f.options);
+    if (siblingBinding.status !== 'declared') throw new Error('fixture sibling binding absent');
+    const own = declared.provider_invocation_profiles.profiles.find(row => JSON.stringify(row.reference) === JSON.stringify(reference))!;
+    declared.provider_invocation_profiles.profiles.push({ ...own, id: siblingId, allocation: { ...(own['allocation'] as object), id: siblingId }, reference: siblingRef,
+      bindingDigest: siblingBinding.binding.digest, schemaVersion: 3, useLeaseId: 'r6-sibling' });
+    await writeFile(f.path, JSON.stringify(declared), { mode: 0o600 }); clearConfigCache();
+    const siblingText = await readFile(f.path, 'utf8');
+    await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-sibling-leased' }, f.options, { registry: localRegistry }))
+      .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    expect.soft(await readFile(f.path, 'utf8')).toBe(siblingText);
+    await writeFile(f.path, configText, { mode: 0o600 }); clearConfigCache();
+    expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
       const db = new DatabaseSync(f.ledger);
     try { db.prepare('DELETE FROM model_catalog_activations WHERE channel_id=? AND model_id=?').run('openai-api', 'gpt-6-luna'); }
     finally { db.close(); }
