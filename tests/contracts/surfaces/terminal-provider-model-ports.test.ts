@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, DeckentError, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, DeckentError, ErrorRegistry, formatHumanError, headlessGovernedUseText, t } from '#platform/index.js';
 import * as adapters from '#adapters/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
@@ -847,6 +847,17 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
       access: 'allowed', models: chat.map((row, index) => ({ modelId: row.nativeId, activation: { state: index < 3 ? 'active' : 'inactive', revision: 1 } })) }] }) as never }, options, 'en', errorText).inspect();
   const label = listed4.kinds[0]!.label, unsealed = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED',
     diagnostic: ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'agent-readiness-verifier-unavailable' } }) }, 'en');
+  // Two verified facts at once (sign-in directory outside the installation and a changed CLI program): both and the connection step; one alone: only it.
+  const changed = ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'agent-program-changed' } });
+  for (const locale of ['en', 'tr'] as const) {
+    const governed = headlessGovernedUseText(locale, 'claude-cli-subscription'), diagnosis = changed.localize!(locale).message;
+    const outside = { state: 'unknown' as const, reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED' as const, governedUse: 'outside-installation' as const };
+    const both = subscriptionReadinessText({ ...outside, diagnostic: changed }, locale, 'claude-cli-subscription');
+    expect.soft(both).toContain(governed.text); expect.soft(both).toContain(diagnosis); expect.soft(both).toContain(governed.next);
+    expect.soft(subscriptionReadinessText(outside, locale, 'claude-cli-subscription')).toBe(`${governed.text} ${governed.next}`);
+    const alone = subscriptionReadinessText({ state: 'unknown', reason: 'NATIVE_AGENT_CAPABILITY_UNSEALED', diagnostic: changed }, locale, 'claude-cli-subscription');
+    expect.soft(alone).toContain(diagnosis); expect.soft(alone).not.toContain(governed.text);
+  }
   expect(listed4.kinds[0]!.detail).toContain('3 model(s) connected');
   expect(listed4.notes.filter(note => note.startsWith(label))).toEqual([`${label} · 3 model(s) connected: ${unsealed}`, `${label} / c3: ${t('tui.model.state.off', {}, 'en')}`]);
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();

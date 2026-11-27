@@ -1098,8 +1098,17 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
   await expect(head.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
   expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
   head.devices.target = 20n;
-  await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  const repaired = await head.write();
+  expect(repaired).toMatchObject({ projectId: head.ref.projectId });
   expect(await head.bytes()).toEqual(retained);
+  // The call that repaired the target and the next ordinary read select the same, known source-installation layout (the package partition
+  // lock directory); the repairing call keeps the target's own known project layout.
+  const ordinary = await head.read(), sourceLayout = (await loadConfiguredScopeContext(head.f.a, 'source', head.f.options, 'read')).layout;
+  expect(sourceLayout.root).toBe(join(head.f.a, '.deckent'));
+  expect(ordinary.installationLayout).toEqual(sourceLayout);
+  expect(repaired.installationLayout).toEqual(sourceLayout);
+  expect(repaired.layout.root).toBe(join(head.f.b, '.deckent'));
+  expect(repaired.layout).toEqual(ordinary.layout);
   record.lineage.pastDevices = ['10'];
   record.entries[0].attachment = head.localAt('10');
   await writeFile(head.registryPath, JSON.stringify(record, null, 2) + '\n');
