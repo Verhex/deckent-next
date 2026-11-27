@@ -113,8 +113,6 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
         return attempt(db, version, binding, reserved.get(attemptKey) ?? null, models.get(attemptKey) ?? null,
           snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found);
       });
-      // N0 R5 (owner D4): a past Attempt (moved by a quota, stall, lost or refused transition) carries only the close owner's failure label.
-      for (const { identity } of version >= WORKER_EVENT_LOG_LEDGER_VERSION ? snapshot.previousBindings ?? [] : []) { const past = pastFailure(db, identity); if (past) found.push(past); }
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
       // Supplemental cost projection cannot invalidate the canonical Run or its producer acceptance receipt.
       let costMetrics: MonitorLedgerRun['costMetrics'];
@@ -147,13 +145,20 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
     })) });
 }
 
-/** Only a failure row bound to the past Attempt's full identity counts; any other row (sealed, corrupt or another identity) is not read here and
- * never invalidates the Run. An SQLite failure still fails the read. */
-function pastFailure(db: DatabaseSync, identity: AttemptIdentity): MonitorAttemptFiles | null {
-  const row = db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
-  const stored = row ? workerEventLogSchema.safeParse(json(row.record)) : null;
-  return stored?.success && !sealedWorkerEventLog(stored.data) && sameAttemptIdentity(stored.data.identity, identity) ? Object.freeze({ identity, patch: null, output: null,
-    events: null, workspace: null, failed: false, open: false, finished: true, sealed: false, unverified: true }) : null;
+/** N0 R6 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified:
+ * one read-only, batched primary-key read; only a failure row bound to the full identity counts (sealed, corrupt or other-identity rows are ignored). */
+export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[]): readonly AttemptIdentity[] {
+  if (!identities.length) return [];
+  let db: DatabaseSync;
+  try { db = openLedgerDatabase(path, { readOnly: true, timeout: busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
+  try { return ledgerTransaction(db, () => {
+    const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+    if (!Number.isSafeInteger(version) || version < WORKER_EVENT_LOG_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return [];
+    const stored = db.prepare(`SELECT w.record FROM json_each(?) j JOIN worker_event_logs w ON w.scope_id=json_extract(j.value,'$[0]') AND w.attempt_id=json_extract(j.value,'$[1]')`)
+      .all(JSON.stringify(identities.map(id => [id.scopeId, id.attemptId]))).flatMap(row => {
+        const parsed = workerEventLogSchema.safeParse(json(row.record)); return parsed.success && !sealedWorkerEventLog(parsed.data) ? [parsed.data.identity] : []; });
+    return Object.freeze(identities.filter(id => stored.some(row => sameAttemptIdentity(row, id))));
+  }, { mode: 'read' }); } finally { db.close(); }
 }
 
 function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['snapshot']['bindings'][number], reservedAtMs: number | null,

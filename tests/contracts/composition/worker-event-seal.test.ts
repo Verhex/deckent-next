@@ -70,6 +70,9 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     // N0 R5: a failure row that could not be written (not an existing first row) is named in the returned failure's `cause`; nothing is durable then.
     const unwritable = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('io'), { code: 'ERR_SQLITE_ERROR' }); } };
     expect(await closeAndSealAttemptWorkerEvents(identity, files, unwritable, sink(true), { ...base, offered: true })).toEqual({ ...failed, cause: 'ERR_SQLITE_ERROR' });
+    // N0 R6: a code-less write failure keeps the cause already at hand (here the artifact write's own code).
+    const codeless = { async saveWorkerEventLog(): Promise<never> { throw new Error('io'); } };
+    expect(await closeAndSealAttemptWorkerEvents(identity, full, codeless, sink(true), { ...base, offered: true, held: () => observation })).toEqual({ ...failed, cause: 'ENOSPC' });
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, null, { ...base, source })).toEqual({ status: 'sealed', eventCount: 1 });
     expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
   });

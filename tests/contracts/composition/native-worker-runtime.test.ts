@@ -229,8 +229,9 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         await store.cancelRun({ commandId: `cancel-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: (await store.loadRun('s', fault))!.revision });
         await store.settleCancelledAttempt(faulted);
       }
-      // N0 R4/R5 (owner D5): an invocation that never started the worker (login capacity busy) seals neither a verdict-only nor a failure row; the
-      // parked Run is resumed by command (no wait) and the same Attempt's real start and close then seal its own log.
+      // N0 R4-R6 (owner D5): an invocation after which the same Attempt can still be dispatched (here: login capacity busy, the Run parks) seals neither
+      // a verdict-only nor a failure row; the parked Run is resumed by command (no wait) and the same Attempt's real start and close then seal ITS log.
+      const artifactReader = adapterExports.FileArtifactStore.reader(async () => productResourcePath(opened.layout, 'artifacts'), 65536);
       const reserveRun = async (runId: string) => {
         await store.createRun({ commandId: `create-${runId}`, actor, identity: { scopeId: 's', runId, layoutRevision: identity.layoutRevision }, graph,
           execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
@@ -242,7 +243,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         await store.cancelRun({ commandId: `cancel-${done.runId}`, actor, scopeId: 's', runId: done.runId, expectedRevision: (await store.loadRun('s', done.runId))!.revision });
         await store.settleCancelledAttempt(done);
       };
-      const own = (run: () => Promise<{ termination: 'confirmed'; status: 'completed' | 'cancelled'; text: string; started?: boolean }>, rows: readonly (typeof reported)[number][] = []) => ({ ...ports,
+      const own = (run: () => Promise<{ termination: 'confirmed'; status: 'completed' | 'cancelled'; text: string }>, rows: readonly (typeof reported)[number][] = []) => ({ ...ports,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release: async () => undefined }) },
         driver: vi.fn(async (input: Parameters<NativeCliWorkerPorts['driver']>[0]) => ({ tools: input.tools, run: () => { if (rows.length) input.onEvents?.(rows); return run(); }, close: async () => undefined })) });
       const waited = await reserveRun('waited'), done = JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] });
@@ -255,19 +256,20 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const resumed = await executeConfiguredTask(project, waited, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } });
       expect(resumed.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 } });
-      expect(await store.loadWorkerEventLog('s', 'waited')).toMatchObject({ identity: waited, eventCount: 2 });
+      const waitedRow = (await store.loadWorkerEventLog('s', 'waited'))!; expect(waitedRow).toMatchObject({ identity: waited, eventCount: 2 });
+      // What custody reads (custody.ts `unsealed`): the Attempt's own sealed stream, read back.
+      expect((await store.loadSealedWorkerEvents(waitedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['session.started', 'model.verification']);
       await finish(waited);
-      // N0 R5 (owner D5): the runner's own start fact decides. A preflight cancel that started no process leaves no row of either shape; a really
-      // started worker cancelled before its first event still seals its log (the host verdict alone).
-      for (const started of [false, true]) {
-        const quiet = await reserveRun(started ? 'silent' : 'unstarted');
-        const settledQuiet = await executeConfiguredTask(project, quiet, { ...options, nativeCliWorker: { projectionRetired: true,
-          ports: own(async () => ({ termination: 'confirmed' as const, status: 'cancelled' as const, text: '', started })) } });
-        expect(settledQuiet.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 1 } });
-        if (started) expect(await store.loadWorkerEventLog('s', 'silent')).toMatchObject({ identity: quiet, eventCount: 1, events: expect.any(Object) });
-        else expect(await store.loadWorkerEventLog('s', 'unstarted')).toBeNull();
-        await finish(quiet);
-      }
+      // N0 R6 (owner D5): a cancel during the driver's preflight (before any process) is terminal for the Attempt (its claim never launches again), so it
+      // seals what HEAD sealed: the host verdict alone. Custody reads it as sealed (custody.ts `unsealed` is false): releasable as at HEAD.
+      // The fake returns exactly what the real driver returns for a preflight cancel (driver.ts:52) and reports no event.
+      const unstarted = await reserveRun('unstarted');
+      const settledQuiet = await executeConfiguredTask(project, unstarted, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: own(async () => ({ termination: 'confirmed' as const, status: 'cancelled' as const, text: '' })) } });
+      expect(settledQuiet.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 1 } });
+      const unstartedRow = (await store.loadWorkerEventLog('s', 'unstarted'))!; expect(unstartedRow).toMatchObject({ identity: unstarted, eventCount: 1, events: expect.any(Object) });
+      expect((await store.loadSealedWorkerEvents(unstartedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['model.verification']);
+      await finish(unstarted);
       // N0 R5: a rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
       const cleanup = await reserveRun('cleanup'), sinkClose = vi.fn(async () => ({ events: [], projectionComplete: true }));
       vi.spyOn(adapterExports, 'prepareNativeCliWorker').mockImplementationOnce(async (...args: Parameters<typeof prepare>) => {

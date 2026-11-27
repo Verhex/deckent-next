@@ -274,9 +274,10 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           await connection?.close(); await relay?.close();
           // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
           const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
-          // Owner D5: only the invocation that dispatched (natively: whose runner may have started) the worker publishes the Attempt log; any other only drains its sink.
+          // Owner D5 (N0 R6): an invocation after which the same Attempt can still be dispatched (any wait or refusal before its own claim; natively, a
+          // supervisor its dispatch never executed) only drains its sink. Once its claim launched, the identity never runs again and its log is sealed as is.
           sinkReached = true;
-          if (!dispatching || worker?.supervisor.startedWorker() === false) await events?.close();
+          if (!dispatching || worker?.supervisor.dispatchedWorker() === false) await events?.close();
           else sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
             offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
           if (offered) try { if (outcome?.status === 'terminal') await worker!.supervisor.release(request); } finally { await worker!.supervisor.close(); }

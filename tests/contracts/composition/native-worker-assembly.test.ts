@@ -93,8 +93,7 @@ it('K21: production driver binds the fresh K5 profile to K16 public transport, r
   try {
     const result = await worker.run({ turnToken: 'turn-token', url: 'http://127.0.0.1:9/mcp' } as never, signal);
     expect(seen).toEqual([undefined, undefined, 'stop']);
-    // N0 R5 (owner D5): the runner's own start fact travels with the result.
-    expect(result).toEqual({ termination: 'confirmed', text: '', status: 'failed', stopped: true, failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA', started: true });
+    expect(result).toEqual({ termination: 'confirmed', text: '', status: 'failed', stopped: true, failureCode: 'HEADLESS_WORKER_RESULT__REASON_QUOTA' });
   } finally { await worker.close(); }
 });
 

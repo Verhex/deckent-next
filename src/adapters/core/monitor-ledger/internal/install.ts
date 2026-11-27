@@ -11,7 +11,7 @@ import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent, summarizeMonitorWorkerEvent } from './worker-content.js';
 import { monitorRecoveryRollout } from './recovery.js';
-import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import { indexMonitorLedger, readPastFailureLogs, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
@@ -29,7 +29,8 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
 export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
   expected?: { revision: number; layoutRevision: string }, scope?: MonitorReadScope) {
   const layout = config.productLayout, locale = resolveLocale(undefined, env, config.language);
-  const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
+  const ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
+  const scan = scanMonitorLedger(ledger,
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}), ...(scope ? { scope } : {}) }, retained);
   // Reject stale/future result views before any output decision or read, including receipt observations.
   const scoped = expected ? { ...scan.reading, runs: scan.reading.runs.filter(value => value.snapshot.revision === expected.revision
@@ -67,13 +68,18 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (Object.keys(found).length) extra.set(key, found);
       } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
+    // N0 R6 (owner D4): a shown past Attempt (`previousBindings`) carries only its not-verified label, read after its read-output decision in one
+    // batched ledger read; a failure there is this stage's per-attempt diagnostic and drops only those labels.
+    const past = reading.runs.flatMap(run => (run.snapshot.previousBindings ?? []).map(binding => binding.identity)).filter(identity => identities.some(shown => sameAttemptIdentity(shown, identity)));
+    let unverified: readonly AttemptIdentity[] = [];
+    try {
+      const permitted: AttemptIdentity[] = []; for (const identity of past) if (await readOutput(identity)) permitted.push(identity);
+      unverified = readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted);
+    } catch (error) { for (const identity of past) diagnostics.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`); }
     // The ledger reader projects each attempt from the binding at the same index.
     const runs = reading.runs.map(run => {
-      // N0 R5 (owner D4): a shown past Attempt keeps only its not-verified transcript (no other content), after the same read-output decision.
-      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => {
-        const transcript = extra.get(MonitorApplication.attemptKey(identity))?.content?.transcript;
-        return transcript?.state === 'unverified' ? [Object.freeze({ identity, transcript })] : [];
-      });
+      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => unverified.some(row => sameAttemptIdentity(row, identity))
+        ? [Object.freeze({ identity, transcript: Object.freeze({ state: 'unverified' as const, excerpt: [], truncated: false }) })] : []);
       return Object.freeze({ ...run, ...(previousTranscripts.length ? { previousTranscripts: Object.freeze(previousTranscripts) } : {}), attempts: Object.freeze(run.attempts.map((value, index) => {
         const identity = run.snapshot.bindings[index]?.identity;
         const found = identity && extra.get(MonitorApplication.attemptKey(identity));

@@ -49,7 +49,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
     async run(bridge, runSignal) {
       if (used) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE'); used = true;
       const combined = AbortSignal.any([signal, runSignal]), checked = await nativeWorkerPreflight(() => transport.preflight(combined), combined);
-      if (!checked) { ended = true; gate.stop(); return { termination: 'confirmed', status: 'cancelled', text: '', started: false }; }
+      if (!checked) { ended = true; gate.stop(); return { termination: 'confirmed', status: 'cancelled', text: '' }; }
       if (!isDeepStrictEqual(checked.execution, input.execution)) throw new NativeCliWorkerError('NATIVE_CLI_WORKER_UNAVAILABLE');
       runDir = await realpath(await mkdtemp(join(input.binding.definition.stateDir, 'worker-run-')));
       const effortArgs = input.effort ? nativeEffortArgs(entry.command.capabilities.reasoningEffort, input.effort) : [];
@@ -72,8 +72,7 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
       const state = createNormalizerState([bridge.turnToken], Date.now(), undefined, bridgeToolClasses(entry.bridge.toolPrefix, tools.session.tools)), observer = createNativeLineObserver(entry.command.capabilities.eventStream, state, createCodexState(),
         events => input.onEvents?.(events as import('#domain/index.js').WorkerEvent[]));
       let lineStopped = false, observed = false;
-      // N0: at most one count-only observation from host-known values: before session.ended on an accepted result line, otherwise once the runner settles;
-      // N0 R5 (owner D5): a runner that reports no started process offers none (a rejected runner's start stays unknown and still does).
+      // N0: at most one count-only observation from host-known values: before session.ended on an accepted result line, otherwise once the runner settles.
       const observe = () => {
         const facts = claude?.observedFacts?.(); if (observed || !facts || !input.onEvents) return; observed = true;
         const observation = nativeCallObservationSchema.safeParse({ schemaVersion: 1, cliVersion: checked.preflight.version,
@@ -86,15 +85,14 @@ export function createNativeCliWorkerDriver(input: Parameters<NativeCliWorkerPor
         if (stop) { lineStopped = true; return 'stop'; }
         if (claude?.observedFacts?.().terminal) observe();
         observer.observe(Buffer.from(raw + '\n'));
-      }).then(settled => { if (settled.started) observe(); return settled; }, (error: unknown) => { observe(); throw error; });
+      }).finally(observe);
       ended = true; gate.stop(); observer.flush(); input.onEvents?.(flushUnmapped(state) as import('#domain/index.js').WorkerEvent[]);
       const finished = claude?.finish(evidence), result = turn?.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, evidence.egress);
       // A clean-up failure keeps the established classification below; the turn-only refusal applies to a settled run.
       if (!evidence.cleanupError && result && 'refusal' in result && 'field' in result.refusal.body && result.refusal.body.field === CODEX_TOOL_ITEM_RESERVATION)
-        return { termination: 'confirmed', status: 'failed', text: CODEX_TOOL_ITEM_RESERVATION, refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', started: evidence.started };
-      // N0 R5 (owner D5): the runner's own start fact travels up; a runner that threw leaves it unknown (realm: only a pre-callback cancel proves none).
-      return { ...nativeWorkerProcessResult(evidence, combined.aborted, gate.refused(), finished,
-        result ? { ...result, lineStopped } : undefined, gate.terminalFailure()), started: evidence.started };
+        return { termination: 'confirmed', status: 'failed', text: CODEX_TOOL_ITEM_RESERVATION, refusal: 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED' };
+      return nativeWorkerProcessResult(evidence, combined.aborted, gate.refused(), finished,
+        result ? { ...result, lineStopped } : undefined, gate.terminalFailure());
     },
     async close() {
       // A thrown runner has no process-end proof; retain private files for reconciliation rather than remove a live CLI's files.
