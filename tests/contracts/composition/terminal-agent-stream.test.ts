@@ -172,10 +172,11 @@ describe('terminal agent turn stream', () => {
     // G3 (owner 2026-11-27): no chat next step for the cleanup or sign-in lock closure, even after a policy-record warning; line mode prints
     // the parent's bytes: the answer alone when one came, else the closing note alone.
     const warned = 'The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor. The model round ended without an answer. Temporary files from the agent turn could not be cleared. No tool call ran.';
-    const failed = (text?: string) => collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { if (text) onEvent({ kind: 'text', text });
-      return result({ turnId: command.turnId, finish: 'error', note: warned, answer: null, toolCalls: 0 }); }).value));
+    const failed = (text?: string, replayed = false) => collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { if (text) onEvent({ kind: 'text', text });
+      return result({ turnId: command.turnId, finish: 'error', note: warned, answer: null, toolCalls: 0, replayed }); }).value));
     const closing = await failed(), partial = await failed('Part');
     expect.soft(closing).toEqual([{ kind: 'done', finish: 'error', note: warned }]);
+    expect.soft(await failed(undefined, true)).toEqual([{ kind: 'done', finish: 'error', note: warned }]);
     const lineOf = async (deltas: readonly TurnDelta[]) => { let drawn = ''; const line = await streamLineTurn((async function* () { yield* deltas; })(), { out: { write: text => { drawn += text; } },
       err: { write: () => {} }, cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' }); return { drawn, line }; };
     expect(await Promise.all([lineOf(closing), lineOf(partial)])).toMatchObject([{ drawn: `${warned}\n`, line: { finish: 'error', answer: warned } },
