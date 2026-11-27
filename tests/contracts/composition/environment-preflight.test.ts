@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { DockerSupervisor, prepareMonitorInstall, readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
@@ -124,6 +125,41 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       expect(shown.runs[0]!.previousTranscripts ?? []).toEqual(permit ? [{ identity: first, transcript: { state: 'unverified', excerpt: [], truncated: false } }] : []);
       expect(shown.runs[0]!.attempts).toHaveLength(1);
     }
+    // N0 R7: one capture serves repeated refreshes (each reports into its own diagnostics), each past identity's read-output failure stays its own,
+    // and only the admitted identities are read. Two past Attempts of a fresh Run, both refused by a probe answered `unmet` (no container).
+    const g = await fixture(context, REQUIREMENTS);
+    try {
+      vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValue('unmet');
+      const moved: Awaited<ReturnType<typeof reserve>>[] = [];
+      for (const round of [1, 2]) {
+        const next = await reserve(g, (await g.store.loadRun('s', 'r'))!.revision, `reserve-g${round}`);
+        await expect(executeConfiguredTask(g.project, next, g.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
+        await applyConfiguredRunLifecycle(g.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: `resume-g${round}`, action: 'resume',
+          expectedRevision: (await g.store.loadRun('s', 'r'))!.revision }, g.options);
+        moved.push(next);
+      }
+      expect((await g.store.loadRun('s', 'r'))!.previousBindings?.map(row => row.identity)).toEqual(moved);
+      // A row is tied to its own key first: a (malformed) row under the first Attempt's key that names the second labels neither.
+      const gConfig = await loadConfig(g.project, g.options), ledger = new DatabaseSync(productResourcePath(gConfig.productLayout, 'ledger'));
+      try { ledger.prepare('INSERT INTO worker_event_logs(scope_id,attempt_id,record) VALUES(?,?,?)').run('s', moved[0]!.attemptId,
+        JSON.stringify({ schemaVersion: 1, identity: moved[1], sealedAt: 1, outcome: 'unverified' })); } finally { ledger.close(); }
+      expect((await (await prepareMonitorInstall(gConfig, g.options.env, async () => true)).readShown(moved)).runs[0]!.previousTranscripts).toBeUndefined();
+      const cleared = new DatabaseSync(productResourcePath(gConfig.productLayout, 'ledger'));
+      try { cleared.prepare('DELETE FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').run('s', moved[0]!.attemptId); } finally { cleared.close(); }
+      for (const identity of moved) await g.store.saveWorkerEventLog({ schemaVersion: 1, identity, sealedAt: 1, outcome: 'unverified' });
+      let failing = true;
+      const capture = await prepareMonitorInstall(gConfig, g.options.env, async identity => {
+        if (failing && identity.attemptId === moved[0]!.attemptId) throw Object.assign(new Error('policy'), { code: 'POLICY_UNAVAILABLE' });
+        return true;
+      });
+      for (const refresh of [1, 2]) {
+        const shown = await capture.readShown(moved);
+        expect(shown.runs[0]!.previousTranscripts, `refresh ${refresh}`).toEqual([{ identity: moved[1], transcript: { state: 'unverified', excerpt: [], truncated: false } }]);
+        expect(shown.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[0]!.attemptId}:POLICY_UNAVAILABLE`]);
+      }
+      failing = false;
+      expect((await capture.readShown(moved)).runs[0]!.previousTranscripts?.map(row => row.identity)).toEqual(moved);
+    } finally { g.store.close(); }
   } finally { f.store.close(); }
 }, 120_000);
 

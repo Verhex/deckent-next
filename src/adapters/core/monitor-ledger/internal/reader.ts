@@ -145,19 +145,26 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
     })) });
 }
 
-/** N0 R6 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified:
- * one read-only, batched primary-key read; only a failure row bound to the full identity counts (sealed, corrupt or other-identity rows are ignored). */
-export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[]): readonly AttemptIdentity[] {
+/** N0 R6/R7 (owner D4): of the given past Attempts (shown, read-output admitted), those whose close owner recorded that their log could not be verified.
+ * One read-only transaction, primary-key reads in chunks of `chunk` identities; a row counts only when its own key is the requested one and its
+ * stored identity is that key and then the full requested identity (a sealed, corrupt or other-identity row is ignored). */
+export function readPastFailureLogs(path: string, busyTimeoutMs: number, identities: readonly AttemptIdentity[], chunk: number): readonly AttemptIdentity[] {
   if (!identities.length) return [];
   let db: DatabaseSync;
   try { db = openLedgerDatabase(path, { readOnly: true, timeout: busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
   try { return ledgerTransaction(db, () => {
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
     if (!Number.isSafeInteger(version) || version < WORKER_EVENT_LOG_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return [];
-    const stored = db.prepare(`SELECT w.record FROM json_each(?) j JOIN worker_event_logs w ON w.scope_id=json_extract(j.value,'$[0]') AND w.attempt_id=json_extract(j.value,'$[1]')`)
-      .all(JSON.stringify(identities.map(id => [id.scopeId, id.attemptId]))).flatMap(row => {
-        const parsed = workerEventLogSchema.safeParse(json(row.record)); return parsed.success && !sealedWorkerEventLog(parsed.data) ? [parsed.data.identity] : []; });
-    return Object.freeze(identities.filter(id => stored.some(row => sameAttemptIdentity(row, id))));
+    const select = db.prepare(`SELECT w.scope_id,w.attempt_id,w.record FROM json_each(?) j JOIN worker_event_logs w ON w.scope_id=json_extract(j.value,'$[0]') AND w.attempt_id=json_extract(j.value,'$[1]')`);
+    const failed = new Map<string, AttemptIdentity>(), key = (scopeId: unknown, attemptId: unknown) => JSON.stringify([scopeId, attemptId]);
+    for (let at = 0; at < identities.length; at += Math.max(1, chunk)) {
+      for (const row of select.all(JSON.stringify(identities.slice(at, at + Math.max(1, chunk)).map(id => [id.scopeId, id.attemptId])))) {
+        const parsed = workerEventLogSchema.safeParse(json(row.record));
+        if (parsed.success && !sealedWorkerEventLog(parsed.data) && key(parsed.data.identity.scopeId, parsed.data.identity.attemptId) === key(row.scope_id, row.attempt_id))
+          failed.set(key(row.scope_id, row.attempt_id), parsed.data.identity);
+      }
+    }
+    return Object.freeze(identities.filter(id => { const row = failed.get(key(id.scopeId, id.attemptId)); return !!row && sameAttemptIdentity(row, id); }));
   }, { mode: 'read' }); } finally { db.close(); }
 }
 

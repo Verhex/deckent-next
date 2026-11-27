@@ -157,10 +157,8 @@ it('K12: capacity is owned by the shared opaque resource; a busy login waits wit
   expect(f.ports.openTools).not.toHaveBeenCalled(); expect(f.ports.driver).not.toHaveBeenCalled();
 });
 it('K12: output stays under DispatchApplication custody; transport receives no workspace or task argv and dispatch is once only', async () => {
-  const f = await prepared(); expect(f.supervisor.dispatchedWorker()).toBe(false);
-  const result = await f.supervisor.execute(request);
-  // N0 R6 (owner D5): once its dispatch executed it, this invocation owns the Attempt's log (the identity is never dispatched again).
-  expect(result).toMatchObject({ result: { kind: 'exited', exitCode: 0 }, outputCompleteness: 'complete' }); expect(f.supervisor.dispatchedWorker()).toBe(true);
+  const f = await prepared(), result = await f.supervisor.execute(request);
+  expect(result).toMatchObject({ result: { kind: 'exited', exitCode: 0 }, outputCompleteness: 'complete' });
   expect(JSON.parse(result.stdout)).toEqual({ schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report });
   expect(await f.supervisor.execute(request)).toEqual(result); expect(f.run).toHaveBeenCalledTimes(1);
   expect(f.ports.openTools).toHaveBeenCalledWith(request, binding, expect.any(AbortSignal), {});
@@ -183,8 +181,6 @@ it('K12: an acquired slot is released without spawning when dispatch preparation
   const f = await prepared(); await f.supervisor.close();
   expect(f.release).toHaveBeenCalledTimes(1); expect(f.run).not.toHaveBeenCalled();
   await expect(f.supervisor.execute(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
-  // N0 R6 (owner D5): a supervisor its dispatch never executed publishes no Attempt log.
-  expect(f.supervisor.dispatchedWorker()).toBe(false);
 });
 it('K12: declared files reuse the existing confined output collector after process and tools settle', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'native-worker-output-')), f = fixture();

@@ -45,7 +45,8 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     const among = (list: readonly AttemptIdentity[], files: MonitorAttemptFiles) => list.some(identity => sameAttemptIdentity(identity, files.identity));
     const selected = scan.files.filter(files => among(identities, files) || (files.failed && among(failures, files)));
     type SelectedContent = { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null };
-    const extra = new Map<string, SelectedContent>();
+    // N0 R7: each call reports into its own list (the shared one stays the capture's; a frozen result list is never pushed to again).
+    const extra = new Map<string, SelectedContent>(), notes = [...diagnostics];
     for (const files of selected) {
       const key = MonitorApplication.attemptKey(files.identity);
       try {
@@ -66,19 +67,22 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         if (sidecars?.refusalAuditLoss) found.diagnostics = [sidecars.refusalAuditLoss];
         if (needsEnd) found.observedEndAtMs = observedEnd(files, sidecars);
         if (Object.keys(found).length) extra.set(key, found);
-      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
+      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); notes.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
-    // N0 R6 (owner D4): a shown past Attempt (`previousBindings`) carries only its not-verified label, read after its read-output decision in one
-    // batched ledger read; a failure there is this stage's per-attempt diagnostic and drops only those labels.
-    const past = reading.runs.flatMap(run => (run.snapshot.previousBindings ?? []).map(binding => binding.identity)).filter(identity => identities.some(shown => sameAttemptIdentity(shown, identity)));
-    let unverified: readonly AttemptIdentity[] = [];
-    try {
-      const permitted: AttemptIdentity[] = []; for (const identity of past) if (await readOutput(identity)) permitted.push(identity);
-      unverified = readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted);
-    } catch (error) { for (const identity of past) diagnostics.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`); }
+    // N0 R6/R7 (owner D4): a shown past Attempt (`previousBindings`) carries only its not-verified label. Shown identities are matched through a keyed
+    // set; each read-output decision (and its failure) is per identity; the admitted ones are read in chunks of the monitor page size in one read-only
+    // transaction, and an SQL failure is reported only for the identities sent to it. Each failure is this stage's existing per-attempt diagnostic.
+    const shown = new Set(identities.map(identity => MonitorApplication.attemptKey(identity))), permitted: AttemptIdentity[] = [];
+    const unavailable = (identity: AttemptIdentity, error: unknown) => notes.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`);
+    for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.has(MonitorApplication.attemptKey(identity))) {
+      try { if (await readOutput(identity)) permitted.push(identity); } catch (error) { unavailable(identity, error); }
+    }
+    let failed = new Set<string>();
+    try { failed = new Set(readPastFailureLogs(ledger, config.storage.sqlite.busyTimeoutMs, permitted, config.inspection.maxPageSize).map(identity => MonitorApplication.attemptKey(identity))); }
+    catch (error) { for (const identity of permitted) unavailable(identity, error); }
     // The ledger reader projects each attempt from the binding at the same index.
     const runs = reading.runs.map(run => {
-      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => unverified.some(row => sameAttemptIdentity(row, identity))
+      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => failed.has(MonitorApplication.attemptKey(identity))
         ? [Object.freeze({ identity, transcript: Object.freeze({ state: 'unverified' as const, excerpt: [], truncated: false }) })] : []);
       return Object.freeze({ ...run, ...(previousTranscripts.length ? { previousTranscripts: Object.freeze(previousTranscripts) } : {}), attempts: Object.freeze(run.attempts.map((value, index) => {
         const identity = run.snapshot.bindings[index]?.identity;
@@ -86,7 +90,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         return found ? Object.freeze({ ...value, ...found }) : value;
       })) });
     });
-    return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
+    return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(notes) }), readOutput);
   } };
 }
 /** M-VIS: the ledger's scope and pool ids (no Run, occupancy or holder), read before the monitor decides admission. */

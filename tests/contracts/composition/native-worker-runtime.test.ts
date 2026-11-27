@@ -232,10 +232,10 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       // N0 R4-R6 (owner D5): an invocation after which the same Attempt can still be dispatched (here: login capacity busy, the Run parks) seals neither
       // a verdict-only nor a failure row; the parked Run is resumed by command (no wait) and the same Attempt's real start and close then seal ITS log.
       const artifactReader = adapterExports.FileArtifactStore.reader(async () => productResourcePath(opened.layout, 'artifacts'), 65536);
-      const reserveRun = async (runId: string) => {
+      const reserveRun = async (runId: string, poolId = 'pool') => {
         await store.createRun({ commandId: `create-${runId}`, actor, identity: { scopeId: 's', runId, layoutRevision: identity.layoutRevision }, graph,
           execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
-          policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+          policy: { schemaVersion: 2, poolId, capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
         const reserved = { ...identity, runId, attemptId: runId };
         await store.reserveRunTasks({ commandId: `reserve-${runId}`, actor, scopeId: 's', runId, expectedRevision: 0, now: 0, identities: [reserved] }); return reserved;
       };
@@ -245,7 +245,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       };
       const own = (run: () => Promise<{ termination: 'confirmed'; status: 'completed' | 'cancelled'; text: string }>, rows: readonly (typeof reported)[number][] = []) => ({ ...ports,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release: async () => undefined }) },
-        driver: vi.fn(async (input: Parameters<NativeCliWorkerPorts['driver']>[0]) => ({ tools: input.tools, run: () => { if (rows.length) input.onEvents?.(rows); return run(); }, close: async () => undefined })) });
+        driver: vi.fn(async (input: Parameters<NativeCliWorkerPorts['driver']>[0]) => ({ tools: input.tools, run: () => { for (const row of rows) input.onEvents?.([row]); return run(); }, close: async () => undefined })) });
       const waited = await reserveRun('waited'), done = JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] });
       const busy = await executeConfiguredTask(project, waited, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } });
@@ -260,6 +260,21 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       // What custody reads (custody.ts `unsealed`): the Attempt's own sealed stream, read back.
       expect((await store.loadSealedWorkerEvents(waitedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['session.started', 'model.verification']);
       await finish(waited);
+      // N0 R7 (owner D4+D5, a declared cost): capacity wait -> resume of the same Attempt -> terminal end whose offered observation cannot be verified (it
+      // precedes the provider's start). HEAD's wait had sealed a readable verdict-only row first, so custody's log check passed; now the wait writes
+      // nothing and the close owner's failure row is the first: custody reads no sealed log (custody.ts `unsealed`) and holds `events-unsealed`.
+      const rewaited = await reserveRun('rewaited');
+      expect((await executeConfiguredTask(project, rewaited, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } })).execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
+      expect(await store.loadWorkerEventLog('s', 'rewaited')).toBeNull();
+      await applyConfiguredRunLifecycle(project, { schemaVersion: 1, scopeId: 's', runId: 'rewaited', commandId: 'resume-rewaited', action: 'resume',
+        expectedRevision: (await store.loadRun('s', 'rewaited'))!.revision }, options);
+      const unverifiedEnd = await executeConfiguredTask(project, rewaited, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[1], reported[0]]) } });
+      expect(unverifiedEnd.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED' } });
+      const rewaitedRow = (await store.loadWorkerEventLog('s', 'rewaited'))!;
+      expect(rewaitedRow).toMatchObject({ identity: rewaited, outcome: 'unverified' }); expect(await store.loadSealedWorkerEvents(rewaitedRow.identity, artifactReader)).toBeNull();
+      await finish(rewaited);
       // N0 R6 (owner D5): a cancel during the driver's preflight (before any process) is terminal for the Attempt (its claim never launches again), so it
       // seals what HEAD sealed: the host verdict alone. Custody reads it as sealed (custody.ts `unsealed` is false): releasable as at HEAD.
       // The fake returns exactly what the real driver returns for a preflight cancel (driver.ts:52) and reports no event.
@@ -317,6 +332,21 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       expect.soft(text).not.toContain('No process exit has been recorded');
       expect(await store.loadBoundDispatch(heldIdentity)).toEqual(heldDispatch);
       expect(await store.loadRun('s', 'held')).toEqual(heldRun);
+      // N0 R7 (owner D5): the invocation that acquired the durable claim seals as HEAD did, whatever follows it: a cancel that prevents the launch grant,
+      // or a grant that fails after the claim was written. Neither identity is dispatched again (replay) and neither supervisor ran. (Their own pool: their claims keep its slots.)
+      const storeType = Object.getPrototypeOf(store) as typeof store, grantLaunch = storeType.grantLaunch, grant = vi.spyOn(storeType, 'grantLaunch');
+      await store.createExecutionPool({ schemaVersion: 1, poolId: 'claims', capacity: { executionSlots: 2, inFlightSlots: 2 } });
+      const prevented = await reserveRun('prevented', 'claims'), never = async (): Promise<never> => { throw new Error('the supervisor must not run'); };
+      grant.mockImplementationOnce(async function (this: typeof store, input) { await this.requestDispatchCancellation(input.claim.request, input.principal); return grantLaunch.call(this, input); });
+      expect((await executeConfiguredTask(project, prevented, { ...options, nativeCliWorker: { projectionRetired: true, ports: own(never) } })).execution).toMatchObject({ status: 'prevented' });
+      grant.mockRejectedValueOnce(ErrorRegistry.createError('ATTEMPT_STORE_BUSY'));
+      const ungranted = await reserveRun('ungranted', 'claims');
+      await expect(executeConfiguredTask(project, ungranted, { ...options, nativeCliWorker: { projectionRetired: true, ports: own(never) } })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
+      grant.mockRestore();
+      for (const claimed of [prevented, ungranted]) {
+        expect(await store.loadWorkerEventLog('s', claimed.attemptId)).toMatchObject({ identity: claimed, eventCount: 1, events: expect.any(Object) });
+        expect(await store.loadBoundDispatch(claimed)).not.toBeNull();
+      }
       expect(run).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledOnce(); expect(credential).not.toHaveBeenCalled();
     } finally { store.close(); }
