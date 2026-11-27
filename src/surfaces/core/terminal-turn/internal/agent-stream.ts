@@ -113,7 +113,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     }
     const lines = result.steer;
     const notices = result.notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` }));
-    const guidance = result.replayed ? null : headlessTurnGuidance(result.note);
+    const guidance = headlessTurnGuidance(result);
     if (guidance) notices.push({ key: '', text: guidance }); // No deduplication key: this notice belongs to this live turn.
     yield { kind: 'done', finish: result.finish, note: result.note, ...(lines.joined.length || lines.returned.length ? { steer: lines } : {}),
       ...(notices.length ? { notices } : {}) };
@@ -123,17 +123,19 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. Only the turn's own positions count:
- * after an optional policy-record warning, the failed-round closure's diagnosis, the whole note, or its last sentence. Any other shape gets no step. */
-function headlessTurnGuidance(note: string | null): string | null {
-  if (note === null) return null;
+/** Match the host's localized closure, so the guidance never travels as an answer or a stored note. A step only when the cause closed the
+ * live turn: the whole note (after an optional policy-record warning) is the engine's failed-round closure with that diagnosis and this turn's
+ * counts. A cancel, a service stop, a delivery failure or any added sentence replaces or extends that closure, so it gets no step. */
+function headlessTurnGuidance(result: ChatTurnResult): string | null {
+  const { note } = result;
+  if (result.replayed || result.finish !== 'error' || note === null) return null;
   for (const locale of LOCALES) {
     const audit = `${t('agent.policyTurn.auditFailed', {}, locale)} `, rest = note.startsWith(audit) ? note.slice(audit.length) : note;
-    const summary = t('agent.turn.outcome.noTools', {}, locale);
-    const names = (cause: string) => rest === cause || rest.endsWith(` ${cause}`)
-      || rest.startsWith(t('agent.turn.outcome.failedDiagnosis', { diagnosis: cause, summary }, locale).split(summary)[0]!);
-    if (names(t('error.headless.loginBusy.guard', {}, locale))) return t('headless.chat.loginBusyNext', {}, locale);
-    if (names(t('error.headless.agentRunDispose', {}, locale)) || names(t('error.headless.agentRunRemove', {}, locale)))
+    const summary = result.toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, locale)
+      : t('agent.turn.outcome.tools', { calls: result.toolCalls, rounds: result.rounds }, locale);
+    const closes = (cause: string) => rest === t('agent.turn.outcome.failedDiagnosis', { diagnosis: cause, summary }, locale);
+    if (closes(t('error.headless.loginBusy.guard', {}, locale))) return t('headless.chat.loginBusyNext', {}, locale);
+    if (closes(t('error.headless.agentRunDispose', {}, locale)) || closes(t('error.headless.agentRunRemove', {}, locale)))
       return t('headless.chat.runCleanupNext', {}, locale);
   }
   return null;

@@ -61,15 +61,10 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
       finish = delta.finish;
       feed(finishRecordStream(record, io.knownSecrets, terminalSafeText)); record = EMPTY_RECORD_STREAM;
       if (held) { write(io.project(held, 'prose')); held = ''; }
-      const guidance = delta.notices?.filter(item => !item.key) ?? [];
-      if (answer.length === 0 && delta.note) { write(io.project(delta.note, 'prose')); answer = delta.note; }
-      else if (delta.note && guidance.length) { // a step is printed only with the cause it follows, whatever the finish
-        if (lastChar !== '\n') write('\n');
-        write(io.project(delta.note, 'prose'));
-      }
-      for (const item of guidance) {
-        if (lastChar !== '\n') write('\n');
-        write(io.project(item.text, 'prose') + '\n');
+      if (answer.length === 0 && delta.note) {
+        write(io.project(delta.note, 'prose')); answer = delta.note;
+        // A live step (keyless) follows only the note it explains; an answered turn's output stays the answer alone.
+        for (const item of delta.notices ?? []) if (!item.key) { if (lastChar !== '\n') write('\n'); write(io.project(item.text, 'prose') + '\n'); }
       }
     }
   }

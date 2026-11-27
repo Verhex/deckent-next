@@ -5,6 +5,8 @@ import type { TurnDelta } from '#surfaces/index.js';
 import { streamLineTurn } from '#surfaces/core/terminal-kit/index.js';
 import { renderAssistantStream, startAssistantStream, type ToolUnit } from '#surfaces/core/terminal-render/index.js';
 import { builtinAgentToolClass } from '#composition/core/agent-turn/index.js';
+import { agentContextFailureNote } from '#engine/index.js';
+import { t } from '#platform/index.js';
 
 const input = { projectRoot: '/project', scopeId: 'scope', messages: [{ role: 'user' as const, content: 'what?' }], options: {} };
 const result = (over: Partial<ChatTurnResult> = {}): ChatTurnResult => ({ schemaVersion: 1, turnId: 't', finish: 'stop', note: null, rounds: 2, toolCalls: 1,
@@ -169,17 +171,28 @@ describe('terminal agent turn stream', () => {
     const divergent = await collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { onEvent({ kind: 'text', text: 'Hello' });
       return result({ turnId: command.turnId }); }).value));
     expect(divergent).toEqual([{ kind: 'text', text: 'Hello' }, { kind: 'done', finish: 'stop', note: null }]);
-    // G3 rows 7/10: a live next step follows its cause even after a policy-record warning; a replay adds none; line mode prints the cause with it.
-    const warned = 'The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor. The model round ended without an answer. Temporary files from the agent turn could not be cleared. No tool call ran.';
-    const failed = (replayed: boolean) => collect(streamTerminalAgentTurn(input, ports(async command => result({ turnId: command.turnId, finish: 'error', note: warned, answer: null, replayed })).value));
-    expect.soft((await failed(false)).at(-1)).toEqual({ kind: 'done', finish: 'error', note: warned, notices: [{ key: '', text: 'Check any tool results above and resolve the cleanup problem before sending another request.' }] });
-    expect((await failed(true)).at(-1)).toEqual({ kind: 'done', finish: 'error', note: warned });
-    const busy = 'Cancelled. No tool call ran. The sign-in lock guard remained held at the end of the wait.';
+    // G3 rows 7/10: a live next step only where the whole note is the failed-round closure of its cause with this turn's counts (also after a
+    // policy-record warning and after tool calls); a replay adds none. Line mode prints the step only after the note it follows.
+    const cleanup = 'The model round ended without an answer. Temporary files from the agent turn could not be cleared.', busyCause = 'The sign-in lock guard remained held at the end of the wait.';
+    const warned = `The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor. ${cleanup} No tool call ran.`;
+    const afterTools = `${cleanup} 2 tool call(s) ran in 3 round(s); their results are above.`, busy = `Cancelled. No tool call ran. ${busyCause}`;
+    const step = [{ key: '', text: 'Check any tool results above and resolve the cleanup problem before sending another request.' }];
+    const closed = async (over: Partial<ChatTurnResult>) => (await collect(streamTerminalAgentTurn(input, ports(async command => result({ turnId: command.turnId, answer: null, ...over })).value))).at(-1);
+    expect.soft(await closed({ finish: 'error', note: warned, toolCalls: 0 })).toEqual({ kind: 'done', finish: 'error', note: warned, notices: step });
+    expect.soft(await closed({ finish: 'error', note: afterTools, toolCalls: 2, rounds: 3 })).toEqual({ kind: 'done', finish: 'error', note: afterTools, notices: step });
+    // No step: a replay; the cause only last in a note a service stop or a delivery failure closed; a sentence after the closure; the bare
+    // cause beside an answer; a closure with another turn's counts.
+    for (const [finish, note, replayed] of [['error', warned, true], ['error', `${t('agent.turn.outcome.serviceStopped', { summary: t('agent.turn.outcome.noTools', {}, 'en') }, 'en')} ${busyCause}`, false],
+      ['error', `${agentContextFailureNote('RUNTIME_CHAT_EVENT_TOO_LARGE')} ${busyCause}`, false], ['error', `The model round ended without an answer. ${busyCause} No tool call ran. [deckent] ${t('agent.turn.outcome.mechanical', {}, 'en')}`, false],
+      ['stop', busyCause, false], ['error', afterTools, false]] as const) expect.soft(await closed({ finish, note, toolCalls: 0, replayed })).toEqual({ kind: 'done', finish, note });
     const partial = await collect(streamTerminalAgentTurn(input, ports(async (command, onEvent) => { onEvent({ kind: 'text', text: 'Part' }); return result({ turnId: command.turnId, finish: 'cancelled', note: busy, answer: null }); }).value));
-    let drawn = ''; const line = await streamLineTurn((async function* () { yield* partial; })(), { out: { write: text => { drawn += text; } }, err: { write: () => {} },
-      cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' });
-    expect.soft(drawn).toBe(`Part\n${busy}\nWait for the other operation to finish, then try again.\n`);
-    expect(line).toMatchObject({ finish: 'cancelled', answer: 'Part' });
+    expect.soft(partial.at(-1)).toEqual({ kind: 'done', finish: 'cancelled', note: busy });
+    // Line mode: an answered turn prints the answer alone (cancelled or with a step); the step follows only the note it explains.
+    const lineOf = async (deltas: readonly TurnDelta[]) => { let drawn = ''; const line = await streamLineTurn((async function* () { yield* deltas; })(), { out: { write: text => { drawn += text; } },
+      err: { write: () => {} }, cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' }); return { drawn, line }; };
+    const stepped = { kind: 'done', finish: 'error', note: warned, notices: step } as const;
+    expect(await Promise.all([lineOf(partial), lineOf([partial[0]!, stepped]), lineOf([stepped])])).toMatchObject([{ drawn: 'Part\n', line: { finish: 'cancelled', answer: 'Part' } },
+      { drawn: 'Part\n', line: { finish: 'error', answer: 'Part' } }, { drawn: `${warned}\n${step[0]!.text}\n`, line: { answer: warned } }]);
   });
 
   it('cancels this exact turn at once on abort and when the consumer stops early; a service error surfaces as is', async () => {

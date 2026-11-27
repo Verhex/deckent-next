@@ -337,8 +337,11 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     const sessions = adapters.openTerminalSessionStore(directory), bound = bindSessionScope(sessions, 's', () => 1);
     const saved = Promise.withResolvers<string>(), deltas: TurnDelta[] = [];
     const note = `The model round ended without an answer. ${cause} No tool call ran.`;
-    const view = mountWorkline({ sessions: { ...bound, async save(snapshot) { await bound.save(snapshot); saved.resolve(snapshot.sessionId); } },
+    // Full window: `exit` is the dump the host writes to the main screen; the next turn is held open once it started.
+    const exit: { current: (() => string) | null } = { current: null }, started = Promise.withResolvers<void>(), held = Promise.withResolvers<void>();
+    const view = mountWorkline({ fullscreen: true, transcriptExit: exit, sessions: { ...bound, async save(snapshot) { await bound.save(snapshot); saved.resolve(snapshot.sessionId); } },
       streamTurn: async function* (messages) {
+        if (deltas.length) { started.resolve(); await held.promise; return; }
         const input = { projectRoot: cleanup.f.project, scopeId: 's', messages, options: cleanup.f.options };
         const stream = streamTerminalAgentTurn(input, { async chatTurn(_root, command, onEvent) {
           const result = await cleanup.run(command.turnId, command.messages);
@@ -355,18 +358,18 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
       const expected = { schemaVersion: 1, sessionId, scopeId: 's', updatedAtMs: 1, messages: [{ role: 'user', content: 'fixture question' }] };
       expect.soft(await readFile(join(directory, `${sessionId}.json`), 'utf8')).toBe(JSON.stringify(expected));
       expect.soft(await sessions.load('s', sessionId)).toEqual(expected.messages);
-      await view.instance.waitUntilRenderFlush();
-      expect.soft(view.stdout.text).toContain(next);
+      // Shown right after the turn, never a history row: the exit dump (the same rows the search reads) keeps the closing note, not the step.
+      await view.instance.waitUntilRenderFlush(); const dump = exit.current?.() ?? '';
+      expect.soft({ shown: view.stdout.frame.includes(next), note: dump.includes(note), step: dump.includes(next) }).toEqual({ shown: true, note: true, step: false });
+      view.stdin.write('next question\r'); await started.promise; await view.instance.waitUntilRenderFlush();
+      expect.soft({ step: view.stdout.frame.includes(next), note: view.stdout.frame.includes(note) }).toEqual({ step: false, note: true });
       let drawn = '';
-      const line = await streamLineTurn((async function* () { yield* deltas; })(), {
-        out: { write: text => { drawn += text; } }, err: { write: () => {} }, cancel: () => {}, project: text => text,
-        toolLine: () => '', approvalLine: () => '',
-      });
-      expect.soft(drawn).toContain(note);
-      expect.soft(drawn).toContain(next);
+      const line = await streamLineTurn((async function* () { yield* deltas; })(), { out: { write: text => { drawn += text; } }, err: { write: () => {} },
+        cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' });
+      expect.soft(drawn).toBe(`${note}\n${next}\n`);
       expect.soft(line).toMatchObject({ finish: 'error', answer: note, appended: [] });
       expect.soft(t(key, {}, 'tr')).toBe(nextTr);
-    } finally { view.instance.unmount(); }
+    } finally { held.resolve(); view.instance.unmount(); }
     fault = headlessDiagnostic('HEADLESS_LOGIN_BUSY', { holder: 'guard' });
   }
 
