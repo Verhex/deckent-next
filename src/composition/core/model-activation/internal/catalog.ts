@@ -2,7 +2,7 @@ import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced, openSqliteModelC
 import { admitConfiguredChatActivation, configuredBinding, configuredChatActivation, configuredDeclarations } from './admit.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogError, modelActivationCommandSchema, modelCatalogCommandSchema, type ModelCatalogQuery, type ModelCatalogCommand, type ModelActivationCommand } from '#domain/index.js';
-import { checkCatalogActivationFacts, verifyCatalogActivationChange, verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization, type ModelCatalogAuthorizer, type ModelCatalogChannelView } from '#engine/index.js';
+import { checkCatalogActivationFacts, verifyCatalogActivationChange, verifiedPrincipal, planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization, type ModelCatalogAuthorizer, type ModelCatalogChannelView, type ModelCatalogResult } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelInspectionSnapshot } from '#composition/core/model-inspection/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -71,11 +71,19 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     const authority = activationAuthority(root, scopeId, options, context), enabling = command.action === 'activate';
     const parent = await planCatalogWrite(context, authority, command, true);
     // The parent receipt is verified when it is obtained (stored, or returned by the writer), before any child. A replay the writer returns
-    // passes the same replay permission as a stored one, on the scope read again now (the base re-read it).
+    // is delivered as the matching replay a fresh read holds, under its replay permission (199/1); that decision is pinned to the shared
+    // authority, so a child write still due re-checks it.
     const verified = <T extends { readonly receipt: Parameters<typeof verifyCatalogActivationChange>[0] }>(result: T) => { verifyCatalogActivationChange(result.receipt, command); return result; };
-    const written = async <T extends { readonly replayed: boolean }>(result: T) => {
-      if (result.replayed) await catalogApplication(await loadConfiguredScopeContext(root, scopeId, options, 'read')).preflight(command, true);
-      return result;
+    const fresh = async (current: Context) => {
+      const found = await catalogApplication(current).preflight(command, true);
+      if (!found?.replayed) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
+      return found;
+    };
+    const written = async (result: ModelCatalogResult) => {
+      if (!result.replayed) return result;
+      const found = await fresh(await loadConfiguredScopeContext(root, scopeId, options, 'read'));
+      authority.pin(true, async current => Boolean(await fresh(current)));
+      return found;
     };
     const off = !parent.replay && !enabling ? verified(await written(await parent.write())) : null;
     const replay = parent.replay ? verified(parent.replay) : off?.replayed ? off : null;

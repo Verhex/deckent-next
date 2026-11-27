@@ -114,9 +114,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         own = null;
         // A re-read advances the expected state only by this connect's own verified write: the published layer's own read has its digest (the
         // global one below), and any other change stops it. When both read layers are one file, the other view is that same written file.
-        const shared = written !== null && oneFile;
+        // Under `globalOnly` the project layer is not read, so a project write is checked against the published file's own digest.
+        const shared = written !== null && oneFile, published = written?.layer === 'project' && options.globalOnly
+          ? (await snapshotConfiguredConfig(projectRoot, { ...options, globalOnly: false })).digest : snapshot.digest;
         if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !shared && !isDeepStrictEqual(observed![layer], snapshot[layer]))
-          || written?.layer === 'project' && snapshot.digest !== written.digest)) throw hold();
+          || written?.layer === 'project' && published !== written.digest)) throw hold();
         observed = snapshot;
         if (written?.layer === 'global' || snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
           const global = await snapshotConfiguredConfig(projectRoot, options, 'global');

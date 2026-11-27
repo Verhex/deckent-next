@@ -1,6 +1,7 @@
 import * as witnessAdapters from '#adapters/index.js';
 import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -238,6 +239,33 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     });
     try { await expect.soft(applyModelCatalog(f.project, later, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); }
     finally { revoked.mockRestore(); await writeFile(fPolicy, fRules); }
+    // That fresh decision also gates the child write still due: inspect removed after the replay was checked stops the chat child.
+    const fourth = { ...command, commandId: 'on-fourth', expectedRevision: 4 }, openReader = witnessAdapters.openSqliteModelCatalogReader;
+    let armed = false;
+    const replayed = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        if (admission.command.commandId !== fourth.commandId) return write(admission);
+        await write(admission); armed = true;
+        return write(admission);
+      };
+      return store;
+    });
+    const reading = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogReader').mockImplementation(async (...args) => {
+      const reader = await openReader(...args), close = reader.close.bind(reader);
+      if (!armed) return reader;
+      armed = false;
+      reader.close = () => {
+        close();
+        writeFileSync(fPolicy, JSON.stringify({ ...rules, grants: [...rules.grants, { ...rules.grants[1], id: 'deny-late-replay', effect: 'deny', actions: ['inspect'],
+          resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: f.model.nativeId })] } }] }));
+      };
+      return reader;
+    });
+    try { await expect.soft(asPerson(() => applyModelCatalog(f.project, fourth, f.options))).rejects.toMatchObject({ code: 'POLICY_DENIED' }); }
+    finally { replayed.mockRestore(); reading.mockRestore(); await writeFile(fPolicy, fRules); }
+    expect.soft(await inspectModelActivation(f.project, { schemaVersion: 1, scopeId: 's', reference: f.reference }, f.options))
+      .toMatchObject({ activation: { state: 'inactive' } });
 
     const partial = await declaredFixture();
     await asPerson(() => applyModelCatalog(partial.project, command, partial.options));

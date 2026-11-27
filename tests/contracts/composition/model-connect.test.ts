@@ -3,7 +3,7 @@ import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
 import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { describe, expect, it, vi } from 'vitest';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, readProviderConnectSeed, parseProviderConnectRegistry } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation as admit, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -449,6 +449,18 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
   await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-global-only', model: { nativeId: globalId } }, { ...shared, globalOnly: true },
     { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
       return Response.json(init.method === 'GET' ? { data: [{ id: globalId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
+  // `globalOnly` with its own installation file, no profile section and no project file yet: the first profile is written to the project
+  // file, and the connect checks that write against the file it published.
+  const ownHome = join(f.data, 'own-global'), installation: Record<string, unknown> = { ...await f.config() };
+  delete installation['provider_invocation_profiles'];
+  await mkdir(ownHome, { recursive: true, mode: 0o700 });
+  await writeFile(join(ownHome, 'config.json'), JSON.stringify(installation), { mode: 0o600 });
+  await rm(f.path); clearConfigCache();
+  const projectId = 'witness-loopback-project-profile';
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-project-profile', model: { nativeId: projectId } },
+    { env: { ...f.options.env, DECKENT_GLOBAL_HOME: ownHome }, globalOnly: true }, { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: projectId }] } : { choices: [] });
     } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
 
 });
