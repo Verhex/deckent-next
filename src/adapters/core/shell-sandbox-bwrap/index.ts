@@ -6,5 +6,5 @@ export { BUBBLEWRAP_BUNDLED_MAX_BYTES, BUBBLEWRAP_KNOWN_PATHS, BUBBLEWRAP_MINIMU
   type BubblewrapSelectOptions } from './internal/launcher.js';
 export { BUBBLEWRAP_BUNDLED } from './internal/bundled.js';
 export { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type ShellRealmSelectionView } from './internal/select.js';
-export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ isolatedProcessArguments, isolatedProcessCommand,
+export { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ isolatedProcessArguments, isolatedProcessCommand, producibleIsolatedArgumentCounts,
   withinByteBound as withinBubblewrapArgumentByteBound, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ type IsolatedProcessView } from './internal/process.js';
