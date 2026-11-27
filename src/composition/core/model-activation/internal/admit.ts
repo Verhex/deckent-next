@@ -1,8 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { DeclaredModelsApplication, configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
-  assessModelInvocationProfileDeliveries } from '#engine/index.js';
-import { ModelCatalogError, ModelActivationError, modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
+  assessModelInvocationProfileDeliveries, sameModelCatalogRequest, verifyCatalogActivationChange } from '#engine/index.js';
+import { ModelCatalogError, ModelActivationError, modelActivationActorSchema, modelActivationCommandSchema, type ModelActivationCommand, type ModelCatalogCommand,
+  type ModelReference } from '#domain/index.js';
 import { openSqliteModelActivationReader, openSqliteModelActivationStore, openSqliteModelCatalogReader } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -106,8 +107,13 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
     if (current?.state === (action === 'activate' ? 'active' : 'inactive')) continue;
     const child = { schemaVersion: 1 as const, commandId: workerOnly ? `${prefix}.${index}` : `${prefix}-${index}`, scopeId, action,
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
-    // A chat receipt replay with a newly missing child still requires a witness.
-    const planned = await planCatalogWrite(context, authority, child);
+    // A chat receipt replay with a newly missing child still requires a witness. A concurrent delivery of the same command may complete
+    // the child after its receipt was looked up: the revision conflict that follows is reconciled before it stands.
+    const planned = await planCatalogWrite(context, authority, child).catch(async (error: unknown) => {
+      if (action === 'activate' && error instanceof ModelCatalogError && error.code === 'MODEL_CATALOG_REVISION_CONFLICT' && await reached(context, child)) return null;
+      throw error;
+    });
+    if (!planned) continue;
     // A matching child receipt: when the row read again in this context holds the requested state (a concurrent delivery of the same
     // command completed it), the child is done and is not written again. Otherwise the conflict is noted; every child is still planned,
     // so a later child's refusal keeps its place.
@@ -117,10 +123,14 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
   return { writes, conflict };
 }
 
-/** The child's row, read now in the command's own context, holds the receipt's change or a later one, and is active. */
-const reached = async (context: Context, child: Readonly<{ scopeId: string; channelId: string; modelId: string | null; expectedRevision: number }>) => {
+/** A child completed by this same command: its receipt (same command and actor) is verified like a parent's, a broken one is an error
+ * (199/1), and its row, read now in the command's own context, is active past the receipt's expected revision. `reached` only reads. */
+const reached = async (context: Context, child: Exclude<ModelCatalogCommand, { action: 'register' }>) => {
   const reader = await openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context));
   try {
+    const { id, issuer, subject, assurance } = context.principal, receipt = await reader.loadReceipt!(child.scopeId, child.commandId);
+    if (!receipt || !sameModelCatalogRequest(receipt, child, modelActivationActorSchema.parse({ id, issuer, subject, assurance }))) return false;
+    verifyCatalogActivationChange(receipt, child);
     const row = await reader.activation(child.scopeId, child.channelId, child.modelId);
     return row?.state === 'active' && row.revision > child.expectedRevision;
   } finally { reader.close(); }
