@@ -39,8 +39,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     let withdrawing = false;
     const cli = command && kind?.connect?.chatPath === null && kind.connect.adapter !== SIWC_INFERENCE.adapter.id
       && (!kind.connect.catalogOnly || kind.connect.headless) ? headlessConnectPorts(command, options, access => access === 'read' ? authority!.current() : scope(access)) : null;
-    const facts = { modelUse: false } as const;
-    // Model-use enrichment is disabled here. The observer only uses the snapshot's scope context.
+    // As at the base, only a person-only CLI connection reads the activation without its model use (a legacy profile is repaired there);
+    // every other kind keeps the model-use check of the existing profile (R6). The person-only observer uses the snapshot's scope context.
+    const facts = kind?.connect?.personOnly && kind.connect.chatPath === null ? { modelUse: false } as const : {};
     const activationContext = { context: async () => authority!.initial() } as Parameters<typeof inspectConfiguredModelActivation>[4];
     if (command && kind?.connect?.adapter === SIWC_INFERENCE.adapter.id) siwc = configuredSiwcConnect(projectRoot, command, options, host.siwcPresentation);
     const siwcModels = async () => (await siwc!.models()).map(row => row.slug);
@@ -157,7 +158,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async register(catalog, commandId) { await applyConfiguredModelCatalog(projectRoot, { schemaVersion: 1, commandId, scopeId, action: 'register', catalog }, options); },
       binding: reference => inspectModelBinding(projectRoot, reference, options),
       async activation(reference, fresh) {
-        return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: scopeId, reference }, options, facts, fresh ? undefined : activationContext)).activation;
+        return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: scopeId, reference }, options, facts, fresh || !('modelUse' in facts) ? undefined : activationContext)).activation;
       },
       async activate(value) {
         await carryConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: scopeId, reference: value.reference,

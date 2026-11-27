@@ -95,6 +95,18 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
       .resolves.toMatchObject({ status: 'connected', steps: { profile: 'present', activation: 'present' } });
     await writeFile(policyPath, policy); clearConfigCache();
     expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
+    // R6, as at the base: an ordinary kind's activation read keeps the model-use check of the existing profile, so a leased (v3) profile in an
+    // installation without that attachment stops before any write instead of being rewritten.
+    const configText = await readFile(f.path, 'utf8'), leased = JSON.parse(configText) as Config;
+    leased.provider_invocation_profiles.profiles = leased.provider_invocation_profiles.profiles.map(row => JSON.stringify(row.reference) === JSON.stringify(reference)
+      ? { ...row, schemaVersion: 3, useLeaseId: 'r6-lease' } : row);
+    await writeFile(f.path, JSON.stringify(leased), { mode: 0o600 }); clearConfigCache();
+    const leasedText = await readFile(f.path, 'utf8');
+    await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-leased' }, f.options, { registry: localRegistry }))
+      .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    expect.soft(await readFile(f.path, 'utf8')).toBe(leasedText);
+    await writeFile(f.path, configText, { mode: 0o600 }); clearConfigCache();
+    expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
       const db = new DatabaseSync(f.ledger);
     try { db.prepare('DELETE FROM model_catalog_activations WHERE channel_id=? AND model_id=?').run('openai-api', 'gpt-6-luna'); }
     finally { db.close(); }

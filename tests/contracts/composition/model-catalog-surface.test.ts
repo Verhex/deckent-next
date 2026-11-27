@@ -264,6 +264,24 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     });
     try { await expect.soft(asPerson(() => applyModelCatalog(f.project, fourth, f.options))).rejects.toMatchObject({ code: 'POLICY_DENIED' }); }
     finally { replayed.mockRestore(); reading.mockRestore(); await writeFile(fPolicy, fRules); }
+    // A replay with nothing left to write is checked at its return: the writer's receipt and the durable one must be the same record.
+    const fifth = { ...off, commandId: 'off-fifth', expectedRevision: 5 };
+    const diverged = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        if (admission.command.commandId !== fifth.commandId) return write(admission);
+        await write(admission);
+        const second = await write(admission), db = new DatabaseSync(f.path);
+        try {
+          const record = JSON.parse(String(db.prepare("SELECT record FROM model_catalog_receipts WHERE command_id='off-fifth'").get()!['record']));
+          db.prepare("UPDATE model_catalog_receipts SET record=? WHERE command_id='off-fifth'").run(JSON.stringify({ ...record, admittedAtMs: record.admittedAtMs + 1 }));
+        } finally { db.close(); }
+        return second;
+      };
+      return store;
+    });
+    try { await expect.soft(applyModelCatalog(f.project, fifth, f.options)).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); }
+    finally { diverged.mockRestore(); }
     expect.soft(await inspectModelActivation(f.project, { schemaVersion: 1, scopeId: 's', reference: f.reference }, f.options))
       .toMatchObject({ activation: { state: 'inactive' } });
 
@@ -373,6 +391,22 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: f.model.nativeId })] } }] }));
     await expect.soft(fresh('direct-first', 6)()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await expect.soft(asPerson(fresh('direct-first', 6))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    // Two deliveries of the same command: the second finds the children the first completed between its listing and its receipt reads.
+    // The wanted state exists, so it succeeds without writing a child again.
+    await writeFile(policyPath, JSON.stringify(policy));
+    const openChildReader = witnessAdapters.openSqliteModelCatalogReader;
+    let opened = 0, running = false, afterFirst: unknown;
+    const concurrent = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogReader').mockImplementation(async (...args) => {
+      if (!running && ++opened === 2) {
+        running = true;
+        try { await fresh('direct-concurrent', 7)(); } finally { running = false; }
+        afterFirst = direct.tables();
+      }
+      return openChildReader(...args);
+    });
+    try { await expect.soft(asPerson(fresh('direct-concurrent', 7))).resolves.toMatchObject({ replayed: true, receipt: { record: { revision: 8 } } }); }
+    finally { concurrent.mockRestore(); }
+    expect.soft(direct.tables()).toEqual(afterFirst);
   });
 
   it('settles missing catalog children after interruption, then replays their receipts without another write', async () => {

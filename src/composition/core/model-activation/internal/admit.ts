@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { DeclaredModelsApplication, configuredInvocationProfiles, verifiedPrincipal, ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
   assessModelInvocationProfileDeliveries } from '#engine/index.js';
 import { ModelCatalogError, ModelActivationError, modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
-import { openSqliteModelActivationReader, openSqliteModelActivationStore } from '#adapters/index.js';
+import { openSqliteModelActivationReader, openSqliteModelActivationStore, openSqliteModelCatalogReader } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { checkConfiguredCatalogFacts, inspectConfiguredModelCatalog, planCatalogWrite } from './catalog.js';
@@ -62,7 +62,8 @@ async function admit(root: string, input: ModelActivationCommand, options: Confi
       .authorize('inspect', { scopeId, reference: command.reference }, current.principal)).ruleId;
     const visible = async <T extends { readonly replayed: boolean } | null>(result: T) => {
       if (!cascade || !result?.replayed) return result;
-      const ruleId = await inspect(await loadConfiguredScopeContext(root, scopeId, options, 'read'))
+      // The scope read again must be the first operation's own (person, project, installation) before its decision covers the receipt.
+      const ruleId = await inspect(authority.bound(await loadConfiguredScopeContext(root, scopeId, options, 'read')))
         .catch(async (refusal: unknown) => { if (command.action === 'activate') await authority.witness('models.activate'); throw refusal; });
       authority.pin(ruleId, inspect);
       return result;
@@ -107,12 +108,23 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
     // A chat receipt replay with a newly missing child still requires a witness.
     const planned = await planCatalogWrite(context, authority, child);
-    // A child receipt whose row no longer holds its change is noted; every child is still planned, so a later child's refusal keeps its place.
-    if (action === 'activate' && planned.replay) { conflict = true; continue; }
+    // A matching child receipt: when the row read again in this context holds the requested state (a concurrent delivery of the same
+    // command completed it), the child is done and is not written again. Otherwise the conflict is noted; every child is still planned,
+    // so a later child's refusal keeps its place.
+    if (action === 'activate' && planned.replay) { if (!await reached(context, child)) conflict = true; continue; }
     writes.push(() => planned.write(channel, [model.modelId]));
   }
   return { writes, conflict };
 }
+
+/** The child's row, read now in the command's own context, holds the receipt's change or a later one, and is active. */
+const reached = async (context: Context, child: Readonly<{ scopeId: string; channelId: string; modelId: string | null; expectedRevision: number }>) => {
+  const reader = await openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context));
+  try {
+    const row = await reader.activation(child.scopeId, child.channelId, child.modelId);
+    return row?.state === 'active' && row.revision > child.expectedRevision;
+  } finally { reader.close(); }
+};
 
 /** A named worker-only model has no chat declaration or whole-channel cascade. */
 export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {},

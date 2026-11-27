@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced, openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
 import { admitConfiguredChatActivation, configuredBinding, configuredChatActivation, configuredDeclarations } from './admit.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
@@ -71,19 +72,17 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     const authority = activationAuthority(root, scopeId, options, context), enabling = command.action === 'activate';
     const parent = await planCatalogWrite(context, authority, command, true);
     // The parent receipt is verified when it is obtained (stored, or returned by the writer), before any child. A replay the writer returns
-    // is delivered as the matching replay a fresh read holds, under its replay permission (199/1); that decision is pinned to the shared
-    // authority, so a child write still due re-checks it.
+    // is delivered only when a fresh read of the command's own context (same person, project, installation) holds that same durable record,
+    // both verified, under its replay permission (199/1); an ordinary refusal of that read stays what it is. The decision is also pinned, so a
+    // child write still due re-checks it.
     const verified = <T extends { readonly receipt: Parameters<typeof verifyCatalogActivationChange>[0] }>(result: T) => { verifyCatalogActivationChange(result.receipt, command); return result; };
-    const fresh = async (current: Context) => {
-      const found = await catalogApplication(current).preflight(command, true);
-      if (!found?.replayed) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
-      return found;
-    };
+    const fresh = async (current: Context) => catalogApplication(authority.bound(current)).preflight(command, true);
     const written = async (result: ModelCatalogResult) => {
       if (!result.replayed) return result;
       const found = await fresh(await loadConfiguredScopeContext(root, scopeId, options, 'read'));
+      if (!found?.replayed || !isDeepStrictEqual(verified(found).receipt, verified(result).receipt)) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
       authority.pin(true, async current => Boolean(await fresh(current)));
-      return found;
+      return result;
     };
     const off = !parent.replay && !enabling ? verified(await written(await parent.write())) : null;
     const replay = parent.replay ? verified(parent.replay) : off?.replayed ? off : null;
