@@ -692,8 +692,8 @@ it('tells the model its per-answer output limit and how to write large content i
   const cli = '- You run inside a CLI whose own built-in tools are off or refused here. Do not infer what the deckent tools may do from the CLI\'s own sandbox'
     + ' (it may call itself read-only).';
   const call = '- When one of these tools fits the request, make the call instead of answering that you cannot or that the session is read-only. Policy and the'
-    + ' permission mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report'
-    + ' what the tool result confirms.';
+    + ' permission mode decide each call: it may run at once, need the person\'s approval, or be refused; whether the person can approve it here depends on their'
+    + ' terminal. Make the call; do not predict its outcome, and report what the tool result confirms.';
   const unfit = '- When the person asks to change project files or run a command and none of these tools fits, say which action is not available in this session;'
     + ' do not use another tool in its place.';
   // v13 only for the text that carries the section; every text without it keeps the v12 header.
@@ -701,6 +701,13 @@ it('tells the model its per-answer output limit and how to write large content i
   // The shared feature line promises no run in v13; v12 keeps its words.
   expect(routed(changeTools)).toContain('- Work: /do <request> asks for a plan; the person decides on any card it opens; /runs shows jobs; /approvals shows what waits for the user\'s decision.');
   expect(render(changeTools, 8192)).toContain('- Work: /do <request> plans and runs a job; /runs shows jobs; /approvals shows what waits for the user\'s decision.');
+  // v13 (Astra 3789): slash commands are an option, never certain here (a line session has only four), and the approval is not promised as decidable here.
+  const slash = '- These slash commands, and those in the session context below, exist only in the interactive deckent terminal; a line session has just /status,'
+    + ' /context, /help and /exit. You cannot tell which one the person uses: offer a command as an option, never as certain to work here.';
+  const policy = (words: string) => `- Policy and the permission mode decide every call: it runs at once, ${words}, or is denied. A result "error=denied-by-policy" or`
+    + ' "error=denied-by-owner" is final: do not repeat that call; say what you needed or ask.';
+  expect(routed(changeTools)).toEqual(expect.arrayContaining([slash, policy('needs the operator\'s approval')]));
+  expect(render(changeTools, 8192)).toContain(policy('waits until the operator approves it')); expect(render(changeTools, 8192)).not.toContain(slash);
   expect(section(routed(changeTools))).toEqual(['Changes in this session:', cli,
     '- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change; propose_work for work'
       + ' a worker should do; run_shell for commands. A built-in tool of the CLI stops the turn.', call, unfit]);
