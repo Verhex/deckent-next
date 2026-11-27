@@ -102,6 +102,24 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     await expect(connect(f.project, command, f.options, { registry: localRegistry })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(f.rows('SELECT * FROM model_catalog_activations')).toEqual(missing);
     expect(f.rows('SELECT * FROM audit_events')).toEqual(beforeReplay);
+    // The wide check runs before each worker write: a settings change after the channel write stops the model write.
+    const unset = new DatabaseSync(f.ledger);
+    try { unset.prepare("DELETE FROM model_catalog_activations WHERE channel_id='openai-api'").run(); } finally { unset.close(); }
+    const openCatalog = witnessAdapters.openSqliteModelCatalogStore;
+    const drifted = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        const written = await write(admission);
+        if (admission.command.commandId.endsWith('.worker.0.0')) await writeFile(f.path, JSON.stringify({ ...await f.config(), language: 'tr' }), { mode: 0o600 });
+        return written;
+      };
+      return store;
+    });
+    try {
+      await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-worker-drift' }, f.options, { registry: localRegistry }))
+        .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    } finally { drifted.mockRestore(); }
+    expect.soft(f.rows("SELECT model_id FROM model_catalog_activations WHERE channel_id='openai-api'").map(row => row['model_id'])).not.toContain('gpt-6-luna');
   // Canary: no result, configuration file, ledger row or model request carries the key.
     expect(JSON.stringify([result, again])).not.toContain(CANARY);
     expect(await allText(f.project)).not.toContain(CANARY);
@@ -420,6 +438,12 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
       } } }))).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
   } finally { concurrent.mockRestore(); }
   expect.soft((await f.config()).provider_invocation_profiles.profiles).toContainEqual(foreign);
+  // One file serving as both the project and the installation settings: the connect's own write is not taken for a foreign one.
+  const sharedId = 'witness-loopback-shared', shared = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: join(f.project, '.deckent') } };
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-shared', model: { nativeId: sharedId } }, shared,
+    { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: sharedId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
 
 });
 

@@ -59,9 +59,13 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
     }
     return { apiTargets, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
   }
-  // A login to the single existing account decides on that account's secret, read without effects first.
-  if (request.operation === 'login' && !request.newAccount) await authorizeSiwcConnect(context, request.scopeId, request.connectionId ?? await withConfiguredSiwc(root,
-    request.scopeId, options, 'inspect', app => app.list()).then(rows => rows.length === 1 ? rows[0]!.connectionId : undefined, () => undefined));
+  // A login to the single existing account decides on that account's secret, observed read-only first. An unreadable list leaves the decision
+  // on the real secret to the witnessed OAuth owner, as the base did.
+  if (request.operation === 'login' && !request.newAccount) {
+    const rows = request.connectionId ? [] : await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.list(), {}, undefined, undefined, 'read')
+      .catch(() => null);
+    if (rows) await authorizeSiwcConnect(context, request.scopeId, request.connectionId ?? (rows.length === 1 ? rows[0]!.connectionId : undefined));
+  }
   if (request.operation === 'logout' || request.operation === 'login' && !request.newAccount) return withConfiguredSiwc(root, request.scopeId, options,
     request.operation === 'logout' ? 'logout' : 'connect', async app => {
       const records = request.connectionId ? [] : request.operation === 'logout' ? await app.listForRevocation() : await app.list();

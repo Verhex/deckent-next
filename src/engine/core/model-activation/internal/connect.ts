@@ -35,7 +35,8 @@ export interface ModelConnectPorts {
   registered?(channelId: string, nativeId: string): Promise<ModelConnectCatalogRow | null>;
   available?(kind: string, endpoint: string): Promise<readonly string[] | null>;
   priced?(kind: string, nativeId: string, endpoint: string): boolean;
-  workerActivate?(reference: ModelReference, commandId: string): Promise<boolean | void>;
+  /** `beforeWrite` runs right before each durable worker write. */
+  workerActivate?(reference: ModelReference, commandId: string, beforeWrite?: () => Promise<void>): Promise<boolean | void>;
   preflight?(scopeId: string, principal: VerifiedPrincipal, target?: Readonly<{ reference: ModelReference; nativeId: string }>): Promise<void>;
   beforeDiscovery?(command: ModelConnectCommand, kind: ModelConnectKind, base: string | null, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
   beforeProbes?(kind: ModelConnectKind, base: string, nativeIds: readonly string[], layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
@@ -517,8 +518,8 @@ export class ModelConnectApplication {
       steps.activation = 'written';
     }
     }
-    // The worker write passes the same before-write check as the other enabling writes.
-    const workerWrite = async () => { if (!ports.workerActivate) return false; await ports.beforeWrite?.(); return ports.workerActivate(target.reference, step(command.commandId, 'worker', String(index))); };
+    // Each durable worker write passes the same before-write check as the other enabling writes.
+    const workerWrite = () => ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)), async () => { await ports.beforeWrite?.(); });
     if (kind.connect.headless && !workerIds?.includes(target.nativeId)) worker = 'image-required'; // the image gates only the worker activation, and the result says so
     else if ((!ports.authorizePlan || selection[index]?.worker) && await workerWrite()) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });

@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError, refuseRetiredModelActivation } from '#engine/index.js';
 import { SIWC_INFERENCE, providerSpendingConfiguredBudget, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { configuredLayersShareFile, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -27,6 +27,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const kind = registry.kinds.find(row => row.id === command?.connection); scopeId = command?.scopeId ?? '';
     let observed: Awaited<ReturnType<typeof snapshotConfiguredConfig>> | null = null, globalDigest: string | null = null;
     let own: { layer: 'global' | 'project'; digest: string } | null = null;
+    const oneFile = configuredLayersShareFile(projectRoot, options);
     const sameLayers = (snapshot: NonNullable<typeof observed>) => {
       if (observed && (!isDeepStrictEqual(observed.global, snapshot.global) || !isDeepStrictEqual(observed.project, snapshot.project)))
         throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
@@ -104,16 +105,18 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
           : discoverConfiguredConnectionModel(projectRoot, scopeId, id, base, nativeId, options, host);
       },
       adapter: (_id, value) => siwc ? siwc.adapter(value.existing) : cli ? cli.adapter(kind!, value) : connectionAdapter(kind!, { ...value, endpoint: value.endpoint ?? '' }),
-      workerActivate: (reference, commandId) => authority!.applyWorker(reference,
-        () => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options)),
+      workerActivate: (reference, commandId, beforeWrite) => authority!.applyWorker(reference,
+        () => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options, beforeWrite)),
       async authorizeDelegation() { await authority!.witness(); },
       principal,
       async layers() {
         const snapshot = await snapshotConfiguredConfig(projectRoot, options), written = own, hold = () => ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
         own = null;
-        // A re-read advances the expected state only by this connect's own verified write; any other change stops it.
-        if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !isDeepStrictEqual(observed![layer], snapshot[layer]))
-          || written?.layer === 'project' && snapshot.digest !== written.digest)) throw hold();
+        // A re-read advances the expected state only by this connect's own verified write; any other change stops it. When both layers are one
+        // file (the reader then reads it once), both views are that written file and only its digest is compared.
+        const shared = written !== null && oneFile;
+        if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !shared && !isDeepStrictEqual(observed![layer], snapshot[layer]))
+          || written !== null && (written.layer === 'project' || shared) && snapshot.digest !== written.digest)) throw hold();
         observed = snapshot;
         if (written?.layer === 'global' || snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
           const global = await snapshotConfiguredConfig(projectRoot, options, 'global');
@@ -175,8 +178,8 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
     // "Connected" only when the stored account record says so now (a renewal can fail after the account was chosen).
     const chosen = siwc?.connectionId() ?? null;
-    const oauthConnected = chosen !== null && await withConfiguredSiwc(projectRoot, scopeId, options, 'inspect', app => app.list())
-      .then(rows => rows.some(row => row.connectionId === chosen && row.state === 'connected' && row.planUse), () => false);
+    const oauthConnected = chosen !== null && await withConfiguredSiwc(projectRoot, scopeId, options, 'inspect', app => app.inspect(chosen), {}, undefined, undefined, 'read')
+      .then(view => view.state === 'connected' && view.planUse, () => false);
     const localizeRefusal = oauthConnected ? (locale: Locale) => {
       if (failure.code === 'AUTHORITY_WITNESS_REQUIRED' && !enablingWriteStarted)
         return { ...failure.localize?.(locale), message: t('siwc.connectedActivationRefused', {}, locale) };

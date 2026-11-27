@@ -187,7 +187,7 @@ it('reads only affected siblings and preserves carry drift refusals', async () =
       endpoint: text => text, secretName: () => null, seed: async () => seed, principal: async () => principal,
       layers: async () => ({ global: {}, project, effective: project }), catalogHas: async () => true,
       register: async () => { throw new Error('unexpected registration'); },
-      authorizePlan: async () => {}, workerNeeded, workerActivate: async () => { writes.push('worker'); return true; },
+      authorizePlan: async () => {}, workerNeeded, workerActivate: async (_reference, _commandId, beforeWrite) => { await beforeWrite?.(); writes.push('worker'); return true; },
       adapter: () => ({ adapter: { id: 'adapter', version: 1, definition: {} }, protocol, tariff: 'unmetered' }),
       ...('current' in scenario ? { beforeWrite: async () => {
         if (writes.includes('provider_invocation_profiles')) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');

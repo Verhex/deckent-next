@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DeckentError, formatHumanError } from '#platform/index.js';
 const state = vi.hoisted(() => ({ records: [] as { connectionId: string; state: string; planUse: boolean }[], connect: vi.fn(),
-  models: vi.fn(), disconnect: vi.fn(), custody: vi.fn(), catalog: vi.fn(), oauth: null as OAuthConnectionApplication | null, owner: null as { issuer: string; subject: string } | null }));
+  models: vi.fn(), disconnect: vi.fn(), custody: vi.fn(), catalog: vi.fn(), oauth: null as OAuthConnectionApplication | null, owner: null as { issuer: string; subject: string } | null,
+  audits: [] as unknown[][], inspected: [] as string[] }));
 vi.mock('../../../src/composition/core/siwc/internal/connect.js', async original => {
   const real = await original<typeof import('../../../src/composition/core/siwc/internal/connect.js')>();
   return { ...real, configuredSiwcConnect: (...args: Parameters<typeof real.configuredSiwcConnect>) => {
@@ -11,9 +12,10 @@ vi.mock('../../../src/composition/core/siwc/internal/connect.js', async original
 });
 vi.mock('../../../src/composition/core/siwc/internal/connection.js', () => ({
   withConfiguredSiwc: async (_root: string, _scope: string, _options: unknown, _operation: string,
-    work: (app: unknown, caller: unknown) => Promise<unknown>) => {
-    state.custody(_operation);
-    return work({ list: async () => state.oauth ? state.oauth.list() : state.records, connect: state.connect, disconnect: state.disconnect },
+    work: (app: unknown, caller: unknown) => Promise<unknown>, ...rest: unknown[]) => {
+    state.custody(_operation); state.audits.push([_operation, rest[3] ?? 'write']);
+    return work({ list: async () => state.oauth ? state.oauth.list() : state.records, connect: state.connect, disconnect: state.disconnect,
+      inspect: async (id: string) => { state.inspected.push(id); return state.oauth!.inspect(id); } },
       { principal: { id: 'person', ...(state.owner ?? { issuer: 'host', subject: '1000' }), assurance: 'os-user', scopeIds: ['scope'] } });
   },
 }));
@@ -188,8 +190,17 @@ it('requires an explicit disconnected old account for new authorization and writ
     // A login to the single existing account decides on that account's own secret, not on the host secret it will not write.
     await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'oauth-host-secret-denied', grants: [...policy.grants,
       { id: 'deny-host-secret', effect: 'deny', scopes: ['scope'], principals: me, actions: ['set'], resource: { kind: 'secret', ids: [SIWC_PROTOCOL.hostSecretName] } }] }));
+    state.audits.length = 0;
     await expect.soft(executeConfiguredSiwc(f.project, { operation: 'login', scopeId: 'scope' }, { env: f.env }))
       .resolves.toMatchObject({ connectionId: connected.connectionId, state: 'connected' });
+    expect.soft(state.audits[0]).toEqual(['inspect', 'read']); // the pre-check observes with the read-only audit store
+    await oauth.disconnect(connected.connectionId).catch(() => undefined);
+    // An unreadable account list is not zero accounts: the witnessed OAuth owner decides on the real secret, as the base did.
+    const unreadable = vi.spyOn(oauth, 'list').mockRejectedValueOnce(new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL', 'unbound-store'));
+    try {
+      await expect.soft(executeConfiguredSiwc(f.project, { operation: 'login', scopeId: 'scope' }, { env: f.env }))
+        .resolves.toMatchObject({ connectionId: connected.connectionId, state: 'connected' });
+    } finally { unreadable.mockRestore(); }
     await oauth.disconnect(connected.connectionId).catch(() => undefined);
     await writeFile(policyPath, JSON.stringify(policy));
     for (const spy of [state.models, state.connect, state.catalog, storeSet, audit, browser]) spy.mockClear();
@@ -229,12 +240,18 @@ it('requires an explicit disconnected old account for new authorization and writ
     // A subscription that is no longer connected when a later step refuses is not reported as connected.
     host.witness = true;
     await oauth.disconnect((await oauth.list()).find(row => row.state === 'connected')!.connectionId);
+    let chosen = '';
     state.catalog.mockImplementationOnce(async () => {
-      await oauth.disconnect((await oauth.list()).find(row => row.state === 'connected')!.connectionId);
+      chosen = (await oauth.list()).find(row => row.state === 'connected')!.connectionId;
+      await oauth.disconnect(chosen);
       throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
     });
+    state.audits.length = 0; state.inspected.length = 0;
     const lapsed = await executeConfiguredSiwc(f.project, freshRequest, { env: f.env }).catch((error: unknown) => error);
     expect(lapsed).toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    // The stored state is read for the chosen account only, with the read-only audit store.
+    expect.soft(state.audits.at(-1)).toEqual(['inspect', 'read']);
+    expect.soft(state.inspected).toEqual([chosen]);
     if (!(lapsed instanceof DeckentError)) throw new Error('Expected a typed sign-in refusal');
     expect.soft(lapsed.params).not.toHaveProperty('connectionState');
     expect.soft(formatHumanError(lapsed, { locale: 'en' })).not.toContain('Your subscription is connected');

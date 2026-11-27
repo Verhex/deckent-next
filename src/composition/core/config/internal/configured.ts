@@ -2,7 +2,7 @@ import { composeCore } from '#composition/core/root/index.js';
 import { ConfigApplication, ConfigApplicationError, ConfigChangeApprovalBroker, assertAuthorityWitness, assertConfigPersonWitness, evaluateConfigWrite, type AuthorityWitness, type ConfigApprovalPort, type ConfigChangeSubject,
   type ConfigDocumentPort, type ConfigSnapshot } from '#engine/index.js';
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
-import { attestLocalInteractiveTerminal, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
+import { attestLocalInteractiveTerminal, configLayersShareFile, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
   resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
 import { isCodedError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -14,6 +14,8 @@ export async function resolveConfiguredConfigPrincipal(projectRoot: string, scop
 export function snapshotConfiguredConfig(projectRoot: string, options: ConfigLoadOptions = {}, layer: 'project' | 'global' = 'project') {
   composeCore(); return createConfigFileDocuments(projectRoot, options).snapshot(layer);
 }
+/** Whether the project and installation settings are one file (the config reader then reads it once). */
+export const configuredLayersShareFile = (projectRoot: string, options: ConfigLoadOptions = {}) => configLayersShareFile(projectRoot, options);
 /**
  * alpha.55.1: the person's terminal witness of a protected config write — the same as every person-only command (`memory`, `agents`, `models
  * roles set`): the MCP actor (or a runtime peer) is refused, any other caller needs `witness` (Core: this process's controlling terminal).

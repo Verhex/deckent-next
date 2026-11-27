@@ -201,6 +201,27 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       ledger.prepare("UPDATE model_catalog_receipts SET record=? WHERE command_id='off'").run(JSON.stringify(record));
     } finally { ledger.close(); }
     await expect.soft(applyModelCatalog(f.project, off, f.options)).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' });
+    // A parent receipt the writer returns as a concurrent replay is verified before any child is written.
+    const again = { ...command, commandId: 'on-again', expectedRevision: 2 }, openCatalog = witnessAdapters.openSqliteModelCatalogStore;
+    const raced = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        if (admission.command.commandId !== again.commandId) return write(admission);
+        await write(admission);
+        const db = new DatabaseSync(f.path);
+        try {
+          const record = JSON.parse(String(db.prepare("SELECT record FROM model_catalog_receipts WHERE command_id='on-again'").get()!['record']));
+          record.changes.push({ ...record.changes[0], modelId: null });
+          db.prepare("UPDATE model_catalog_receipts SET record=? WHERE command_id='on-again'").run(JSON.stringify(record));
+        } finally { db.close(); }
+        return write(admission);
+      };
+      return store;
+    });
+    try { await expect.soft(asPerson(() => applyModelCatalog(f.project, again, f.options))).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); }
+    finally { raced.mockRestore(); }
+    expect.soft(await inspectModelActivation(f.project, { schemaVersion: 1, scopeId: 's', reference: f.reference }, f.options))
+      .toMatchObject({ activation: { state: 'inactive' } });
 
     const partial = await declaredFixture();
     await asPerson(() => applyModelCatalog(partial.project, command, partial.options));
@@ -263,16 +284,30 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     const unreadable = JSON.parse(await readFile(policyPath, 'utf8'));
     await writeFile(policyPath, JSON.stringify({ ...unreadable, grants: [...unreadable.grants, { ...policy.grants[1], id: 'deny-direct-inspect', effect: 'deny',
       actions: ['inspect'], resource: { kind: 'model-activation', ids: [modelActivationTargetId(direct.reference)] } }] }));
-    await expect.soft(admit()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    // A child receipt whose row no longer holds its change refuses while planning, before any child write.
+    // Without inspect a caller learns nothing from the receipt: without the witness it gets the witness refusal, as for a command with none.
+    const fresh = (commandId: string, expectedRevision: number) => () => admitModelActivation(direct.project, { schemaVersion: 1, scopeId: 's', commandId,
+      action: 'activate', reference: direct.reference, expectedRevision, expectedBinding: binding.binding, catalogRevision: binding.catalogRevision }, direct.options);
+    await expect.soft(admit()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect.soft(fresh('direct-fresh', 2)()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect.soft(asPerson(admit)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    // A replay the writer returns (a concurrent twin of the same command) needs inspect too.
+    const openActivation = witnessAdapters.openSqliteModelActivationStore;
+    const twin = vi.spyOn(witnessAdapters, 'openSqliteModelActivationStore').mockImplementation(async (...args) => {
+      const store = await openActivation(...args), write = store.admit.bind(store);
+      store.admit = async admission => { await write(admission); return write(admission); };
+      return store;
+    });
+    try { await expect.soft(asPerson(fresh('direct-race', 2))).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { twin.mockRestore(); }
+    // A child receipt whose row no longer holds its change refuses before any write, after the witness.
     await writeFile(policyPath, JSON.stringify(policy));
-    const child = () => admitModelActivation(direct.project, { schemaVersion: 1, scopeId: 's', commandId: 'direct-child', action: 'activate',
-      reference: direct.reference, expectedRevision: 2, expectedBinding: binding.binding, catalogRevision: binding.catalogRevision }, direct.options);
+    const child = fresh('direct-child', 3);
     const remove = (where: string) => { const db = new DatabaseSync(direct.path); try { db.prepare(`DELETE FROM model_catalog_activations${where}`).run(); } finally { db.close(); } };
     remove(` WHERE model_id='${f.model.nativeId}'`);
-    await expect(asPerson(child)).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 3 } } });
+    await expect(child()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect(asPerson(child)).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 4 } } });
     remove('');
     const tampered = direct.tables();
+    await expect.soft(child()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     await expect.soft(asPerson(child)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
     expect.soft(direct.tables()).toEqual(tampered);
   });
@@ -299,6 +334,23 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await expect(asPerson(apply)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
     expect(f.tables()).toEqual(partial);
     await declare('original');
+    // A resumed command verifies its whole parent receipt (an extra change) before it writes the missing child.
+    const parent = (record?: string) => {
+      const ledger = new DatabaseSync(f.path);
+      try {
+        const kept = String(ledger.prepare("SELECT record FROM model_catalog_receipts WHERE command_id='interrupted'").get()!['record']);
+        const changed = JSON.parse(kept);
+        changed.changes[0].revision += 5;
+        ledger.prepare("UPDATE model_catalog_receipts SET record=? WHERE command_id='interrupted'").run(record ?? JSON.stringify(changed));
+        return kept;
+      } finally { ledger.close(); }
+    };
+    const kept = JSON.parse(parent()), extra = { ...kept, changes: [...kept.changes, { ...kept.changes[0], modelId: 'claude-sonnet-5-5' }] };
+    parent(JSON.stringify(extra));
+    const corrupt = f.tables();
+    await expect.soft(asPerson(apply)).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' });
+    expect.soft(f.tables()).toEqual(corrupt);
+    parent(JSON.stringify(kept));
     const completed = await asPerson(apply);
     expect(completed.replayed).toBe(true);
     const settled = f.tables();
@@ -320,16 +372,6 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     expect(f.tables()).toEqual(settled);
     await writeFile(policyPath, readable);
     // The sealed parent receipt is verified before the re-run reports the command complete.
-    const parent = (record?: string) => {
-      const ledger = new DatabaseSync(f.path);
-      try {
-        const kept = String(ledger.prepare("SELECT record FROM model_catalog_receipts WHERE command_id='interrupted'").get()!['record']);
-        const changed = JSON.parse(kept);
-        changed.changes[0].revision += 5;
-        ledger.prepare("UPDATE model_catalog_receipts SET record=? WHERE command_id='interrupted'").run(record ?? JSON.stringify(changed));
-        return kept;
-      } finally { ledger.close(); }
-    };
     const original = parent();
     await expect.soft(apply()).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' });
     parent(original);
