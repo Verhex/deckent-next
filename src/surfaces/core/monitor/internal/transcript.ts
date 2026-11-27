@@ -37,7 +37,7 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
   // WORKER-CURRENCY-2 report view: the pinned model row first, with the evidence limit stated.
   const model = data.model ? [renderWorkerModelLine(data.model, locale), t('cli.worker.model.notice', {}, locale)] : [];
   // Event excerpts, targets, models and the report are worker-written (untrusted): the whole view leaves through the terminal sanitizer.
-  if (!data.sealed || !data.summary) return terminalSafeText([...model, t('cli.task.transcript.none', {}, locale),
+  if (!data.sealed || !data.summary) return terminalSafeText([...model, 'logFailure' in data ? t('cli.task.transcript.logUnverified', {}, locale) : t('cli.task.transcript.none', {}, locale),
     ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), ...reportLines(data.finalReport, locale)] : [])].join('\n'));
   const s = data.summary, subscription = Boolean(data.model);
   const reported = data.finalReport?.status === 'reported' ? data.finalReport.report.changedFiles : [];

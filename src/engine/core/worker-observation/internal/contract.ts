@@ -71,12 +71,20 @@ export interface WorkerObservationReport {
 export class WorkerObservationError extends CodedError {
   constructor(override readonly code: 'WORKER_OBSERVATION_INVALID' | 'WORKER_OBSERVATION_UNAVAILABLE') { super(code); this.name = 'WorkerObservationError'; }
 }
+const stamp = () => persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /** Sealed worker-reported events of one attempt: the redacted event log artifact; the summary is always recomputed from it. */
-export const workerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
-  eventCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), sealedAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  /** 'partial' when the live worker.events projection failed to write some events; the sealed artifact is built from all received events. */
+const sealedWorkerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
+  eventCount: stamp(), sealedAt: stamp(),
+  /** 'partial' when the live worker.events projection is incomplete (a write failed or the sink never opened). */
   projection: z.enum(['complete', 'partial']).optional() }).readonly();
+/** N0 (owner D4): the close owner's record that this Attempt's log could not be verified. Not a sealed log (no events receipt): every sealed-log
+ * reader treats it as absent; the store keeps the first row of either shape, so it never replaces a sealed log nor is replaced by one. */
+const unverifiedWorkerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, sealedAt: stamp(), outcome: z.literal('unverified') }).readonly();
+export const workerEventLogSchema = z.union([sealedWorkerEventLogSchema, unverifiedWorkerEventLogSchema]);
 export type WorkerEventLog = z.infer<typeof workerEventLogSchema>;
+export type SealedWorkerEventLog = z.infer<typeof sealedWorkerEventLogSchema>;
+/** The sealed shape only: null for no row and for the failure row. */
+export const sealedWorkerEventLog = (log: WorkerEventLog | null): SealedWorkerEventLog | null => log && 'events' in log ? log : null;
 export interface WorkerEventLogStore {
   saveWorkerEventLog(record: WorkerEventLog): Promise<WorkerEventLog>;
   loadWorkerEventLog(scopeId: string, attemptId: string): Promise<WorkerEventLog | null>;

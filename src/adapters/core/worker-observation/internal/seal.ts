@@ -60,8 +60,13 @@ export async function closeAndSealAttemptWorkerEvents(identity: AttemptIdentity,
   if (!input.offered) return seal(await sink?.close());
   const deadline = performance.now() + input.deadlineMs;
   const drained = await Promise.resolve().then(() => sink?.close(input.deadlineMs)).then(closed => ({ closed }), () => null);
+  let sealing: WorkerEventSealing;
   try {
     if (!drained) throw new Error('unverified');
-    return await seal(drained.closed, { observation: input.held?.(), deadline });
-  } catch { return Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
+    sealing = await seal(drained.closed, { observation: input.held?.(), deadline });
+  } catch { sealing = Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
+  // Owner D4: the close owner records that this Attempt's log could not be verified. The store keeps the first row of either shape, so a sealed
+  // log is never replaced; a refused or failed write leaves the typed failure as the result.
+  if (sealing.status === 'failed') await store.saveWorkerEventLog({ schemaVersion: 1, identity, sealedAt: Date.now(), outcome: 'unverified' }).catch(() => undefined);
+  return sealing;
 }

@@ -11,7 +11,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunBoundDispatchStore, DispatchTerminal } from '#engine/core/dispatch/index.js';
 import { assertRunExecution, projectRunView, RunStoreError, runLifecycleWriteSchema, type RunLifecycleStore, type RunReceipt, type RunStore } from '#engine/core/runs/index.js';
-import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
+import { projectAttemptWorkerModels, readSealedWorkerEvents, sealedWorkerEventLog, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
 import { TaskEvidenceError, verifyDispatchEvaluationEvidence, readBeuserDispatchEvidence } from './evidence.js';
 import { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './transition.js';
@@ -147,7 +147,7 @@ export class TaskEvaluationApplication {
       const sealed = await readSealedWorkerEvents(this.store, this.artifacts, identity);
       const signal = model ? detectWorkerQuota(sealed, retained.stdout) : null;
       if (signal && model) {
-        const log = await this.store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
+        const log = sealedWorkerEventLog(await this.store.loadWorkerEventLog(identity.scopeId, identity.attemptId));
         const evidenceDigest = signal.source === 'exit-text' ? dispatch.output.digest : log?.events.digest ?? dispatch.output.digest;
         const evidenceDigests = [dispatch.output.digest, ...(log ? [log.events.digest] : []), ...(task.workInput && dispatch.patch ? [dispatch.patch.digest] : [])];
         const evaluation = taskEvaluationSchema.parse(bindTaskAcceptance(run, { ...manifestEvaluation, model, evidenceDigests,

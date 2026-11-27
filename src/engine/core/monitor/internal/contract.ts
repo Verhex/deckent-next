@@ -118,7 +118,7 @@ export interface MonitorWorkerHuman {
   readonly evaluation: MonitorTask['evaluation']['verdict'];
   /** Acceptance reason from the same evaluation owner; patch counts never decide acceptance. */
   readonly evaluationReason?: MonitorTask['evaluation']['reason'];
-  readonly transcript: { readonly state: 'sealed' | 'missing' | 'denied' | 'unavailable'; readonly excerpt: readonly MonitorEventExcerpt[]; readonly truncated: boolean };
+  readonly transcript: { readonly state: 'sealed' | 'missing' | 'denied' | 'unavailable' | 'unverified'; readonly excerpt: readonly MonitorEventExcerpt[]; readonly truncated: boolean };
   readonly patch: { readonly state: 'recorded' | 'missing' | 'denied' | 'unavailable'; readonly files: readonly string[]; readonly fileCount: number | null; readonly truncated: boolean; readonly baseCommit: string | null };
   /** A missing token event is unknown, even if the summary's running accumulator is zero. */
   readonly tokenUsageRecorded?: boolean;

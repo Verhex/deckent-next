@@ -894,6 +894,12 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
   expect(deniedText).toContain('politika izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
+  // N0 R4 (owner D4): a failure row reads as this Attempt's not-verified log, in both languages, instead of "no transcript record".
+  for (const [locale, text] of [['tr', 'Bu denemenin işçi günlüğü doğrulanamadı.'], ['en', "This Attempt's worker log could not be verified."]] as const) {
+    const unverified = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'unverified' as const, excerpt: [], truncated: false } } }] }] };
+    const unverifiedText = surface.renderMonitorText(unverified, { locale, width: 80, ascii: true, verbose: true });
+    expect(unverifiedText).toContain(text); expect(unverifiedText).not.toContain(locale === 'tr' ? 'Transcript kaydı yok' : 'No transcript record');
+  }
   { // N3-8: a proven zero-file patch says so and attributes the not-run count to the worker report; missing, denied and unavailable patches do not.
     const sample = finishedHumanSnapshot(humanWorkerSnapshot()), install = sample.installs[0]!, worker = install.workers[0]!;
     const base = worker.human!, finalReport = base.finalReport!;

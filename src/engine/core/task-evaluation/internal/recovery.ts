@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { TaskEvaluationError, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type TaskEvaluation, type TaskEvaluationModel } from '#domain/index.js';
 import type { RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
-import type { WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
+import { sealedWorkerEventLog, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 /** One ordered digest of criterion state observations; absence of observations keeps legacy bytes unchanged. */
 export function criterionEvidenceDigest(criteria: TaskEvaluation['criteria']): string | undefined {
   const references = criteria.filter(row => row.effectEvidence).map(row => ({ criterionId: row.criterionId, effectEvidence: row.effectEvidence }));
@@ -10,8 +10,8 @@ export function criterionEvidenceDigest(criteria: TaskEvaluation['criteria']): s
 /** Capture exact immutable custody; each output/seal digest can open one return, never a retry loop. */
 export async function evaluationRecovery(store: Pick<WorkerEventLogStore, 'loadWorkerEventLog'>, run: RunSnapshot,
   identity: AttemptIdentity, dispatch: Awaited<ReturnType<RunBoundDispatchStore['loadBoundDispatch']>>, model: TaskEvaluationModel | undefined, criteria: TaskEvaluation['criteria'] = []) {
-  const log = await store.loadWorkerEventLog(identity.scopeId, identity.attemptId);
-  if (log && !sameAttemptIdentity(log.identity, identity)) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
+  const stored = await store.loadWorkerEventLog(identity.scopeId, identity.attemptId), log = sealedWorkerEventLog(stored);
+  if (stored && !sameAttemptIdentity(stored.identity, identity)) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
   const patch = run.graph.tasks.find(task => task.id === identity.taskId)?.workInput ? dispatch?.patch : undefined;
   const criterionDigest = criterionEvidenceDigest(criteria);
   const evidenceDigests = [dispatch?.output?.digest, log?.events.digest, patch?.digest, criterionDigest].filter((value): value is string => value !== undefined);

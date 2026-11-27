@@ -57,6 +57,8 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   /** N0 R2: one in-flight release; a concurrent custody sweep or patch preparation joins it, a rejection lets the next call retry as before. */
   private releasing: Promise<'absent'> | undefined;
   offeredObservation(): boolean { return this.offered; }
+  /** Owner D5: whether this supervisor spawned its worker; an invocation that never did publishes no Attempt log. */
+  startedWorker(): boolean { return this.started; }
   private result: SandboxResult | undefined;
   private running: Promise<SandboxResult> | undefined;
   private driver: NativeCliWorkerDriver | undefined;

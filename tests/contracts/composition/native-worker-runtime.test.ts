@@ -221,10 +221,27 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
           driver: vi.fn(async input => ({ tools: input.tools, run: () => { for (const row of fault === 'unheld' ? [reported[1], reported[0]] : reported) input.onEvents?.([row]); return once(); },
             close: async () => undefined })) } } });
         expect(lost.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null } });
-        expect(await store.loadWorkerEventLog('s', fault)).toBeNull(); expect(settled).toHaveBeenCalledOnce(); expect(once).toHaveBeenCalledOnce(); expect(closes).toHaveBeenCalledOnce();
+        // N0 R4 (owner D4): the unverifiable record leaves the close owner's failure row, never a sealed log.
+        const failureRow = await store.loadWorkerEventLog('s', fault);
+        expect(failureRow).toMatchObject({ identity: faulted, outcome: 'unverified' }); expect(failureRow).not.toHaveProperty('events');
+        expect(settled).toHaveBeenCalledOnce(); expect(once).toHaveBeenCalledOnce(); expect(closes).toHaveBeenCalledOnce();
         await store.cancelRun({ commandId: `cancel-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: (await store.loadRun('s', fault))!.revision });
         await store.settleCancelledAttempt(faulted);
       }
+      // N0 R4 (owner D5): an invocation that never started the worker (login capacity busy) seals neither a verdict-only nor a failure row,
+      // so the real run's own seal can still be written for that Attempt.
+      const waited = { ...identity, runId: 'waited', attemptId: 'waited' };
+      await store.createRun({ commandId: 'create-waited', actor, identity: { scopeId: 's', runId: 'waited', layoutRevision: identity.layoutRevision }, graph,
+        execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+        policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-waited', actor, scopeId: 's', runId: 'waited', expectedRevision: 0, now: 0, identities: [waited] });
+      const busy = await executeConfiguredTask(project, waited, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } });
+      expect(busy.execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
+      expect(await store.loadWorkerEventLog('s', 'waited')).toBeNull();
+      const real = { ...(await store.loadWorkerEventLog('s', 'attempt'))!, identity: waited } as Parameters<typeof store.saveWorkerEventLog>[0];
+      expect(await store.saveWorkerEventLog(real)).toEqual(real);
+      await store.cancelRun({ commandId: 'cancel-waited', actor, scopeId: 's', runId: 'waited', expectedRevision: (await store.loadRun('s', 'waited'))!.revision });
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
