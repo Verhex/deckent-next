@@ -1,4 +1,4 @@
-import { DeckentError as ProviderDiagnostic, headlessDiagnostic } from '#platform/index.js';
+import { DeckentError as ProviderDiagnostic, headlessDiagnostic, isRecord, isSandboxViewDiagnostic } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,7 @@ import { nativeAgentExecutionSchema, type NativeAgentReadinessReason } from '#ca
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse } from './contract.js';
 import { nativeAgentFlagSetDigest, headlessRequiredFlags } from './env.js';
-import { headlessPreflight, type HeadlessPreflight } from './preflight.js';
+import { closedPreflightRefusal, headlessPreflight, type HeadlessPreflight } from './preflight.js';
 import type { HeadlessIsolation } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
 import { headlessExecutableRefusal, resolveHeadlessExecutable, type HeadlessExecutable } from './executable.js';
@@ -40,6 +40,18 @@ const targetPath = (profile: ModelInvocationProfile, stateDir: string) => join(s
 const publications = new Map<string, Promise<void>>();
 
 async function readObservationRecord(path: string, ownerUid: number, bound: number) {
+  const text = await readOwnedRecord(path, ownerUid, bound);
+  try { return text === null ? null : recordSchema.safeParse(JSON.parse(text)).data ?? null; } catch { return null; }
+}
+/** Display only: a closed preflight record's sandbox argument-count refusal in the writer's form, read with the observation's file checks. */
+export async function readClosedPreflightRefusal(profile: ModelInvocationProfile) {
+  const { entry, definition } = agentTarget(profile);
+  const text = await readOwnedRecord(join(definition.stateDir, 'preflight.json'), definition.ownerUid, entry.headless.limits.preflightOutputBytes);
+  let record: unknown; try { record = text === null ? null : JSON.parse(text); } catch { return null; }
+  const refusal = isRecord(record) && record['state'] === 'closed' ? closedPreflightRefusal(record) : null;
+  return refusal && isSandboxViewDiagnostic(refusal) ? refusal : null;
+}
+async function readOwnedRecord(path: string, ownerUid: number, bound: number) {
   if (process.getuid?.() !== ownerUid || constants.O_NOFOLLOW === undefined) return null;
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return null;
@@ -50,9 +62,7 @@ async function readObservationRecord(path: string, ownerUid: number, bound: numb
     const info = await file.stat();
     if (!info.isFile() || info.nlink !== 1 || info.uid !== ownerUid || (info.mode & 0o077) !== 0 || info.size > bound) return null;
     const bytes = Buffer.alloc(bound + 1), read = await file.read(bytes, 0, bytes.length, 0);
-    if (read.bytesRead > bound) return null;
-    try { return recordSchema.safeParse(JSON.parse(bytes.subarray(0, read.bytesRead).toString('utf8'))).data ?? null; }
-    catch { return null; }
+    return read.bytesRead > bound ? null : bytes.subarray(0, read.bytesRead).toString('utf8');
   } finally { await file.close(); }
 }
 

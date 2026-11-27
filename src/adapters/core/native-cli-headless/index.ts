@@ -22,7 +22,7 @@ export { headlessPreflight } from './internal/preflight.js';
 export type { HeadlessPreflight } from './internal/preflight.js';
 export { runHeadlessIsolated, headlessIsolationSeal } from './internal/realm.js';
 export type { HeadlessSpawn, HeadlessIsolation } from './internal/realm.js';
-export { preflightNativeAgent, readNativeAgentObservation } from './internal/agent-observation.js';
+export { preflightNativeAgent, readNativeAgentObservation, readClosedPreflightRefusal } from './internal/agent-observation.js';
 export { createNativeAgentDriver } from './internal/agent-driver.js';
 export { nativeAgentLaunch, nativeAgentCorrelationKind, nativeBridgeLimits } from './internal/launch.js';
 export { initGuard as nativeHeadlessInitRefusal } from './internal/port.js';

@@ -1,12 +1,12 @@
 import { compareToolchainVersions, prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { DeckentError, headlessDiagnostic, isRecord, readHeadlessDiagnosticRecord } from '#platform/index.js';
+import { DeckentError, headlessDiagnostic, isRecord } from '#platform/index.js';
 import { headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { searchExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
-import { headlessExecutableRevision, isIdentifiedOpenPreflight, headlessPreflight, verifiedCliVersion } from './preflight.js';
+import { closedPreflightRefusal, headlessExecutableRevision, isIdentifiedOpenPreflight, headlessPreflight, verifiedCliVersion } from './preflight.js';
 import { headlessExecutableRefusal, headlessSelectionRefusal, executableLookupReason, resolveHeadlessExecutable } from './executable.js';
 import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
@@ -135,7 +135,7 @@ export async function readHeadlessLogins<T extends object = Record<never, never>
     const mismatch = prior?.state !== 'open' ? null : !identified ? preflightRecordDiagnostic()
       : family ? await currentPreflightRefusal(prior, family, definition) : headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
     const record = mismatch ? null : prior;
-    const closed = record?.state === 'closed' ? readHeadlessDiagnosticRecord(record.refusal, record.check) : null;
+    const closed = record?.state === 'closed' ? closedPreflightRefusal(record) : null;
     const diagnostic = observed.diagnostic ?? mismatch ?? closed;
     const egress = await readEgress(definition.stateDir).then(value => value === undefined ? { egress: null, egressUnreadable: true } : { egress: value },
       () => ({ egress: null, egressUnreadable: true }));

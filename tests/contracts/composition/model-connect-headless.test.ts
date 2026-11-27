@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { DRIVER } from '../support/pty-steps.js';
 import * as adapters from '#adapters/index.js';
-import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +16,9 @@ import { connectModel } from '../../../src/index.js';
 import * as platform from '#platform/index.js';
 import * as catalog from '#composition/core/provider-catalog/index.js';
 import * as configComposition from '#composition/core/config/index.js';
-import { providerPanelPort, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
+import { providerPanelPort, subscriptionReadinessPort, subscriptionReadinessText } from '#surfaces/core/terminal-provider/index.js';
+import { inspectConfiguredNativeChat } from '#composition/core/terminal-chat/index.js';
+import { localNativeAgentReadinessSchema } from '#capabilities/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
@@ -546,6 +548,35 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const [insideWorker, [insideLogin]] = await custody();
     expect(insideWorker ?? {}).not.toHaveProperty('governedUse');
     expect(insideLogin).not.toHaveProperty('governedUse');
+    // /provider: a closed preflight's re-read sandbox refusal explains the row; the readiness state is the same object without it, and an
+    // altered or missing record, or any other unregistered diagnostic, keeps today's reading.
+    const profile = parseModelInvocationProfile(await h.profile()), preflight = join(String(profile.adapter.definition['stateDir']), 'preflight.json');
+    const original = await readFile(preflight, 'utf8');
+    const panel = subscriptionReadinessPort(h.f.project, 'scope', { inspectSubscriptionReadiness: inspectConfiguredNativeChat }, { env: h.f.env });
+    const sandbox = 'The launcher needs 9007 arguments and can accept at most 9000. Argument counts: HOME masks 0, project/state and host protection 8994, ancestor pins 0, final read-only remounts 2, command tail 7, other setup 4. Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry';
+    const shown = async (check: unknown) => {
+      await writeFile(preflight, JSON.stringify({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check }));
+      return panel.inspect('chat', profile.reference);
+    };
+    const [refused, altered, missing] = [await shown(sandbox), await shown(sandbox.replace('9007', '9008')), await shown(null)];
+    // The record is read with the observation reader's checks: a readable-by-others file or a link to the same record shows nothing.
+    expect(await shown(sandbox)).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
+    await chmod(preflight, 0o644); const shared = await panel.inspect('chat', profile.reference); await chmod(preflight, 0o600);
+    await rename(preflight, `${preflight}.target`); await symlink(`${preflight}.target`, preflight);
+    const linked = await panel.inspect('chat', profile.reference);
+    await rm(preflight); await rm(`${preflight}.target`);
+    const deleted = await panel.inspect('chat', profile.reference);
+    await writeFile(preflight, original, { mode: 0o600 });
+    const plain = await panel.inspect('chat', profile.reference);
+    expect(refused).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
+    expect(plain).not.toHaveProperty('diagnostic');
+    // Every field except the one explanatory diagnostic is the plain reading's, and the plain reading has no other field.
+    expect(Object.fromEntries(Object.entries(refused).filter(([key]) => key !== 'diagnostic'))).toStrictEqual(plain);
+    for (const other of [altered, missing, shared, linked, deleted]) expect(other).toStrictEqual(plain);
+    expect(subscriptionReadinessText(refused, 'en', 'claude-cli-subscription')).toContain(sandbox);
+    expect(subscriptionReadinessText(refused, 'tr', 'claude-cli-subscription')).toContain('Başlatıcı için 9007 argüman gerekiyor, sınır 9000.');
+    expect(localNativeAgentReadinessSchema.safeParse({ state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE',
+      diagnostic: platform.ErrorRegistry.createError('SANDBOX_VIEW_TOO_LARGE', { message: sandbox, params: { check: sandbox } }) }).success).toBe(false);
   });
   it('s3c models login: an MCP actor or a caller without the terminal witness is refused before anything is created or started; the person signs the own dir in', async () => {
     const h = await harness(null), owned = join(await realpath(h.f.env.HOME), '.deckent', 'headless', 'logins');

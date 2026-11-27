@@ -643,7 +643,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     } catch { outcome = { status: 'failed', state: native?.failedSettlement ? 'unknown' : signal.aborted || native?.interrupted ? 'cancelled' : 'unavailable' }; }
     // After draining proposals, preserve interruption, planning, uncertain effects and verified provider quota stops.
     if (toolLimitReached && native && !signal.aborted && !native.interrupted && !native.planningRefused && !ports.planning?.active) {
-      if (native.failedSettlement || coordinator.effectsUnknown) outcome = { status: 'failed', state: 'unknown' };
+      // An unknown outcome already set above keeps its settlement diagnosis.
+      if (native.failedSettlement || coordinator.effectsUnknown) outcome = outcome.status === 'failed' && outcome.state === 'unknown' ? outcome : { status: 'failed', state: 'unknown' };
       else if (outcome.status !== 'failed' || outcome.reason !== 'provider-quota') return finish('error', t('agent.turn.outcome.toolCallLimit', {}, input.language));
     }
     if (outcome.status === 'responded') {

@@ -849,17 +849,21 @@ it('native settlement failure is retained as unknown, fences new effects and can
 });
 
 it('retains a native guard reason when tool settlement also becomes unknown', async () => {
-  const p = ports([]);
-  p.value.execute = async () => ({ status: 'ok', text: 'effect happened' });
-  p.value.settled = async () => { throw new Error('store unavailable'); };
-  p.value.invokeAgent = async ({ session }, _delta, signal) => {
-    await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal);
-    return { status: 'failed', state: 'The native CLI reported a tool surface that differs from the one offered.' };
-  };
-  const result = await nativeRun(p.value);
-  expect(result).toMatchObject({ finish: 'error', toolCalls: 1 });
-  expect(result.note).toContain('unknown');
-  expect(result.note).toContain('The native CLI reported a tool surface that differs from the one offered.');
+  // Also when the round reached the tool-call limit: the unknown settlement keeps its diagnosis.
+  for (const limit of [false, true]) {
+    const p = ports([]);
+    p.value.execute = async () => ({ status: 'ok', text: 'effect happened' });
+    p.value.settled = async () => { throw new Error('store unavailable'); };
+    p.value.invokeAgent = async ({ session, markToolLimitReached }, _delta, signal) => {
+      await session.propose(call('n1', 'run_shell', { command: 'effect' }), nativeCorrelation('n1'), signal);
+      if (limit) markToolLimitReached?.();
+      return { status: 'failed', state: 'The native CLI reported a tool surface that differs from the one offered.' };
+    };
+    const result = await nativeRun(p.value);
+    expect(result).toMatchObject({ finish: 'error', toolCalls: 1 });
+    expect(result.note).toContain('unknown');
+    expect(result.note).toContain('The native CLI reported a tool surface that differs from the one offered.');
+  }
 });
 
 it('retains an observed native guard when an outer signal, service stop or delivery failure ends the turn', async () => {

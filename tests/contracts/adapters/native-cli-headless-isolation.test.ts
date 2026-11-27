@@ -156,7 +156,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(record).toMatchObject({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE',
       check: (refusal as Error).message });
     expect(record.check).not.toMatch(/\/tmp\/|fixture-\d/u);
-    expect(await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId)).toMatchObject([{ state: 'closed', isolation: null }]);
+    const logins = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId), [reread] = logins;
+    expect(logins).toHaveLength(1);
+    expect(reread).toMatchObject({ state: 'closed', isolation: null, diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
+    expect(reread?.diagnostic?.localize?.('en').message).toBe((refusal as Error).message);
+    expect(reread?.diagnostic?.localize?.('tr').message).toMatch(/^Başlatıcı için 90\d\d argüman gerekiyor, sınır 9000\..*ayrı bir CLI yapılandırma dizini/u);
     expect(await c.log()).toEqual([]);
   });
   it('sees only its login dir and run dir: the rest of HOME is absent, other login entries are masked, writes outside the bind fail', async () => {
@@ -360,6 +364,33 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       expect.soft(doctor(history, 'en')).toContain(en);
       expect.soft(doctor(history, 'tr')).toContain(tr);
     }
+    // The sandbox's argument-count refusal keeps its writer's sentence: an exact catalog match is shown with its counts in the reader's
+    // language; an altered sentence stays unverified and nothing of it is shown.
+    const sandboxEn = 'The launcher needs 9007 arguments and can accept at most 9000. Argument counts: HOME masks 0, project/state and host protection 8994, ancestor pins 0, final read-only remounts 2, command tail 7, other setup 4. Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry';
+    const sandboxTr = 'Başlatıcı için 9007 argüman gerekiyor, sınır 9000. Argüman sayıları: HOME maskeleri 0, proje/durum ve ana sistem korumaları 8994, üst dizin sabitlemeleri 0, son salt okunur bağlamalar 2, komut eki 7, diğer kurulum 4. Daha az girdi içeren ayrı bir CLI yapılandırma dizini kullanıp yeniden bağlanın ve tekrar deneyin';
+    for (const stored of [sandboxEn, sandboxTr]) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check: stored }));
+      const sandbox = await logins();
+      expect.soft(sandbox[0]?.diagnostic).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE', params: { count: 9007, bound: 9000, protective: 8994 } });
+      expect.soft(doctor(sandbox, 'en')).toContain(sandboxEn);
+      expect.soft(doctor(sandbox, 'tr')).toContain(sandboxTr);
+    }
+    // Only the writer's own form counts: a v1 record from the isolated launcher over its fixed bound, with no HOME masks or pins and its two
+    // final remounts. An inconsistent sum, a count within the bound, another bound, the general shell advice, HOME masks, or a missing or
+    // future record version each keep the generic reading.
+    const general = sandboxEn.replace('Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry',
+      'Use a project or HOME that needs fewer protective mounts, or shorten the command argument list where possible, then retry');
+    for (const [schemaVersion, check] of [[1, sandboxEn.replace('needs 9007', 'needs 9008')], [1, sandboxEn.replace('needs 9007', 'needs 8998').replace('protection 8994', 'protection 8985')],
+      [1, sandboxEn.replace('at most 9000', 'at most 9001')], [1, general], [1, sandboxEn.replace('HOME masks 0', 'HOME masks 6').replace('protection 8994', 'protection 8988')],
+      [undefined, sandboxEn], [2, sandboxEn]] as const) {
+      await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ schemaVersion, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check }));
+      const notWritten = await logins();
+      expect.soft(notWritten[0]?.diagnostic, check).not.toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE' });
+      expect.soft(doctor(notWritten, 'en'), check).toContain('The provider-program diagnostic could not be verified.');
+      expect.soft(doctor(notWritten, 'en'), check).not.toContain('The launcher needs');
+    }
+    await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check: null }));
+    expect.soft(doctor(await logins(), 'tr')).toContain('Sağlayıcı programına ilişkin tanı doğrulanamadı.');
     await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ state: 'open', version: '9.0.0' }));
     expect.soft((await logins())[0]?.state).toBe('unknown');
     expect.soft(doctor(await logins(), 'en')).toContain('The previous subscription CLI check record could not be interpreted.');

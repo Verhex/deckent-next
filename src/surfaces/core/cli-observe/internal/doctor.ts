@@ -1,6 +1,6 @@
 import { lstat } from 'node:fs/promises';
 import {
-  ErrorRegistry, isHeadlessDiagnosticIdentifier, loadConfig, productResourcePath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
+  DeckentError, ErrorRegistry, isHeadlessDiagnosticIdentifier, isSandboxViewDiagnostic, loadConfig, productResourcePath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation, getConfigMetadata,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
@@ -187,8 +187,14 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push(ownerBaseline.missing ? { group: 'security', id: 'owner-baseline', state: 'warning',
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
     : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
+  // Optional, additive: a Brain login's re-read sandbox argument-count refusal (code, safe counts and the row's own sentence); absent otherwise.
+  // The connection is a registry kind id; the profile id (any identity string, possibly path-shaped) is not carried.
+  const headlessLoginRefusals = (facts.headlessLogins ?? []).flatMap(login => login.diagnostic instanceof DeckentError && isSandboxViewDiagnostic(login.diagnostic)
+    ? [{ ...(login.connection ? { connection: login.connection } : {}), code: login.diagnostic.code,
+      params: login.diagnostic.params, message: login.diagnostic.localize?.(locale).message ?? login.diagnostic.message }] : []);
   return { data: { ...data, status: doctorNeedsAttention(checks) ? 'degraded' as const : 'ready' as const,
-    summary: { ...doctorCounts(checks), checks: doctorReadinessChecks(facts, checks, locale) }, providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null }, checks, config, options };
+    summary: { ...doctorCounts(checks), checks: doctorReadinessChecks(facts, checks, locale) }, providerSpending: facts.providerSpending ?? null, codingRepository: facts.codingRepository ?? null, workerKinds: facts.workerKinds ?? null,
+    ...(headlessLoginRefusals.length ? { headlessLoginRefusals } : {}) }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:
