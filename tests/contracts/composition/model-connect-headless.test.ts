@@ -20,6 +20,7 @@ import { providerPanelPort, subscriptionReadinessPort, subscriptionReadinessText
 import { inspectConfiguredNativeChat } from '#composition/core/terminal-chat/index.js';
 import { localNativeAgentReadinessSchema } from '#capabilities/index.js';
 import { producedSandboxRefusal, UNPRODUCIBLE_SANDBOX_REFUSAL } from '../../fixtures/native-headless/sandbox-refusal.js';
+import { argumentCountRefusal } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, inspectConfiguredModelReadiness } from '#composition/core/model-connect/index.js';
 import { configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
@@ -560,7 +561,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
       return panel.inspect('chat', profile.reference);
     };
     // The earlier example's sum and text hold, but no isolated view yields its "other setup 4": the panel keeps its previous explanation.
-    const [refused, altered, missing] = [await shown(sandbox), await shown(UNPRODUCIBLE_SANDBOX_REFUSAL), await shown(null)];
+    // A producer-made refusal with a hidden launcher package path is shown too; one "other setup" argument more than the producer's cannot be built.
+    expect(await shown(producedSandboxRefusal('en', 1_500, true))).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
+    const made = platform.readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandbox).params as Record<string, number>;
+    const oneMore = argumentCountRefusal(made['count']! + 1, { home: 0, protective: made['protective']!, pins: 0, remounts: 2, tail: made['tail']! }, { DECKENT_LANGUAGE: 'en' }, true);
+    const [refused, altered, missing, unbuildable] = [await shown(sandbox), await shown(UNPRODUCIBLE_SANDBOX_REFUSAL), await shown(null), await shown(oneMore)];
     // The record is read with the observation reader's checks: a readable-by-others file or a link to the same record shows nothing.
     expect(await shown(sandbox)).toMatchObject({ diagnostic: { code: 'SANDBOX_VIEW_TOO_LARGE' } });
     await chmod(preflight, 0o644); const shared = await panel.inspect('chat', profile.reference); await chmod(preflight, 0o600);
@@ -574,7 +579,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(plain).not.toHaveProperty('diagnostic');
     // Every field except the one explanatory diagnostic is the plain reading's, and the plain reading has no other field.
     expect(Object.fromEntries(Object.entries(refused).filter(([key]) => key !== 'diagnostic'))).toStrictEqual(plain);
-    for (const other of [altered, missing, shared, linked, deleted]) expect(other).toStrictEqual(plain);
+    for (const other of [altered, missing, unbuildable, shared, linked, deleted]) expect(other).toStrictEqual(plain);
     expect(subscriptionReadinessText(refused, 'en', 'claude-cli-subscription')).toContain(sandbox);
     expect(subscriptionReadinessText(refused, 'tr', 'claude-cli-subscription')).toContain(producedSandboxRefusal('tr'));
     expect(localNativeAgentReadinessSchema.safeParse({ state: 'unknown', reason: 'NATIVE_AGENT_CLI_UNAVAILABLE',
