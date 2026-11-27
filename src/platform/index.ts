@@ -56,7 +56,7 @@ export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SecretResolverContext, /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, loadConfigTerminalLaunch, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, agentEnvironmentFloor, loadConfigTerminalLaunch, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';

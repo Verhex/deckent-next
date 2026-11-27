@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 import { toInputJsonSchema } from '#platform/core/validate/index.js';
-import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, resolveGlobalConfigPaths, validateConfig, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
+import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, loadConfig, resolveGlobalConfigPaths, validateConfig, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { projectInputSchema } from '#engine/core/config/index.js';
 import {
@@ -83,12 +83,26 @@ describe('host locale (composition, resolved once per call)', () => {
     expect(AGENT_ENVIRONMENT).toEqual(getConfigFieldDefault('cli').agentEnvironment);
     expect(AGENT_ENVIRONMENT).toEqual(expect.arrayContaining(['CLAUDECODE', 'AI_AGENT', 'CURSOR_AGENT']));
     const configured = await fixture('{"cli":{"agentEnvironment":["MY_AGENT"]}}');
-    expect(await hostAgentEnvironment(configured.dir, configured.env)).toEqual(['MY_AGENT']);
+    const markers = getConfigFieldDefault('cli').agentEnvironment;
+    expect(await hostAgentEnvironment(configured.dir, configured.env)).toEqual([...markers, 'MY_AGENT']);
     expect(await hostAgentEnvironment((await fixture('{}')).dir, configured.env)).toBeUndefined();
+    // K3: the installation's list (else the default) is a floor a project file only adds to; both readers (host, composed config) agree.
+    const emptied = await fixture('{"cli":{"agentEnvironment":[]}}'), projectFile = join(emptied.dir, '.deckent', 'config.json');
+    const host = await hostAgentEnvironment(emptied.dir, emptied.env), global = resolveGlobalConfigPaths(emptied.env).platformPath;
+    expect(detectCliMode({ env: { CLAUDECODE: '1' }, stdin: tty, stdout: tty, ...(host ? { agentEnvironment: host } : {}) })).toEqual({ mode: 'plain', reason: 'agent' });
+    for (const [installed, project, expected] of [[null, [], markers], [['AI_AGENT'], [], ['AI_AGENT']], [[], ['MY_AGENT'], ['MY_AGENT']]] as const) {
+      if (installed) await writeFile(global, JSON.stringify({ cli: { agentEnvironment: installed } }));
+      await writeFile(projectFile, JSON.stringify({ cli: { agentEnvironment: project } })); clearConfigCache();
+      expect(await hostAgentEnvironment(emptied.dir, emptied.env)).toEqual(expected);
+      expect((await loadConfig(emptied.dir, { env: emptied.env, heal: false })).cli.agentEnvironment).toEqual(expected);
+      expect((await loadConfig(emptied.dir, { env: emptied.env, heal: false, globalOnly: true })).cli.agentEnvironment).toEqual(installed ?? markers);
+    }
+    await writeFile(global, JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT'] } })); await writeFile(projectFile, '{broken');
+    expect(await hostAgentEnvironment(emptied.dir, emptied.env)).toEqual(['AI_AGENT']); // an unreadable project file keeps the installation floor
     // Exact upper-case names only (no prefix or pattern); an invalid or unreadable config never blocks: the kit default decides.
     expect(() => validateConfig({ cli: { agentEnvironment: ['CODEX_*'] } })).toThrow();
     expect(() => validateConfig({ cli: { agentEnvironment: ['lower'] } })).toThrow();
-    expect(await hostAgentEnvironment((await fixture('{"cli":{"agentEnvironment":["CODEX_*"]}}')).dir, configured.env)).toBeUndefined();
+    expect(await hostAgentEnvironment((await fixture('{"cli":{"agentEnvironment":["CODEX_*"]}}')).dir, configured.env)).toEqual(markers); // adds nothing
     expect(await hostAgentEnvironment((await fixture('{broken')).dir, configured.env)).toBeUndefined();
   });
 });

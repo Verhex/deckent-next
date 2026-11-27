@@ -17,7 +17,8 @@ export async function hostLocale(argv: readonly string[], root: string, env: Nod
 /** The long-running commands whose SIGINT/SIGTERM cancel the call (besides `runtime serve`); a cli-grouped-help test pins each name to the catalog. */
 export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.freeze([['beuser', 'walk'], ['do'], ['workers', 'watch'], ['decide', 'ask'],
   ['task', 'integration-deliver'], ['task', 'integration-adopt'], ['task', 'integration-rollback']]);
-/** INIT-D7: the installation's `cli.agentEnvironment`, read like the language (presentation only); unreadable or invalid → the kit default. */
+/** INIT-D7 + K3: the effective `cli.agentEnvironment` (installation floor plus project names), read like the language (presentation only); a bad
+ * project file keeps the floor, an unreadable or invalid installation file → the kit default. */
 export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);
 /** U7-1: the project this call belongs to, walked up from the launch folder; `init --here` keeps the exact folder (a nested installation).
  * Git is asked (lazily, read-only) only when an installation above the folder lies in a work tree. A refusal is printed in the caller's language. */

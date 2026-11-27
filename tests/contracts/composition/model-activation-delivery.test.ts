@@ -12,7 +12,7 @@ import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { modelActivationTargetId } from '#engine/index.js';
-import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, getConfigFieldDefault, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 // SESSION-RESULT-LIMIT-2026-09-28: `models activate` refuses a reference whose already-declared invocation profile
 // could never deliver a worst-case result on any surface — before this fix it silently activated (proven below on
@@ -118,14 +118,17 @@ it('admits activation when no profile is declared yet for this reference (the co
 });
 
 it('admits only relevant concurrent changes during a witnessed activation', async () => {
-  for (const change of ['marker-order', 'harmless-marker', 'effective-marker', 'unrelated-profile', 'selected-profile', 'binding', 'target-policy'] as const) {
+  for (const change of ['marker-order', 'harmless-marker', 'effective-marker', 'emptied-floor', 'unrelated-profile', 'selected-profile', 'binding', 'target-policy'] as const) {
     const f = await fixture(null);
     const path = join(f.project, '.deckent/config.json'), policyPath = join(f.data, 'policy.json');
-    const authored = { ...JSON.parse(await readFile(path, 'utf8')), cli: { agentEnvironment: ['FIXTURE_AGENT_A', 'FIXTURE_AGENT_B'] } };
+    // K3 'emptied-floor': the project file empties the list while the caller carries a default marker; the floor still marks it.
+    const listed = change === 'emptied-floor' ? [] : ['FIXTURE_AGENT_A', 'FIXTURE_AGENT_B'];
+    const authored = { ...JSON.parse(await readFile(path, 'utf8')), cli: { agentEnvironment: listed } };
     const write = (value: unknown) => writeFile(path, JSON.stringify(value), { mode: 0o600 });
     await write(authored);
     const policy = JSON.parse(await readFile(policyPath, 'utf8'));
-    const activate = () => admit(f.project, f.activate, { env: f.env });
+    const env = change === 'emptied-floor' ? { ...f.env, [getConfigFieldDefault('cli').agentEnvironment[0]!]: '1' } : f.env;
+    const activate = () => admit(f.project, f.activate, { env });
     if (change === 'effective-marker') vi.stubEnv('FIXTURE_AGENT_C', '1');
     const result = await asPerson(activate, async () => {
       if (change === 'marker-order' || change === 'harmless-marker' || change === 'effective-marker') {
@@ -137,12 +140,12 @@ it('admits only relevant concurrent changes during a witnessed activation', asyn
         await write({ ...authored, provider_invocation_profiles: { schemaVersion: 1, profiles: [added] } });
       } else if (change === 'binding') {
         await write({ ...authored, provider_catalog: { ...catalog, revision: 'changed' } });
-      } else {
+      } else if (change === 'target-policy') {
         await writeFile(policyPath, JSON.stringify({ ...policy, grants: policy.grants.map((grant: object) => ({ ...grant, id: 'changed' })) }));
       }
       return true;
     }).catch(error => error).finally(() => vi.unstubAllEnvs());
-    if (change === 'effective-marker') expect.soft(result, change).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    if (change === 'effective-marker' || change === 'emptied-floor') expect.soft(result, change).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     else if (change === 'selected-profile' || change === 'binding' || change === 'target-policy')
       expect.soft(result, change).toMatchObject({ code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' });
     else expect.soft(result, change).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });

@@ -93,13 +93,19 @@ export async function loadConfigLanguage(projectRoot = process.cwd(), options: P
   const language = Object.hasOwn(project, 'language') ? project['language'] : global?.['language'];
   return language === undefined ? undefined : CORE_SCHEMA.shape.language.parse(language);
 }
-/** INIT-D7, presentation only like the language: the configured `cli.agentEnvironment` (project over installation), through the same layer
- * readers without healing, secrets or locks; absent stays absent so the caller uses the registry default. An invalid value throws. */
+const agentList = (layer: unknown) => isRecord(layer) && isRecord(layer['cli']) && Object.hasOwn(layer['cli'], 'agentEnvironment') ? layer['cli']['agentEnvironment'] : undefined;
+const agentNames = (layer: unknown) => { const value = agentList(layer); return value === undefined ? undefined : CORE_SCHEMA.shape.cli.safeParse({ agentEnvironment: value }).data?.agentEnvironment; };
+/** K3 (owner 2026-11-27): the one effective `cli.agentEnvironment` of every reader. The installation layer's list when it is set (an empty one
+ * too), else the packaged default, is a floor; a project layer only adds names (floor first, de-duplicated). An invalid layer list adds nothing
+ * (an invalid installation list leaves the default floor), so the floor never depends on what a project file can break. */
+export function agentEnvironmentFloor(global: unknown, project: unknown): string[] {
+  return [...new Set([...agentNames(global) ?? CORE_SCHEMA.shape.cli.parse({}).agentEnvironment, ...agentNames(project) ?? []])];
+}
+/** INIT-D7, presentation only like the language: the host's `cli.agentEnvironment` through the same layer readers (no healing, secrets or locks)
+ * and the composed config's floor; an unreadable project file adds nothing. Absent in both layers stays absent so the caller uses the default. */
 export async function loadConfigAgentEnvironment(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}): Promise<readonly string[] | undefined> {
-  const { global, project } = await presentationLayers(projectRoot, options, 'cli');
-  const pick = (layer: JsonRecord | null) => isRecord(layer?.['cli']) && Object.hasOwn(layer['cli'], 'agentEnvironment') ? layer['cli']['agentEnvironment'] : undefined;
-  const value = pick(project) ?? pick(global);
-  return value === undefined ? undefined : CORE_SCHEMA.shape.cli.parse({ agentEnvironment: value }).agentEnvironment;
+  const { global, project } = await presentationLayers(projectRoot, options, 'cli').catch(async () => ({ global: await loadGlobalConfig(options), project: null }));
+  return agentList(global) === undefined && agentList(project) === undefined ? undefined : agentEnvironmentFloor(global, project);
 }
 /** alpha.60 C, presentation only like the language: the `terminal` section (project keys over installation keys), the configured language and
  * the data root, for the launch shell's decision to draw before the host loads. No registration, secrets, healing or locks: never execution
@@ -178,7 +184,9 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     throw error;
   }
   await checkHold(productLayout.root);
-  const value: ResolvedConfig = { ...secrets.config, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
+  // K3: after validation, so each layer keeps its own bound and a long union never refuses a load that worked before.
+  const cli = { ...secrets.config.cli, agentEnvironment: agentEnvironmentFloor(global, normalizedProject) };
+  const value: ResolvedConfig = { ...secrets.config, cli, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
   bindConfigKnownSecrets(value, secrets.knownSecrets);
   freezeResolved(value);
   for (const section of configSections().values()) section.options.validateEffective?.(value, env);

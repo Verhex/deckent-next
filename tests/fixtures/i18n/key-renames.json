@@ -993,7 +993,8 @@
       "terminal.slash.scope": {"before": "Kapsamı, projeyi, modu ve yüzey erişimini göster", "after": "Kapsamı, projeyi, modu ve hangi kullanım yollarına erişebildiğinizi gösterin"},
       "terminal.slash.tasks": {"before": "Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)", "after": "Arka plan çalışmaları: işçiler ve çalışmalar tek canlı pencerede (salt okunur)"},
       "cli.help.summary.monitor": {"before": "Kurulumları ve işleri izle", "after": "Kurulumları ve çalışmaları izle"},
-      "cli.help.summary.operation": {"before": "Tipli işlemleri yürüt veya incele", "after": "Girdi ve sonuç türleri denetlenen işlemleri yürüt veya incele"}
+      "cli.help.summary.operation": {"before": "Tipli işlemleri yürüt veya incele", "after": "Girdi ve sonuç türleri denetlenen işlemleri yürüt veya incele"},
+      "config.field.cli": {"before": "Sınırlı görev grafı JSON girdisi dahil komut satırı girdi sınırları ve bir AI ajan çağıranı işaretleyen ortam değişkenleri (ona soru sorulmaz)", "after": "Sınırlı görev grafı JSON girdisi dahil komut satırı girdi sınırları ve bir AI ajan çağıranı işaretleyen ortam değişkenleri (ona soru sorulmaz). Proje dosyası işaret adı ekleyebilir ama kurulumun listesini (kurulum liste vermezse yerleşik listeyi) çıkaramaz"}
     }
   }
 }

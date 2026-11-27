@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -46,7 +46,10 @@ describe.skipIf(process.platform !== 'linux')('config set of a protected switch 
     const env: Record<string, string> = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color' };
     const init = await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp-demo'], { cwd: root, env: { ...env, TERM: 'dumb' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
     expect(init.stderr).toBe('');
-    const configPath = join(root, '.deckent', 'config.json'), before = await readFile(configPath, 'utf8');
+    // K3: the project file empties the marker list; the installation floor (here the default) still marks the AI terminal.
+    const configPath = join(root, '.deckent', 'config.json');
+    await writeFile(configPath, JSON.stringify({ ...JSON.parse(await readFile(configPath, 'utf8')), cli: { agentEnvironment: [] } }));
+    const before = await readFile(configPath, 'utf8');
     const onTerminal = async (extra: Record<string, string>) => JSON.parse((await execute(python, ['-c', PTY,
       JSON.stringify([process.execPath, cli, 'config', 'set', 'memoryAutomation.extraction.mode', '"shadow"', '--scope', 'erp-demo']), root, JSON.stringify({ ...env, ...extra })],
     { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 })).stdout) as { status: number | string; output: string };

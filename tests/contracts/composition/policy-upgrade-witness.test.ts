@@ -71,6 +71,9 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
 it.skipIf(process.platform !== 'linux')('119-F1a: AI-marked person apply AND rollback refuse before all writes; markerless terminal succeeds', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-upgrade-marker-')); roots.push(root);
   await applyPolicyTemplateInstallation(root, 'installation', { env: homeEnv(join(root, 'home')) });
+  // K3: the project file empties the marker list; the installation floor (here the default) still marks the caller.
+  const projectConfig = join(root, '.deckent/config.json');
+  await writeFile(projectConfig, JSON.stringify({ ...JSON.parse(await readFile(projectConfig, 'utf8')), cli: { agentEnvironment: [] } }));
   const marker = getConfigFieldDefault('cli').agentEnvironment[0]!, marked = { env: { ...homeEnv(join(root, 'home')), [marker]: '1' } };
   vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
   const preview = await upgradePolicyTemplateInstallation(root, 'installation', false, undefined, marked);

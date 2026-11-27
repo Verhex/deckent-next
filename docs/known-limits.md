@@ -313,8 +313,11 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   opens or closes the modes for the installation owner; AI tools, pipes and CI cannot. After an apply the policy has a new `a-…`
   revision, so `deckent doctor` no longer names it `first-run-template-v13` and a later `init policy --upgrade` takes the add-only path.
   The terminal witness is the controlling terminal: a same-UID process can manufacture a pseudo-terminal (the SEC-1 limit; an
-  Enterprise composition can pass a stronger witness); an AI agent's shell is refused by the agent marker and the CLI card gate, not by
-  the witness alone. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
+  Enterprise composition can pass a stronger witness); an AI agent's shell that carries a name of the effective marker list
+  (`cli.agentEnvironment`) is refused by the agent marker and the CLI card gate, not by the witness alone. Both read the same list: the
+  installation's list (the built-in list when the installation sets none), to which a project file can add names but from which it
+  cannot remove them. The installation setting itself can still be shortened, and a process of your account can unset its own marker
+  variable or imitate a terminal (the SEC-1 limit), so the marker is never a security boundary. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
   the grant.
 
 - **A worker sees the project's instruction snapshot only after a person trusts it.** A Run snapshots one project instruction file

@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { attachmentFailure } from '#engine/index.js';
 import { readableProjectAttachmentSchema, isNewerAttachmentVersion } from '#domain/index.js';
 import { observeBootstrapState, bootstrapPublishesConfig, loadConfig, validateConfig, versionedConfig, deepMerge, resolveProductLayout,
-  productResourcePath, digestText, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
+  productResourcePath, digestText, agentEnvironmentFloor, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 /** The installer's retained first-session material is the only recovery read override. No files are healed or published here. */
 export async function readAttachmentBootstrapConfig(projectRoot: string, options: ConfigLoadOptions): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), observed = await observeBootstrapState(root);
@@ -24,7 +24,8 @@ export async function readAttachmentBootstrapConfig(projectRoot: string, options
   const global = await loadConfig(root, { ...options, heal: false, globalOnly: true, force: true });
   const { projectRoot: ignoredRoot, productLayout: ignoredLayout, secretPaths: ignoredPaths, ...values } = global;
   void ignoredRoot; void ignoredLayout; void ignoredPaths;
-  const config = validateConfig(deepMerge(values, authored)).config;
+  const merged = validateConfig(deepMerge(values, authored)).config; // K3: the installation floor plus the authored project names
+  const config = { ...merged, cli: { ...merged.cli, agentEnvironment: agentEnvironmentFloor(values, authored) } };
   const layout = resolveProductLayout({ projectRoot: root, ...(config.layout.root ? { root: config.layout.root } : {}), resources: config.layout.resources });
   if (cfg.path !== productResourcePath(layout, 'config') || ref.path !== productResourcePath(layout, 'projectAttachment')
     || dirname(String(cfg.path)) === global.productLayout.root) return attachmentFailure('PROJECT_ATTACHMENT_INVALID');
