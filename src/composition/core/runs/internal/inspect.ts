@@ -41,6 +41,9 @@ async function readConfiguredRun(projectRoot: string, input: RunQuery, options: 
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const { answerSource, selectAnswerQuestion, ...inspected } = await app.inspectWithModels(query, undefined, answerTaskId);
+    // A control read under a repaired selection reads nothing more: the card and the picker row use the Run itself, from this context alone,
+    // never a set-aside delivery, result view, queue or progression that would resolve the project again.
+    if (expected !== undefined) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, controlBinding: runControlBinding() }) };
     if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, ...(forControl === 'absent-too' ? { controlBinding: runControlBinding() } : {}) }) };
     // BeUser M-33: the tasks of this Run a person set aside (the same records /deliver and the monitor read).
     const dismissed = (limit: number) => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options)

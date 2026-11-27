@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
+import * as adapterIndex from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { InstallationIdentityError, RunDecisionApprovalBroker, RunInspectionApplication, type RunQuery } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
@@ -127,9 +128,28 @@ it.skipIf(process.platform === 'win32')('refuses a CLI picker card when the proj
   expect(await atTerminal()).toBe(1);
   expect(output).toContain(english); expect(inspected).not.toHaveBeenCalled(); expect(ask).not.toHaveBeenCalled();
   inspected.mockRestore();
+  // Once a Run read has passed its binding check, a project that points elsewhere sends no read to the other installation: the picker row is
+  // read from that first context alone and the card's re-read refuses before any store opens.
+  await f.configure('selected');
+  const opened: string[] = [], openReader = adapterIndex.openSqliteInventoryReader, openAudit = adapterIndex.openReadOnlyAuditStore;
+  vi.spyOn(adapterIndex, 'openSqliteInventoryReader').mockImplementation(async (path, ...rest) => { opened.push(path); return openReader(path, ...rest); });
+  vi.spyOn(adapterIndex, 'openReadOnlyAuditStore').mockImplementation(async (path, ...rest) => { opened.push(path); return openAudit(path, ...rest); });
+  const perCall = vi.spyOn(adapterIndex, 'inventoryReadsPerCall'), models = RunInspectionApplication.prototype.inspectWithModels;
+  let stores = -1;
+  const first = vi.spyOn(RunInspectionApplication.prototype, 'inspectWithModels').mockImplementationOnce(async function (this: RunInspectionApplication, ...args) {
+    await f.configure('attached'); stores = perCall.mock.calls.length; return models.apply(this, args);
+  });
+  relocatedOnce(); ask.mockReset(); ask.mockImplementationOnce(async () => 'run-fixture').mockImplementationOnce(async () => 'yes');
+  expect(await atTerminal()).toBe(1);
+  expect(output).toContain(english); expect(first).toHaveBeenCalledOnce(); expect(ask).toHaveBeenCalledOnce();
+  expect(opened.filter(path => path.startsWith(join(f.root, 'attached')))).toEqual([]); expect(perCall).toHaveBeenCalledTimes(stores);
+  first.mockRestore(); ask.mockReset();
   // A repaired picker without the bound reader stops with the binding change instead of listing through the ordinary reader.
   await f.configure('selected'); f.errors.splice(0);
   await expect(f.cli(argv.slice(0, 4), true, 'en', { loadInstallationIdentity: async () => ({}), preflightRunControl: async () => 'repaired:here', inspectRunControl: undefined })).resolves.toBe(1);
+  expect(f.errors.splice(0).join('')).toContain(english); expect(ask).not.toHaveBeenCalled();
+  // Nor without the bound id-list reader: it stops the same way instead of saying that no Run can take the control.
+  await expect(f.cli(argv.slice(0, 4), true, 'en', { loadInstallationIdentity: async () => ({}), preflightRunControl: async () => 'repaired:here', inspectSurfaceRunIds: undefined })).resolves.toBe(1);
   expect(f.errors.splice(0).join('')).toContain(english); expect(ask).not.toHaveBeenCalled();
   // After the repair the picker reads the configuration without healing it: a configuration that broke meanwhile is left as it is.
   const configPath = join(f.root, '.deckent/config.json'), names = await readdir(join(f.root, '.deckent')), broken = '{ "layout": ';

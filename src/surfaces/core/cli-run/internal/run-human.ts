@@ -102,14 +102,14 @@ export async function readScopeRuns(context: RunCommandContext, scopeId: string,
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, repaired = context.repairedRunControlBinding, bound = context.inspectRunControl;
   // After an entry repair the list and each Run are read only under the repaired binding (owner decision on the picker), each Run checked
-  // before it is read; without the bound reader the picker stops rather than list through the ordinary one.
-  if (repaired !== undefined && !bound) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
+  // before it is read; without both bound readers (ids and Runs) the picker stops rather than list through the ordinary ones.
+  if (repaired !== undefined && (!bound || !context.inspectSurfaceRunIds)) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
   const inspect: NonNullable<RunCommandContext['inspectRun']> = repaired === undefined ? context.inspectRun : async (at, query, read, answerTaskId) => {
     const data = await bound!(at, query, read, answerTaskId, repaired);
     if (data.controlBinding !== repaired) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     return data;
   };
-  const ids = repaired === undefined ? await listRunIds(context, root, scopeId, options) : await context.inspectSurfaceRunIds?.(root, scopeId, options, repaired) ?? [];
+  const ids = repaired === undefined ? await listRunIds(context, root, scopeId, options) : await context.inspectSurfaceRunIds!(root, scopeId, options, repaired);
   const views = await mapBounded(ids, HOST_LIMITS_REGISTRY.observationConcurrency, async id => {
     const data = await inspect(root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId: id }), options, answerTaskId);
     observed?.(data);
