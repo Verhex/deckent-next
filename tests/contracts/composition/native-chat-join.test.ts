@@ -324,12 +324,10 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
     const opened = await cleanupDriver(input);
     return { ...opened, native: (...args) => ({ ...opened.native(...args), send: async () => { throw fault; } }) };
   };
-  for (const [cause, next, nextTr, key] of [
-    ['The agent turn’s temporary directory could not be removed.',
-      'Check any tool results above and resolve the cleanup problem before sending another request.',
-      'Yukarıdaki araç sonuçları varsa inceleyin ve yeni bir istek göndermeden önce temizlik sorununu giderin.', 'headless.chat.runCleanupNext'],
-    ['The sign-in lock guard remained held at the end of the wait.',
-      'Wait for the other operation to finish, then try again.', 'Diğer işlem bitince yeniden deneyin.', 'headless.chat.loginBusyNext'],
+  // G3 (owner 2026-11-27): the cleanup and sign-in lock closures reach the terminal as the closing note alone, with no chat next step.
+  for (const [cause, next] of [
+    ['The agent turn’s temporary directory could not be removed.', 'Check any tool results above and resolve the cleanup problem before sending another request.'],
+    ['The sign-in lock guard remained held at the end of the wait.', 'Wait for the other operation to finish, then try again.'],
   ] as const) {
     cleanup.events.length = 0;
     const directory = join(cleanup.f.data, 'terminal-test-sessions');
@@ -356,16 +354,12 @@ it.each(['admission', 'send'] as const)('renders a path-free typed refusal at th
       expect.soft(await readFile(join(directory, `${sessionId}.json`), 'utf8')).toBe(JSON.stringify(expected));
       expect.soft(await sessions.load('s', sessionId)).toEqual(expected.messages);
       await view.instance.waitUntilRenderFlush();
-      expect.soft(view.stdout.text).toContain(next);
+      expect.soft({ note: view.stdout.text.includes(note), step: view.stdout.text.includes(next) }).toEqual({ note: true, step: false });
       let drawn = '';
-      const line = await streamLineTurn((async function* () { yield* deltas; })(), {
-        out: { write: text => { drawn += text; } }, err: { write: () => {} }, cancel: () => {}, project: text => text,
-        toolLine: () => '', approvalLine: () => '',
-      });
-      expect.soft(drawn).toContain(note);
-      expect.soft(drawn).toContain(next);
+      const line = await streamLineTurn((async function* () { yield* deltas; })(), { out: { write: text => { drawn += text; } }, err: { write: () => {} },
+        cancel: () => {}, project: text => text, toolLine: () => '', approvalLine: () => '' });
+      expect.soft(drawn).toBe(`${note}\n`);
       expect.soft(line).toMatchObject({ finish: 'error', answer: note, appended: [] });
-      expect.soft(t(key, {}, 'tr')).toBe(nextTr);
     } finally { view.instance.unmount(); }
     fault = headlessDiagnostic('HEADLESS_LOGIN_BUSY', { holder: 'guard' });
   }
