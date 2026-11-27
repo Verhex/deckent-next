@@ -688,17 +688,20 @@ it('tells the model its per-answer output limit and how to write large content i
       model: { nativeId: 'n', providerId: 'p', modelId: 'm', capabilities: [] }, sessionState: false, surfaces: [], rules: [],
       tools: names.map(([name]) => ({ name, effects: [{ cell: 'read' as const, effect: refused.includes(name) ? 'refused' as const : 'asks' as const }] })) } }).split('\n');
   const section = (lines: string[]) => lines.slice(lines.indexOf('Changes in this session:'), lines.indexOf('Working style:') - 1);
-  const cli = '- You run inside a CLI whose own built-in tools are off or refused here. A read-only sandbox it may describe applies to those tools only, not to'
-    + ' this session: do not tell the person the session is read-only.';
+  const cli = '- You run inside a CLI whose own built-in tools are off or refused here. Do not infer what the deckent tools may do from the CLI\'s own sandbox'
+    + ' (it may call itself read-only), and do not tell the person the session is read-only.';
+  // v13 only for the text that carries the section; every text without it keeps the v12 header.
+  expect(routed(changeTools)[0]).toBe('[Deckent runtime instructions v13]'); expect(render(changeTools, 8192)[0]).toBe('[Deckent runtime instructions v12]');
   expect(section(routed(changeTools))).toEqual(['Changes in this session:', cli,
-    '- Changes go only through the deckent tools offered here: edit_file, write_file for a direct file change; propose_work for work a worker should do;'
-      + ' run_shell for commands. A built-in tool of the CLI stops the turn.',
-    '- When the person asks for a change, make the fitting call instead of answering that you cannot. Policy and the permission mode decide each call:'
-      + ' it may run at once, open a card the person decides, or be refused, and its result says which. Make the call; do not predict its outcome.']);
-  expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell']))[2]).toBe('- Changes go only through the deckent tools offered here: propose_work for work a worker'
-    + ' should do. A built-in tool of the CLI stops the turn.');
-  const none = ['Changes in this session:', cli, '- No deckent tool that changes the project is available to you in this turn: when the person asks for a change, say that'
-    + ' you cannot make it here and point them to /do <request>, which plans and runs it as a job.'];
+    '- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change; propose_work for work'
+      + ' a worker should do; run_shell for commands. A built-in tool of the CLI stops the turn.',
+    '- When the person asks to change project files or run a command, make the fitting call instead of answering that you cannot. Policy and the permission'
+      + ' mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report what'
+      + ' the tool result confirms.']);
+  expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell']))[2]).toBe('- Project files and commands change only through the deckent tools offered'
+    + ' here: propose_work for work a worker should do. A built-in tool of the CLI stops the turn.');
+  const none = ['Changes in this session:', cli, '- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks'
+    + ' for such a change, say that you cannot make it here and point them to /do <request>, which plans and runs it as a job.'];
   expect(section(routed([['read_file', 'read'], ['scratch_write', 'edit']]))).toEqual(none);
   expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell', 'propose_work']))).toEqual(none);
   const plainLines = render(changeTools, 8192);

@@ -156,7 +156,8 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
   expect(h.state.prompt).toContain('- Permission mode: standart (the person also asks for every edit)');
   // CHAT-ROUTE (W23): the native agent CLI's own tools are off, so the prompt names the offered deckent change tools the policy leaves open
   // (no plan port here: no propose_work; this policy refuses run_shell in every cell, so it is not named).
-  expect(h.state.prompt).toContain('- Changes go only through the deckent tools offered here: edit_file, write_file for a direct file change. A built-in tool of the CLI stops the turn.');
+  expect(h.state.prompt).toContain('- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change.'
+    + ' A built-in tool of the CLI stops the turn.'); expect(h.state.prompt).toContain('[Deckent runtime instructions v13]');
   // This fixture is the Claude CLI family; the Codex CLI family meets the same registry condition, so its turns take the same line.
   expect(nativeCliAgent('codex-jsonl')?.agent.transport.kind).toBe('codex-mcp');
   const decided = await h.decide(event, 'allow');
