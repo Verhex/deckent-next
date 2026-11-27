@@ -593,7 +593,7 @@
   "doctor.serviceConfigStale": "deckent servisi: yeniden başlatma gerekli, yeniden başlatma gerektiren bir yapılandırma değişikliğinden önce başladı (deckent runtime restart)",
   "doctor.imageRefresh": "İşçi imajı: {status}",
   "doctor.imageRefresh.updating": "arka planda güncelleniyor; işler mevcut imajı kullanıyor",
-  "doctor.imageRefresh.failed": "yenileme başarısız ({reason}); önceki imaj kullanılıyor",
+  "doctor.imageRefresh.failed": "yenileme başarısız ({reason}); iş türleri sabitledikleri imajı korur",
   "doctor.sandboxSelfTest.ok": "yalıtım öz-testi: tamam (bir komut bu projenin gerçek yalıtım alanı görünümünde çalıştı; başlangıçtan çıkışa {ms} ms, görünüm hazırlığı hariç)",
   "doctor.sandboxSelfTest.failed": "yalıtım öz-testi BAŞARISIZ: {detail}. Bu projede onay gerektirmeyen kabuk komutları test geçene kadar çalışamaz (onaylı komutlar etkilenmez); host kabuğuna düşülmez.",
   "doctor.imageRefresh.current": "güncel ({version})",

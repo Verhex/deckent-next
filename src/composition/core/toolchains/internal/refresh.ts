@@ -4,8 +4,10 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { CodedError, loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
-import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
+import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, reviseRegistryForConnections, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { executionRegistrySchema } from '#domain/index.js';
+import { isNativeCodingTemplate, nativeCliWorkerBindingSchema, readHeadlessSealedVersion, type NativeCliWorkerBinding } from '#adapters/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
@@ -35,11 +37,21 @@ async function writeState(home: string, state: ToolchainRefreshState) { await mk
 export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies {
   /** Test seam: runs after the registry was read and the revision derived, immediately before the compare-and-set write. */
   readonly beforeRegistryWrite?: (attempt: number) => void | Promise<void>;
+  /** R8: the CLI version a bound connection's own last check proved (verified record, no spawn); null keeps the record. */
+  readonly observed?: (worker: NativeCliWorkerBinding) => Promise<string | null>;
+}
+/** R8 (owner 114): each kind-pointed connected template whose own connection proved another CLI version than it records; a read failure observes nothing. */
+async function connectionVersions(registry: unknown, observe: (worker: NativeCliWorkerBinding) => Promise<string | null>) {
+  const parsed = executionRegistrySchema.safeParse(registry), kinds = parsed.success ? parsed.data.kinds : [];
+  const bound = parsed.data?.profiles.filter(row => isNativeCodingTemplate(row) && kinds.some(kind => kind.profile.id === row.id && kind.profile.version === row.version)) ?? [];
+  return (await Promise.all(bound.map(async row => { const worker = nativeCliWorkerBindingSchema.safeParse(row.parameters['worker']);
+    const version = worker.success ? await observe(worker.data).catch(() => null) : null, recorded = (row.parameters['invocation'] as { cliVersion?: unknown } | undefined)?.cliVersion;
+    return version !== null && version !== recorded ? [{ profile: { id: row.id, version: row.version }, cliVersion: version }] : []; }))).flat();
 }
 /**
  * One refresh: policy gate, durable `updating` marker, the existing update path with apply (plan, daemon preflight, build, receipt, proposal),
- * then the proposal applied as a governed `admission.registry` config write (new profile versions only; old versions and every admitted Run
- * stay as they were). Every attempt leaves an audit record under `toolchains/refreshes`; a failure keeps the previous registry and image.
+ * then the proposal and each connected kind's re-recorded CLI version (R8) applied as one governed `admission.registry` config write (new profile
+ * versions only; old versions and every admitted Run stay as they were). Every attempt leaves an audit record under `toolchains/refreshes`; a failure keeps the previous registry and image.
  */
 export function refreshConfiguredToolchains(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions = {},
   dependencies: ToolchainRefreshDependencies = {}, observer: ToolchainRefreshObserver = {}): Promise<ToolchainRefreshOutcome> {
@@ -76,7 +88,9 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
       await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: plan.next?.imageVersion ?? null, imageId: null, staleProviders: plan.staleProviders, appliedProfiles: 0, reason: null });
       await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
     } });
-    if (result.decision === 'built' && result.proposal) {
+    const proposal = result.decision === 'built' ? result.proposal : null;
+    const observed = await connectionVersions(config.admission?.registry, dependencies.observed ?? (worker => readHeadlessSealedVersion(worker.definition, worker.protocolFamily)));
+    if (proposal || observed.length) {
       if (dependencies.signal?.aborted) throw new CodedError('REFRESH_STOPPED');
       // Compare-and-set on one consistent read: the project document and its digest come from the same bytes, the revision is derived from that
       // document alone (never from the merged view), and the write carries the digest as `expect` while a guard under the write lock refuses it
@@ -87,7 +101,8 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         const read = await snapshotConfiguredConfig(projectRoot, options, 'project');
         const hold = registryLayerHold(read);
         if (hold) throw new CodedError(hold);
-        const revision = reviseRegistryForProposal((read.document as { admission: { registry: unknown } }).admission.registry, result.proposal);
+        const current = (read.document as { admission: { registry: unknown } }).admission.registry, connections = reviseRegistryForConnections(current, observed);
+        const image = proposal ? reviseRegistryForProposal(connections?.registry ?? current, proposal) : null, revision = image ?? connections;
         if (!revision) break;
         const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
         if (!scopeId) throw new CodedError('TERMINAL_SCOPE_REQUIRED');
@@ -96,7 +111,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         try {
           configWrite = await createConfiguredConfigApplication(projectRoot, options, layerGuard).set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project', principal, scopeId,
             commandId: `toolchain-refresh-${startedAt}-${attempt}`, expect: read.digest });
-          applied = revision.applied.length; break;
+          applied = (connections?.applied.length ?? 0) + (image?.applied.length ?? 0); break;
         } catch (error) { if (failureCode(error) !== 'CONFIG_CONCURRENT_REVISION_HOLD' || attempt >= REGISTRY_WRITE_ATTEMPTS) throw error; }
       }
     }

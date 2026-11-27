@@ -25,7 +25,7 @@ import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { closedPreflightRefusal } from '#adapters/core/native-cli-headless/index.js';
 import { argumentCountRefusal } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { producedSandboxRefusal, UNPRODUCIBLE_SANDBOX_REFUSAL } from '../../fixtures/native-headless/sandbox-refusal.js';
-import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, doctorReadinessChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, doctorReadinessChecks, firstJobKind, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
 // the schema-2 --json report with additive health counts, and the interactive fix offer only on a person's terminal through an existing operation.
@@ -103,12 +103,15 @@ describe('doctor rows (pure)', () => {
   });
   it('groups rows under Kurulum / Güvenlik / Çalışma / Araçlar with word markers, a summary first and one next step per warning', () => {
     for (const locale of ['en', 'tr'] as const) {
-      const unavailable = doctorChecks(report, facts({ workerKinds: [{ kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'prepared-code', reason: 'image-unverified', rebind: false }] }), locale).filter(row => row.id === 'work.kind');
-      expect(unavailable).toHaveLength(2);
+      const unavailable = doctorChecks(report, facts({ workerKinds: [{ kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'prepared-code', reason: 'image-unverified', rebind: false }, // owner 114 below: the true reason wins
+        { kind: 'probe-a', reason: 'image-missing', rebind: false, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }, { kind: 'docker-t', reason: null, rebind: true, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }] }), locale).filter(row => row.id === 'work.kind');
+      expect(unavailable).toHaveLength(4);
       expect(unavailable[0]).toMatchObject({ group: 'work', state: 'warning' });
       expect(unavailable[0]!.text).toContain(locale === 'en' ? 'worker image is missing' : 'işçi imajı eksik');
       expect(unavailable[0]!.next).toContain('deckent coding template --kind missing-code --connection <id>');
       expect(unavailable[1]!.next).toContain('deckent coding --json'); expect(unavailable[1]!.next).not.toContain('--connection');
+      expect(unavailable.slice(2).map(row => [row.state, row.next])).toEqual([['warning', undefined], ['warning', expect.stringContaining('template --kind docker-t --connection <id>')]]); // a prepared profile: no step
+      expect(unavailable[2]!.text).toBe(locale === 'en' ? "Task kind probe-a cannot run: it runs its CLI in Docker, and deckent does not use this CLI's login in Docker." : "probe-a iş türü çalıştırılamaz: CLI'sini Docker içinde çalıştırır ve deckent bu CLI'nin oturumunu Docker'da kullanmaz.");
     }
     expect(renderDoctorReport(report, [], 'tr')).toContain("deckent'in işçileri ve yalıtım alanı bu anahtarları okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir.");
     expect(renderDoctorReport(report, [], 'en')).toContain("deckent's workers and sandbox cannot read them; other programs running as your user can.");
@@ -118,7 +121,7 @@ describe('doctor rows (pure)', () => {
     expect(budget).toMatchObject({ state: 'warning', next: 'deckent models create-budget --usd <amount> --scope live' });
     const text = renderDoctorChecks(checks, 'tr');
     const lines = text.split('\n');
-    expect(lines[0]).toMatch(/^Durum: hazır · \d+ uyarı · \d+ sınanmadı$/);
+    expect(lines[0]).toMatch(/^Durum: ilgi bekliyor · \d+ uyarı · \d+ sınanmadı$/); // owner 114: the report's failed image refresh is never "ready"
     expect(lines.indexOf('Kurulum')).toBeLessThan(lines.indexOf('Güvenlik'));
     expect(lines.indexOf('Güvenlik')).toBeLessThan(lines.indexOf('Çalışma'));
     expect(lines.indexOf('Çalışma')).toBeLessThan(lines.indexOf('Araçlar'));
@@ -137,7 +140,8 @@ describe('doctor rows (pure)', () => {
     // Internals stay out of the default view (CLI review §doctor findings 1, 2): no socket path, backend id, realm marker or "(-)".
     for (const internal of ['/tmp/dk-', 'core.secret-store', 'terminal.shell.realm', '[deckent]', '(-)', 'ready', 'degraded']) expect(text).not.toContain(internal);
     const en = renderDoctorChecks(doctorChecks(report, facts(), 'en'), 'en');
-    expect(en.split('\n')[0]).toMatch(/^Status: ready · \d+ warning\(s\) · \d+ not tested$/);
+    expect(en.split('\n')[0]).toMatch(/^Status: needs attention · \d+ warning\(s\) · \d+ not tested$/);
+    expect(renderDoctorChecks(doctorChecks({ ...report, imageRefresh: null }, facts(), 'en'), 'en').split('\n')[0]).toMatch(/^Status: ready · /u);
     expect(en).toContain('Installation\n  ok          Node.js v26.10.0 (minimum 24.22.0)');
   });
   it('PRE-34: the Docker row is the setup decision in the setup\'s words; not reachable is an error only when work is configured to run there', () => {
@@ -164,6 +168,8 @@ describe('doctor rows (pure)', () => {
     expect(doctorChecks(image, facts(), 'en').find(row => row.id === 'work.image')?.text).toBe('Worker image is current');
     expect(doctorChecks({ ...image, imageRefresh: { status: 'current', reason: null, imageVersion: 'v7' } }, facts({ imageId: id }), 'en').find(row => row.id === 'work.image')?.text)
       .toBe('Worker image is current (v7)');
+    for (const locale of ['en', 'tr'] as const) { const failed = doctorChecks(report, facts({ imageId: id }), locale).find(row => row.id === 'work.image')!; expect(failed.fix).toBeUndefined(); // owner 114
+      expect(failed).toMatchObject({ state: 'warning', needsAttention: true, next: expect.stringMatching(/deckent runtime restart$/u), text: locale === 'en' ? 'The last worker image refresh failed (BUILD_FAILED); task kinds keep the image they pin' : 'Son işçi imajı yenilemesi başarısız (BUILD_FAILED); iş türleri sabitledikleri imajı korur' }); }
   });
   it('PRE-34: the verbose pool line names the pool row and capacity it read, never a bare "(-)"', () => {
     const pool = { schemaVersion: 1, poolId: 'live', capacity: { executionSlots: 4, inFlightSlots: 6 } } as never;
@@ -295,7 +301,10 @@ describe('doctor subscription rows (pure)', () => {
   });
 });
 
-const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }) };
+// Owner 114: the failed image row no longer carries the update fix (a manual build re-pins nothing); the stale tool row does, so the card is still reached.
+const fixable = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }), inspectToolchainCurrency: async () => ({ schemaVersion: 1,
+  measuredAt: '2026-11-27T00:00:00.000Z', mode: 'report', registryEndpoint: 'https://registry.npmjs.org', basis: 'fixture', providers: [{ provider: 'codex', mechanism: 'npm',
+    admitted: [], latest: { version: '0.156.0', source: 'fixture', observedAt: '2026-11-27T00:00:00.000Z' }, status: 'stale', update: 'fixture' }] }) };
 const doctorRegistry = fixtureDockerRegistry(['coding']);
 const doctorDocker = {
   docker: Object.fromEntries(Object.entries({ ...doctorRegistry.profiles[0]!.parameters, executable: 'docker' }).filter(([key]) => key !== 'argv')),
@@ -607,8 +616,8 @@ describe('deckent doctor (command)', () => {
     const tty = { isTTY: true, setRawMode: () => undefined };
     for (const [env, stdin, json] of [[{}, { isTTY: false }, false], [{ CLAUDECODE: '1' }, tty, false], [{}, tty, true]] as const) {
       const out: string[] = [];
-      await runKernelCommand(['doctor', '--lang', 'en', ...(json ? ['--json'] : [])], { root, env: { HOME: join(root, 'h'), ...env }, stdin: stdin as never,
-        stdout: Object.assign({ write: (v: string) => { out.push(v); } }, { isTTY: true }) as never, stderr: { write() {} }, ...failedImage,
+      await runKernelCommand(['doctor', '--lang', 'en', '--toolchains', ...(json ? ['--json'] : [])], { root, env: { HOME: join(root, 'h'), ...env }, stdin: stdin as never,
+        stdout: Object.assign({ write: (v: string) => { out.push(v); } }, { isTTY: true }) as never, stderr: { write() {} }, ...fixable,
         updateToolchains: async () => { applied++; return { decision: 'built', plan: null, build: null, proposalPath: null }; } } as never).catch(() => undefined);
       expect(out.join('')).not.toContain('Update the worker tools?');
     }
@@ -643,7 +652,7 @@ describe('interactive doctor (person on a terminal)', () => {
   it('negative: a declined fix changes nothing and the operation is never called', async () => {
     const root = await project(), io = terminal('n');
     let applied = 0;
-    await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} }, ...failedImage,
+    await runKernelCommand(['doctor', '--lang', 'en', '--toolchains'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} }, ...fixable,
       updateToolchains: async () => { applied++; return { decision: 'built', plan: null, build: null, proposalPath: null }; } } as never);
     expect(applied).toBe(0);
     expect(io.written.join('')).toContain('Not applied: nothing was changed.');
@@ -651,7 +660,7 @@ describe('interactive doctor (person on a terminal)', () => {
   it('an accepted fix runs the existing operation once, then measures again', async () => {
     const root = await project(), io = terminal('y');
     const calls: unknown[] = [];
-    await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} }, ...failedImage,
+    await runKernelCommand(['doctor', '--lang', 'en', '--toolchains'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} }, ...fixable,
       updateToolchains: async (_root: string, input: unknown) => { calls.push(input); return { decision: 'built', plan: { next: { imageVersion: 'r9-20261019' } }, build: null, proposalPath: '/p.json' }; } } as never);
     expect(calls).toEqual([{ apply: true }]);
     const text = io.written.join('');
@@ -674,8 +683,8 @@ describe('interactive doctor (person on a terminal)', () => {
   });
   it('negative: a fix the operation refuses (for example a missing grant) ends with that typed error, after the report', async () => {
     const root = await project(), io = terminal('y');
-    const error = await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} },
-      ...failedImage, updateToolchains: async () => { throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); } } as never).then(() => null, (caught: unknown) => caught);
+    const error = await runKernelCommand(['doctor', '--lang', 'en', '--toolchains'], { root, env: { HOME: join(root, 'h') }, stdin: io.stdin as never, stdout: io.stdout as never, stderr: { write() {} },
+      ...fixable, updateToolchains: async () => { throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); } } as never).then(() => null, (caught: unknown) => caught);
     expect(error).toMatchObject({ code: 'POLICY_DENIED' });
     expect(io.written.join('')).toContain('Installation health: ');
   });
@@ -935,6 +944,10 @@ it('recommends plain deckent doctor in both unmeasured worker rows for a configu
   expect.soft(checks.find(row => row.id === 'work.pool')).toMatchObject({ state: 'untested', next: 'deckent doctor' });
   expect(doctorReadinessChecks(scoped, checks, 'en').find(row => row.id === 'work.firstWorker'))
     .toMatchObject({ state: 'untested', next: 'deckent doctor' });
+  // Owner 114: a first work kind that cannot run (its CLI's login may not be used in Docker) blocks the first worker with that reason, image present or not.
+  const closed = facts({ workerReadiness: null, poolHeld: false, poolHasRoom: true, workerKinds: [{ kind: firstJobKind, reason: null, rebind: false, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }] });
+  expect(doctorReadinessChecks(closed, doctorChecks(report, closed, 'en'), 'en').find(row => row.id === 'work.firstWorker'))
+    .toMatchObject({ state: 'warning', text: expect.stringContaining(`Task kind ${firstJobKind} cannot run`) });
 });
 
 it('guides setup without a scope and keeps the permission preview for an unreadable configured scope (EN/TR)', () => {

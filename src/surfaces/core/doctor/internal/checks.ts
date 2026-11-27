@@ -187,14 +187,16 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 }
 
 function workerKindCheck(kind: import('#engine/index.js').WorkerKindAvailability, l: Locale): DoctorCheck {
+  // Owner 114: the true reason wins over the image; a prepared profile has no rebind and its removal is not decided, so no step is invented.
+  if (kind.notRunnable) return row('work', 'work.kind', 'warning', t('worker.kind.docker-login-closed', { kind: kind.kind }, l), kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : undefined);
   return row('work', 'work.kind', 'warning', kind.reason === 'image-missing'
     ? t('worker.kind.image-missing', { kind: kind.kind }, l) : t('worker.kind.image-unverified', { kind: kind.kind }, l),
   kind.rebind ? t('worker.kind.rebind', { kind: kind.kind }, l) : t('worker.kind.restore', { kind: kind.kind }, l));
 }
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
-  const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  for (const kind of f.workerKinds ?? []) if (kind.reason) rows.push(workerKindCheck(kind, l));
+  const rows: DoctorCheck[] = [];
+  for (const kind of f.workerKinds ?? []) if (kind.reason || kind.notRunnable) rows.push(workerKindCheck(kind, l));
   if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText, f.providerSpending?.checkpoint ? undefined : scoped('deckent models create-budget --usd <amount>', f)));
   const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'unconfigured' && f.codingRepository && f.codingRepository.state !== 'done' ? row('work', 'work.pool', f.codingRepository.state === 'skipped' ? 'ok' : 'untested', messageText(f.codingRepository.reason.code, l, f.codingRepository.reason.params) ?? f.codingRepository.reason.code)
@@ -220,8 +222,9 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
       lines.join(' ')));
   }
   const image = r.imageRefresh;
+  // Owner 114: a failed refresh names its code and never offers `toolchains update` (a manual build re-pins nothing); the summary is not "ready".
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
-    ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)
+    ? { ...row('work', 'work.image', 'warning', t('doctor.check.image.failed', { reason: terminalSafeText(image.reason ?? '-') }, l), t('doctor.check.image.failed.next', {}, l)), needsAttention: true }
     : row('work', 'work.image', 'ok', image.status === 'updating' ? t('doctor.check.image.updating', {}, l)
       : image.imageVersion || shortImageId(f.imageId) ? t('doctor.check.image.current', { version: image.imageVersion ?? shortImageId(f.imageId)! }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
   rows.push(executionRow(f, l));
@@ -370,7 +373,7 @@ const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doct
 export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly DoctorCheck[], locale: Locale): readonly DoctorCheck[] {
   const pool = checks.find(check => check.id === 'work.pool');
   const worker = f.workerReadiness, kind = f.workerKinds?.find(value => value.kind === firstJobKind);
-  const kindCheck = kind?.reason ? workerKindCheck(kind, locale) : undefined;
+  const kindCheck = kind?.reason || kind?.notRunnable ? workerKindCheck(kind, locale) : undefined;
   const startupBlock = checks.find(check => check.id === 'setup.startability' && check.state === 'error');
   const docker = f.firstWorkerImage ? checks.find(check => check.id === 'work.docker') : undefined;
   const image = f.firstWorkerImage === 'configured' ? checks.find(check => check.id === 'work.workerImage') : undefined;
@@ -388,7 +391,7 @@ export function doctorReadinessChecks(f: DoctorCheckFacts, checks: readonly Doct
     : f.poolStatus === 'drift' && pool ? blocked(pool.text, pool.next)
     : f.poolHasRoom === false ? blocked(t('monitor.blocker.waitingPoolSlot', {}, locale), poolStatus)
     : image?.state === 'error' ? blocked(image.text, image.next)
-    : kind?.reason === 'image-missing' && kindCheck ? blocked(kindCheck.text, kindCheck.next)
+    : (kind?.reason === 'image-missing' || kind?.notRunnable) && kindCheck ? blocked(kindCheck.text, kindCheck.next)
     : docker && (docker.state === 'error' || docker.state === 'warning') ? blocked(docker.text, docker.next)
     : startupBlock ? blocked(startupBlock.text, startupBlock.next)
     : workerRow ? workerRow

@@ -40,7 +40,7 @@ it('the monitor snapshot carries the refresh as typed diagnostics, nothing for u
   expect(await snapshot(async () => { throw Object.assign(new Error('x'), { code: 'EIO' }); })).toContain('image-refresh-unreadable:EIO');
 });
 
-it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr', 'önceki imaj kullanılıyor'], ['current', 'en', 'current (r5-20261006)']] as const)('doctor shows the image refresh line (%s, %s) and keeps unknown silent', async (status, locale, text) => {
+it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr', 'yenileme başarısız (WORKER_IMAGE_BUILD_FAILED); iş türleri sabitledikleri imajı korur'], ['current', 'en', 'current (r5-20261006)']] as const)('doctor shows the image refresh line (%s, %s) and keeps unknown silent', async (status, locale, text) => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-refresh-')); roots.push(root); const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
   const lines: string[] = [];
   await runKernelCommand(['doctor', '--verbose', '--lang', locale], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status, reason: 'WORKER_IMAGE_BUILD_FAILED', imageVersion: 'r5-20261006' }) });

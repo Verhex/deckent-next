@@ -11,7 +11,7 @@ import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } f
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { workerConsentBinding, configServiceState, restartConfigDigest } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
-import { readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { createNativeCodingTemplate, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 
 beforeEach(context => { if (process.platform !== 'linux') context.skip('configured policy/integrity flows need a verified POSIX UID'); });
 const roots: string[] = [];
@@ -138,9 +138,37 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
 
   it('a second refresh of an already refreshed install builds nothing new and leaves the registry unchanged', async () => {
     const f = await fixture();
-    await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
-    const after = await f.registry(); f.state.builds = 0; f.latest['@openai/codex'] = '0.156.0';
-    const second = await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer);
+    // Owner 114 option 0: a template bound to a connection (codex, its record behind the latest) and claude's Docker pin (a CLI whose login may not
+    // be used in Docker, made stale here) are not image pins: one codex build for the Docker kind, no claude consent asked, the connected record kept.
+    const document = JSON.parse(await readFile(f.path, 'utf8')), { executable, ...limits } = document.execution.docker; void executable;
+    const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64),
+      resourceKey: 'opaque-subscription-fixture', definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'no-state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } };
+    const connected = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: '0.150.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding);
+    document.admission.registry.profiles.push(connected); document.admission.registry.kinds.push({ kind: 'connected-codex', profile: { id: connected.id, version: connected.version } });
+    await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); f.latest['@anthropic-ai/claude-code'] = '2.1.300';
+    expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(1);
+    const refreshed = await f.registry();
+    expect(refreshed.profiles.filter(profile => profile.id === connected.id)).toEqual([connected]);
+    expect(refreshed.kinds.find(kind => kind.kind === 'connected-codex')!.profile).toEqual({ id: connected.id, version: 1 });
+    expect(refreshed.kinds.find(kind => kind.kind === 'claude-pinned')!.profile).toEqual({ id: 'claude-pinned', version: 1 });
+    // R8: above, the bound connection has no proved check (the real verified reader found none), so its record stayed. Once its own check proves a
+    // version, the refresh re-records it without a build: a new version, the image id kept; another connection's check is never read for it.
+    let provedVersion = '0.152.0';
+    const proved = { ...f.deps, observed: async (worker: { definition: { stateDir: string } }) => worker.definition.stateDir === binding.definition.stateDir ? provedVersion : null };
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, proved, f.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, imageId: null, code: null } });
+    const recorded = await f.registry(), v2 = recorded.profiles.find(profile => profile.id === connected.id && profile.version === 2) as unknown as typeof connected;
+    expect(f.state.builds).toBe(1); expect(recorded.kinds.find(kind => kind.kind === 'connected-codex')!.profile).toEqual({ id: connected.id, version: 2 });
+    expect(v2.parameters).toEqual({ ...connected.parameters, invocation: { ...connected.parameters['invocation'] as object, cliVersion: '0.152.0' } });
+    // A new codex release and a newly proved connection version land in one write: the Docker kind is re-pinned to the build, the connected kind to its proof.
+    f.latest['@openai/codex'] = '0.157.0'; provedVersion = '0.153.0';
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, proved, f.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 2, code: null } });
+    const both = await f.registry();
+    expect(f.state.builds).toBe(2); expect(both.kinds.find(kind => kind.kind === 'connected-codex')!.profile).toEqual({ id: connected.id, version: 3 });
+    expect((both.profiles.find(profile => profile.id === connected.id && profile.version === 3)!.parameters as unknown as { invocation: { cliVersion: string } }).invocation.cliVersion).toBe('0.153.0');
+    expect(both.kinds.find(kind => kind.kind === 'codex-pinned')!.profile).toEqual({ id: 'codex-pinned', version: 3 });
+    const after = await f.registry(); f.state.builds = 0; f.latest['@openai/codex'] = '0.157.0';
+    const second = await refreshConfiguredToolchains(f.root, 'interval', f.options, proved, f.observer);
     expect(second.outcome).toBe('current'); expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(after);
   });
 

@@ -5,7 +5,8 @@ import type { AffectedProfile } from './update.js';
 
 /** What both derivations read from the installed configuration: its admission registry (an unreadable registry admits nothing). */
 export type ToolchainAdmissionSource = Readonly<{ admission?: Readonly<{ registry?: unknown }> | null | undefined }>;
-export type WorkerKindAvailability = Readonly<{ kind: string; reason: 'image-missing' | 'image-unverified' | null; rebind: boolean }>;
+/** `notRunnable` (owner 114, doctor and `deckent coding` only): a Docker kind of a CLI whose login may not be used in Docker, refused at Run start. */
+export type WorkerKindAvailability = Readonly<{ kind: string; reason: 'image-missing' | 'image-unverified' | null; rebind: boolean; notRunnable?: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }>;
 
 const pinSchema = z.looseObject({ provider: z.string(), preflight: z.looseObject({ cliVersion: z.string() }).optional() });
 const nativeProfileSchema = z.looseObject({ id: z.string(), version: persistedNumber(z.number()), parameters: z.looseObject({ imageId: z.string().optional(),
@@ -25,11 +26,12 @@ function nativePins(config: ToolchainAdmissionSource) {
     const template = templateProfileSchema.safeParse(candidate);
     if (template.success) {
       const { id, version, parameters: { docker, invocation } } = template.data;
-      return invocation.provider in toolchainCatalog.providers ? [{ profile: { id, version }, provider: invocation.provider, cliVersion: invocation.cliVersion, imageId: docker.imageId }] : [];
+      return invocation.provider in toolchainCatalog.providers ? [{ profile: { id, version }, provider: invocation.provider, cliVersion: invocation.cliVersion, imageId: docker.imageId,
+        worker: template.data.parameters['worker'] }] : [];
     }
     const profile = nativeProfileSchema.safeParse(candidate); const subscription = profile.success ? profile.data.parameters.nativeSubscription : undefined;
     if (!subscription?.preflight || !(subscription.provider in toolchainCatalog.providers)) return [];
-    return [{ profile: { id: profile.data!.id, version: profile.data!.version }, provider: subscription.provider, cliVersion: subscription.preflight.cliVersion, imageId: profile.data!.parameters.imageId }];
+    return [{ profile: { id: profile.data!.id, version: profile.data!.version }, provider: subscription.provider, cliVersion: subscription.preflight.cliVersion, imageId: profile.data!.parameters.imageId, worker: undefined }];
   });
 }
 
@@ -38,7 +40,13 @@ export function admittedToolchains(config: ToolchainAdmissionSource): AdmittedTo
   return nativePins(config).map(pin => admittedToolchainSchema.parse({ profile: pin.profile, provider: pin.provider, cliVersion: pin.cliVersion }));
 }
 
+const candidate = ({ imageId, worker, ...pin }: ReturnType<typeof nativePins>[number]): AffectedProfile => { void worker;
+  return { ...pin, imageId: imageId && /^sha256:[a-f0-9]{64}$/.test(imageId) ? imageId : null }; };
 /** The same pins as update candidates, each with its profile's image id when that is an immutable digest (else null). */
-export function affectedToolchainProfiles(config: ToolchainAdmissionSource): AffectedProfile[] {
-  return nativePins(config).map(({ imageId, ...pin }) => ({ ...pin, imageId: imageId && /^sha256:[a-f0-9]{64}$/.test(imageId) ? imageId : null }));
+export function affectedToolchainProfiles(config: ToolchainAdmissionSource): AffectedProfile[] { return nativePins(config).map(candidate); }
+/** Owner 114 option 0: the image refresh's own view, the pins whose kind runs its image. A template carrying a `worker` binding never runs its image
+ * (a valid one runs on its connection, a malformed one is refused by the adapter), and a Docker pin of a CLI whose login may not be used in Docker
+ * (`loginClosed`: adapter catalog data the caller supplies) is refused at Run start; neither is rebuilt or re-pinned (the same rule as `repinParameters`). */
+export function imageToolchainProfiles(config: ToolchainAdmissionSource, loginClosed: (provider: string) => boolean): AffectedProfile[] {
+  return nativePins(config).filter(pin => pin.worker === undefined && !loginClosed(pin.provider)).map(candidate);
 }
