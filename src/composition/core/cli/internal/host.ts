@@ -39,7 +39,7 @@ import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConf
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, headlessIsolationRefusal, headlessLoginDir, headlessPersonWitness, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { inspectConfiguredRunAnswer, inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold, inspectConfiguredRun,
+import { inspectConfiguredRunAnswer, inspectConfiguredWorkerReadiness, releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold, inspectConfiguredRunControl,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer, inspectConfiguredNativeInputs, produceConfiguredNativeInputs } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
@@ -291,7 +291,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // Task answers read and write in-process against the same configured ledger.
     inspectRun: (root, input, options, answerTaskId) => answerTaskId === undefined
       ? runtime.inspectRun(input) : inspectConfiguredRunAnswer(root, input, options, answerTaskId),
-    inspectRunControl: (root, input, options) => inspectConfiguredRun(root, input, options, true),
+    inspectRunControl: (root, input, options) => inspectConfiguredRunControl(root, input, options),
     deliverRunCancellation: (_root, input) => runtime.deliverRunCancellation(input),
     reserveRunTasks: (_root, input) => runtime.reserveRunTasks(input),
     proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),

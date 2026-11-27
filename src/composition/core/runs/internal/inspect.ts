@@ -16,6 +16,11 @@ async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['
 export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}, forControl = false) {
   return (await readConfiguredRun(projectRoot, input, options, undefined, forControl)).result;
 }
+/** The host's control read (CLI card, terminal window): its Run-control binding also when no Run is found, so a caller holding a repaired
+ * binding compares it before it reads "not found" (owner 2026-11-27). The SDK's `inspectRun` keeps the read above. */
+export async function inspectConfiguredRunControl(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
+  return (await readConfiguredRun(projectRoot, input, options, undefined, 'absent-too')).result;
+}
 
 /** The local answer cards read the question and its source at the same Run revision. Null defers first-open selection to the Runs card. */
 export async function inspectConfiguredRunAnswer(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, taskId: string | null) {
@@ -23,7 +28,7 @@ export async function inspectConfiguredRunAnswer(projectRoot: string, input: Run
   return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}), ...(selectAnswerQuestion ? { selectAnswerQuestion } : {}) });
 }
 
-async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl = false) {
+async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl: boolean | 'absent-too' = false) {
   try {
     const query = runQuerySchema.parse(input);
     const { config, layout, document, principal, path, runControlBinding } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
@@ -33,7 +38,7 @@ async function readConfiguredRun(projectRoot: string, input: RunQuery, options: 
       artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization }, { ...(config.admission ? { admission: { poolId: config.admission.poolId, executionSlots: config.admission.executionSlots, inFlightSlots: config.admission.inFlightSlots } } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity }, configuredWorkCostEvidence(config, layout,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const { answerSource, selectAnswerQuestion, ...inspected } = await app.inspectWithModels(query, undefined, answerTaskId);
-    if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected }) };
+    if (!inspected.run) return { result: Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, ...(forControl === 'absent-too' ? { controlBinding: runControlBinding() } : {}) }) };
     // BeUser M-33: the tasks of this Run a person set aside (the same records /deliver and the monitor read).
     const dismissed = (limit: number) => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options)
       .then(rows => new Set(rows.filter(row => row.runId === query.runId).map(row => row.taskId)));

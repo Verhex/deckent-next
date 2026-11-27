@@ -81,8 +81,10 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   const reason = input.reason?.trim() || t('terminal.runControl.reasonDefault', {}, locale);
   for (let round = 0; ; round++) {
     const { run, answerSource, controlBinding } = await inspect(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
+    // A repaired binding is compared before the read is interpreted: a Run absent where the project now points is the binding change.
+    const repaired = bound ? context.repairedRunControlBinding : undefined;
+    if (repaired !== undefined && (run || controlBinding !== undefined) && controlBinding !== repaired) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
-    if (bound && context.repairedRunControlBinding !== undefined && controlBinding !== context.repairedRunControlBinding) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     const question = readTaskQuestion(run, answerTaskId, answerSource);
     if (!eligible(run, question)) {
       const id = shownId(run.runId);

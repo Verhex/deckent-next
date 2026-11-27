@@ -1,12 +1,12 @@
 import { runProposalCommand } from './run-proposal.js';
 import { cliUsage, commandLocale, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
-import { cliMode, renderInputSchema } from '#surfaces/core/cli-human/index.js';
+import { cliMode, matchIdPrefix, renderInputSchema } from '#surfaces/core/cli-human/index.js';
 import { projectInputSchema } from '#engine/index.js';
 import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand, type WorkerAdmissionWarning } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
-import { taskGraphSchema, validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
+import { identitySchema, taskGraphSchema, validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { RunCommandContext } from './context.js';
 import { renderRunCancellation, runCancellationExitCode } from './cancellation.js';
 import { renderRunInspect } from './run-inspect.js';
@@ -172,16 +172,24 @@ export function runControlRepairScope(argv: readonly string[], context: RunComma
   let flags;
   try { flags = runFlags(argv, action, true, () => new Error()); } catch { return undefined; }
   const { values, json } = flags, scopeId = values.get('--scope'), commandId = values.get('--command-id'), revision = values.get('--expected-revision'), reason = values.get('--reason');
-  if (!scopeId || !values.has('--id') || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
+  const selection = values.get('--id');
+  if (!scopeId || selection === undefined || !runSelection(selection) || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
   const card = commandId === undefined && revision === undefined;
   if (card ? cliMode(context, json).mode !== 'interactive' : commandId === undefined || revision === undefined || !/^(0|[1-9][0-9]*)$/.test(revision)
     || !Number.isSafeInteger(Number(revision)) || (action === 'hold' ? !reason?.trim() : reason !== undefined)) return undefined;
-  // Every value that needs no Run passes the control schema first; the card's command id and revision are the system's (placeholders here).
+  // Every value that needs no Run passes the control schema first (the Run id is judged after it resolves; the card's command id and revision
+  // are the system's): placeholders stand for them here.
   const holdReason = action === 'hold' ? { holdReason: card ? reason?.trim() || 'held' : reason } : {};
   try {
-    return runLifecycleCommandSchema.safeParse({ schemaVersion: 1, commandId: commandId ?? `cli-run-${action}-entry`, scopeId, runId: values.get('--id'), action, ...holdReason,
+    return runLifecycleCommandSchema.safeParse({ schemaVersion: 1, commandId: commandId ?? `cli-run-${action}-entry`, scopeId, runId: 'entry-run', action, ...holdReason,
       expectedRevision: card ? 0 : Number(revision) }).success ? scopeId : undefined;
   } catch { return undefined; }
+}
+
+/** Whether a typed `--id` can select a Run: a full id (`identitySchema`), or a prefix the short-id helper accepts (`matchIdPrefix`: at least
+ * `shortId.minPrefix` characters) that a full id could start with (no leading space, no control character, so the value plus one more is an id). */
+function runSelection(typed: string): boolean {
+  return identitySchema.safeParse(typed).success || (identitySchema.safeParse(`${typed}x`).success && matchIdPrefix(typed, [`${typed}x`]).kind === 'unique');
 }
 
 /** `run inspect` (CLI review §run): read scope rule; a short id resolves; on a person's terminal without --id, the Run is picked. */

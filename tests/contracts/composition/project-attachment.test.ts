@@ -1166,12 +1166,17 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
       ['run', 'hold', '--scope', 'target', '--id', 'no-such-run']]) expect(await refused(argv)).toBe(untouched);
     // A value the control schema refuses (a reserved command id, an over-long reason) never starts a repair either.
     const values = ['--scope', 'target', '--id', 'no-such-run', '--expected-revision', '0'];
-    for (const argv of [['run', 'hold', ...values, '--command-id', 'dispatch-fence-moved', '--reason', 'moved'], ['run', 'hold', ...values, '--command-id', 'answer-after-move', '--reason', 'x'.repeat(100_000)]])
-      expect(await refused(argv)).toBe(untouched);
+    for (const argv of [['run', 'hold', ...values, '--command-id', 'dispatch-fence-moved', '--reason', 'moved'], ['run', 'hold', ...values, '--command-id', 'answer-after-move', '--reason', 'x'.repeat(100_000)],
+      ['run', 'hold', '--scope', 'target', '--id', 'no ', '--command-id', 'answer-after-move', '--expected-revision', '0', '--reason', 'moved']]) expect(await refused(argv)).toBe(untouched);
     output = '';
     expect(await cliMain(typed)).not.toBe(78);
     expect(output).not.toContain('PROJECT_ATTACHMENT');
     expect(lookups).toEqual([['target', 'no-such-run']]);
+    expect(await head.bytes()).toEqual(retained);
+    // A valid short selection that is no full id (a trailing space) reaches the repair as well; the control schema judges the id it resolves to.
+    await writeFile(head.refPath, intermediate); output = '';
+    expect(await cliMain(['run', 'hold', '--scope', 'target', '--id', 'no-such ', '--command-id', 'hold-short', '--expected-revision', '0', '--reason', 'moved', '--lang', 'en'])).not.toBe(78);
+    expect(output).not.toContain('PROJECT_ATTACHMENT');
     expect(await head.bytes()).toEqual(retained);
     await writeFile(head.refPath, intermediate); output = '';
     // The `--id` card form, as a person at a terminal (no agent or CI marker).
