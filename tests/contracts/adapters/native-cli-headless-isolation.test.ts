@@ -17,13 +17,15 @@ import { prepareHeadlessConnection, readHeadlessLogins, runHeadlessLogin, resolv
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { createClaudeAgentDriver, nativeWorkerProcessResult } from '#capabilities/core/native-agent-execution/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, readHeadlessDiagnosticRecord } from '#platform/index.js';
 import { headlessDiagnosticCases } from '#platform/core/errors/index.js';
 import { renderHeadlessLogin } from '#surfaces/core/cli-models/index.js';
 import { doctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assistantLine, fullHelp, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { argumentCountRefusal } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { producedSandboxRefusal, UNPRODUCIBLE_SANDBOX_REFUSAL } from '../../fixtures/native-headless/sandbox-refusal.js';
 
 const servers: Server[] = [];
 vi.mock('node:fs/promises', async original => ({ ...await original<typeof files>() }));
@@ -364,25 +366,26 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
       expect.soft(doctor(history, 'en')).toContain(en);
       expect.soft(doctor(history, 'tr')).toContain(tr);
     }
-    // The sandbox's argument-count refusal keeps its writer's sentence: an exact catalog match is shown with its counts in the reader's
-    // language; an altered sentence stays unverified and nothing of it is shown.
-    const sandboxEn = 'The launcher needs 9007 arguments and can accept at most 9000. Argument counts: HOME masks 0, project/state and host protection 8994, ancestor pins 0, final read-only remounts 2, command tail 7, other setup 4. Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry';
-    const sandboxTr = 'Başlatıcı için 9007 argüman gerekiyor, sınır 9000. Argüman sayıları: HOME maskeleri 0, proje/durum ve ana sistem korumaları 8994, üst dizin sabitlemeleri 0, son salt okunur bağlamalar 2, komut eki 7, diğer kurulum 4. Daha az girdi içeren ayrı bir CLI yapılandırma dizini kullanıp yeniden bağlanın ve tekrar deneyin';
+    // The sandbox's argument-count refusal keeps its writer's sentence. A refusal the isolated launcher really produces is shown with its
+    // counts in the reader's language; nothing of any other text is shown.
+    const sandboxEn = producedSandboxRefusal('en'), sandboxTr = producedSandboxRefusal('tr');
+    const produced = readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandboxEn).params as Record<string, number>;
     for (const stored of [sandboxEn, sandboxTr]) {
       await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check: stored }));
       const sandbox = await logins();
-      expect.soft(sandbox[0]?.diagnostic).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE', params: { count: 9007, bound: 9000, protective: 8994 } });
+      expect.soft(sandbox[0]?.diagnostic).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE', params: produced });
       expect.soft(doctor(sandbox, 'en')).toContain(sandboxEn);
       expect.soft(doctor(sandbox, 'tr')).toContain(sandboxTr);
     }
-    // Only the writer's own form counts: a v1 record from the isolated launcher over its fixed bound, with no HOME masks or pins and its two
-    // final remounts. An inconsistent sum, a count within the bound, another bound, the general shell advice, HOME masks, or a missing or
-    // future record version each keep the generic reading.
-    const general = sandboxEn.replace('Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry',
-      'Use a project or HOME that needs fewer protective mounts, or shorten the command argument list where possible, then retry');
-    for (const [schemaVersion, check] of [[1, sandboxEn.replace('needs 9007', 'needs 9008')], [1, sandboxEn.replace('needs 9007', 'needs 8998').replace('protection 8994', 'protection 8985')],
-      [1, sandboxEn.replace('at most 9000', 'at most 9001')], [1, general], [1, sandboxEn.replace('HOME masks 0', 'HOME masks 6').replace('protection 8994', 'protection 8988')],
-      [undefined, sandboxEn], [2, sandboxEn]] as const) {
+    // Only what the writer can produce counts. The earlier example (sum and text hold, other setup 4) and each single departure from the
+    // producer (protective not whole masks, a tail without its head, HOME masks, another root remount, a count within the bound, another bound,
+    // the general shell advice, a missing or future record version) keep the generic reading.
+    const en = { DECKENT_LANGUAGE: 'en' }, base = { home: 0, protective: produced['protective']!, pins: 0, remounts: 2, tail: produced['tail']! };
+    const count = produced['count']!, within = 3 * Math.ceil((count - 9000) / 3);
+    for (const [schemaVersion, check] of [[1, UNPRODUCIBLE_SANDBOX_REFUSAL], [1, argumentCountRefusal(count + 1, { ...base, protective: base.protective + 1 }, en, true)],
+      [1, argumentCountRefusal(count, { ...base, tail: 3 }, en, true)], [1, argumentCountRefusal(count + 6, { ...base, home: 6 }, en, true)],
+      [1, argumentCountRefusal(count + 1, { ...base, remounts: 3 }, en, true)], [1, argumentCountRefusal(count - within, { ...base, protective: base.protective - within }, en, true)],
+      [1, sandboxEn.replace('at most 9000', 'at most 9001')], [1, argumentCountRefusal(count, base, en, false)], [undefined, sandboxEn], [2, sandboxEn]] as const) {
       await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ schemaVersion, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check }));
       const notWritten = await logins();
       expect.soft(notWritten[0]?.diagnostic, check).not.toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE' });

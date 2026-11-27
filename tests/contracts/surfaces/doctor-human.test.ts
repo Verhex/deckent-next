@@ -22,6 +22,8 @@ import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import { EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-kit/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { closedPreflightRefusal } from '#adapters/core/native-cli-headless/index.js';
+import { producedSandboxRefusal, UNPRODUCIBLE_SANDBOX_REFUSAL } from '../../fixtures/native-headless/sandbox-refusal.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, doctorReadinessChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
@@ -514,15 +516,16 @@ describe('deckent doctor (command)', () => {
     for (const key of ['platform', 'host', 'node', 'status', 'poolReadiness', 'secretStore', 'shellRealm', 'imageRefresh', 'recoveryFiles']) expect(Object.keys(json)).toContain(key);
     // A Brain login's re-read sandbox argument-count refusal is an optional field: code, safe counts and the row's sentence; an altered or
     // missing record adds nothing (the row keeps its generic text).
-    const sandbox = 'The launcher needs 9007 arguments and can accept at most 9000. Argument counts: HOME masks 0, project/state and host protection 8994, ancestor pins 0, final read-only remounts 2, command tail 7, other setup 4. Use a dedicated CLI configuration directory with fewer entries, then reconnect and retry';
+    const sandbox = producedSandboxRefusal('en'), closed = (check: unknown) => closedPreflightRefusal({ schemaVersion: 1, refusal: 'SANDBOX_VIEW_TOO_LARGE', check });
     const login = (check: unknown) => ({ state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/fixture/login', consent: [], isolation: null,
-      connection: 'claude-cli-subscription', profileId: 'fixture-profile', diagnostic: readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', check) });
+      connection: 'claude-cli-subscription', profileId: 'fixture-profile', diagnostic: closed(check) });
     expect(json).not.toHaveProperty('headlessLoginRefusals');
     logins = [login(sandbox)];
     const withRefusal = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
     expect(withRefusal.headlessLoginRefusals).toEqual([{ connection: 'claude-cli-subscription', code: 'SANDBOX_VIEW_TOO_LARGE',
-      params: { count: 9007, bound: 9000, home: 0, protective: 8994, pins: 0, remounts: 2, tail: 7, other: 4 }, message: sandbox }]);
-    for (const old of [sandbox.replace('9007', '9008'), null]) {
+      params: readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandbox).params, message: sandbox }]);
+    // An altered sum, a missing check and the earlier example (its sum and text hold, but no isolated view yields "other setup 4") add nothing.
+    for (const old of [sandbox.replace(/needs (\d+)/u, (_, n: string) => `needs ${Number(n) + 1}`), null, UNPRODUCIBLE_SANDBOX_REFUSAL]) {
       logins = [login(old)];
       expect(JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''))).not.toHaveProperty('headlessLoginRefusals');
     }

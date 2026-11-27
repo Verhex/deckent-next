@@ -58,28 +58,45 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
 export const withinByteBound = (args: readonly string[]) =>
   args.reduce((total, arg) => total + Buffer.byteLength(arg) + 1, 0) <= BUBBLEWRAP_ARGUMENT_MAX_BYTES;
 
+// The view's argument groups. The argument-count refusal reports them and the reader of a stored refusal checks them, so both use these.
+const viewHead = (size: string) => ['--unshare-all', '--unshare-user', '--disable-userns', '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--size', size, '--tmpfs', '/tmp'];
+const systemBind = (path: string) => ['--ro-bind-try', path, path];
+const privateMemory = (size: string, path: string) => ['--perms', '0700', '--size', size, '--tmpfs', path];
+const stateBind = (dir: string) => ['--bind', dir, dir], fileMask = (path: string) => ['--ro-bind', '/dev/null', path];
+const ROOT_REMOUNT = ['--remount-ro', '/'], chdir = (dir: string) => ['--chdir', dir];
+const tailHead = (shell: string, limits: string) => ['--', shell, '-c', limits];
+/** Whether the isolated launcher can report these counts: no HOME masks or pins, its root remount, a protective group of whole masks (every
+ * directory mask is two file masks long), a tail with its head, and at least the arguments every view has (plus the state bind with masks). */
+export function producibleIsolatedArgumentCounts(c: Readonly<Record<string, unknown>>): boolean {
+  const fixed = viewHead('').length + BUBBLEWRAP_SYSTEM_PATHS.length * systemBind('').length + privateMemory('', '').length + chdir('').length;
+  const n = (name: string) => typeof c[name] === 'number' ? c[name] as number : NaN;
+  return n('home') === 0 && n('pins') === 0 && n('remounts') === ROOT_REMOUNT.length && n('protective') % fileMask('').length === 0
+    && 2 * fileMask('').length === privateMemory('', '').length && n('tail') >= tailHead('', '').length
+    && n('other') >= fixed + (n('protective') > 0 ? stateBind('').length : 0);
+}
+
 function isolatedViewPrefix(view: IsolatedProcessView): string[] {
   const size = String(view.tmpfsBytes);
-  const args = ['--unshare-all', '--unshare-user', '--disable-userns', '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--size', size, '--tmpfs', '/tmp'];
-  for (const path of BUBBLEWRAP_SYSTEM_PATHS) args.push('--ro-bind-try', path, path);
+  const args = viewHead(size);
+  for (const path of BUBBLEWRAP_SYSTEM_PATHS) args.push(...systemBind(path));
   const pinned = view.pinnedExecutable;
   const hidden = pinned?.hideDirectory ? packageMountPaths(pinned.hideDirectory) : [];
   for (const path of hidden) args.push('--perms', '0755', '--size', size, '--tmpfs', path);
   if (pinned) args.push('--ro-bind-fd', String(pinned.fd), pinned.target);
   for (const path of hidden) args.push('--remount-ro', path);
   for (const path of view.executables) args.push('--ro-bind', path, path);
-  args.push('--perms', '0700', '--size', size, '--tmpfs', view.workDir);
+  args.push(...privateMemory(size, view.workDir));
   if (view.stateDir) {
-    args.push('--bind', view.stateDir, view.stateDir);
-    for (const path of view.stateMasks.directories) args.push('--perms', '0700', '--size', size, '--tmpfs', path);
-    for (const path of view.stateMasks.files) args.push('--ro-bind', '/dev/null', path);
+    args.push(...stateBind(view.stateDir));
+    for (const path of view.stateMasks.directories) args.push(...privateMemory(size, path));
+    for (const path of view.stateMasks.files) args.push(...fileMask(path));
     for (const file of view.stateCopies ?? []) args.push('--bind', file.source, file.target);
   }
   for (const path of view.workFiles) args.push('--ro-bind', path, path);
   for (const socket of view.sockets) args.push('--ro-bind', socket.source, socket.target);
   // The realm's own root (bubblewrap's tmpfs holding the mount points) read-only last: a write outside the private memories and the bound login
   // dir fails instead of landing in memory (`--remount-ro` changes only that mount point).
-  args.push('--remount-ro', '/', '--chdir', view.workDir);
+  args.push(...ROOT_REMOUNT, ...chdir(view.workDir));
   return args;
 }
 
@@ -95,10 +112,10 @@ export function isolatedProcessCommand(input: Readonly<{ shell: string; launcher
   if (!Number.isSafeInteger(input.fileSizeBlocks) || input.fileSizeBlocks <= 0 || !Number.isSafeInteger(input.openFiles) || input.openFiles <= 0) return null;
   // `unset PWD`: the shell's own variable never joins the command's built environment.
   const limits = `ulimit -c 0 && ulimit -f ${input.fileSizeBlocks} && ulimit -n ${input.openFiles} && unset PWD && exec "$0" "$@"`;
-  const tail = ['--', input.shell, '-c', limits, ...input.command], args = [...view, ...tail];
+  const tail = [...tailHead(input.shell, limits), ...input.command], args = [...view, ...tail];
   if (args.length > BUBBLEWRAP_ARGUMENT_MAX_COUNT) {
-    const protective = input.view.stateDir ? 6 * input.view.stateMasks.directories.length + 3 * input.view.stateMasks.files.length : 0;
-    const message = argumentCountRefusal(args.length, { home: 0, protective, pins: 0, remounts: 2, tail: tail.length }, input.environment ?? process.env, true);
+    const protective = input.view.stateDir ? privateMemory('', '').length * input.view.stateMasks.directories.length + fileMask('').length * input.view.stateMasks.files.length : 0;
+    const message = argumentCountRefusal(args.length, { home: 0, protective, pins: 0, remounts: ROOT_REMOUNT.length, tail: tail.length }, input.environment ?? process.env, true);
     throw ErrorRegistry.createError(SANDBOX_VIEW_TOO_LARGE, { message, params: { check: message } });
   }
   if (!withinByteBound(view)) return null;
