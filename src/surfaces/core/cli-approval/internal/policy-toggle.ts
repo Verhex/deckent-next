@@ -3,7 +3,7 @@ import type { DecisionDelegationView, McpCapabilityState, McpCapabilityView } fr
 import { delegationWords, mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
 import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
-import { cardIo, sinksOf } from './io.js';
+import { cardIo, scopeCancelled, sinksOf } from './io.js';
 
 const LEAVE = '-leave', APPLY = 'apply', NO = 'no';
 export type CardAsk = (request: CliCardRequest) => Promise<string | null>;
@@ -60,7 +60,7 @@ export async function toggleDelegations(context: ApprovalCommandContext, locale:
   ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void | ExitCode> {
   const host = context.delegations; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, print = (text: string) => emit(text, sinksOf(context));
-  const scope = await toggleScope(context, locale, explicit, 'deckent policy delegations', ask); if (!scope) return;
+  const scope = await toggleScope(context, locale, explicit, 'deckent policy delegations', ask); if (!scope) return scopeCancelled(context, locale);
   const query = { schemaVersion: 1 as const, scopeId: scope.scopeId, actor: 'mcp' as const }, view = await host.inspect(root, query, options), words = delegationWords(locale);
   print([scopeNotice(scope, locale), delegationTable(view, locale, cliTableStyle(context))].join('\n'));
   const step = await ask({ title: t('cli.policy.toggle.stepTitle', { scope: scope.scopeId }, locale), options: [...view.steps.filter(row => row.managed !== 'conflict').map(row => ({ id: row.step.id,
@@ -82,7 +82,7 @@ export async function toggleMcp(context: ApprovalCommandContext, locale: Locale,
   ask: Ask = cardIo(context, locale, ttlMs).ask): Promise<void | ExitCode> {
   const host = context.mcpCapabilities; if (!host) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, print = (text: string) => emit(text, sinksOf(context));
-  const scope = await toggleScope(context, locale, explicit, 'deckent policy mcp', ask); if (!scope) return;
+  const scope = await toggleScope(context, locale, explicit, 'deckent policy mcp', ask); if (!scope) return scopeCancelled(context, locale);
   const view = await host.inspectMcpCapabilities(root, scope.scopeId, options), words = mcpCapabilityWords(locale);
   print([scopeNotice(scope, locale), mcpTable(view, locale, cliTableStyle(context))].join('\n'));
   const picked = await ask({ title: t('cli.policy.toggle.groupTitle', { scope: scope.scopeId }, locale), options: [...view.groups.filter(state => state.managed !== 'conflict').map(state => ({
