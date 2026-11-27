@@ -123,6 +123,7 @@
   "coding.dependencies.allowance.withdrawn": "Package allowance withdrawn · decision {decisionId} · version {version}",
   "coding.dependencies.allowance.historical": "Recorded package decision {decisionId} · version {version} · inactive.",
   "coding.dependencies.allowance.absent": "There is no package allowance for this target and profile.",
+  "coding.dependencies.allowance.declined": "Cancelled. This command did not change the dependency allowance.",
   "coding.dependencies.run": "Task {taskId} · approved file list SHA-256 {listDigest} · lockfile SHA-256 {lockfileDigest} · checkout mount {checkoutMount}",
   "coding.dependencies.mountPending": "awaiting a recorded checkout",
   "coding.dependencies.empty": "This Run has no sealed package inputs.",

@@ -930,16 +930,29 @@ it.skipIf(process.platform !== 'linux')('releases secret custody while the perso
     const confirm = vi.fn(async () => { await switchPackageStore(f); return false; });
     const output: string[] = [];
     let declined: unknown;
-    // The person's No reaches the command: the allowance is not granted and a script sees 1 (owner decision 155).
-    expect(await codingCommand(['coding', 'template', '--allow-dependencies', '--kind', kind, '--scope', scopeId, '--lang', 'en'], {
+    const allowances = async () => JSON.parse(await readFile(f.configPath, 'utf8')).toolchains?.packageAllowances;
+    // The person's No reaches the command: the allowance is unchanged and a script sees 1 (owner decision 155).
+    const cli = (flag: string, lang: Locale, answer: () => Promise<boolean>) => codingCommand(['coding', 'template', flag, '--kind', kind, '--scope', scopeId, '--lang', lang], {
       root: f.root, env: f.options.env, stdin: Object.assign(new PassThrough(), { isTTY: true }), stdout: { isTTY: true, write(value: string) { output.push(value); } },
       configureCodingTemplate: async () => { throw Error('fixture reached template setup'); },
-      changeCodingAllowance: async (root, request, options) => (declined = await changeConfiguredPackageAllowance(root, request, options, confirm)),
-    })).toBe(1);
+      changeCodingAllowance: async (root, request, options) => (declined = await changeConfiguredPackageAllowance(root, request, options, answer)),
+    });
+    const none = await allowances();
+    expect(await cli('--allow-dependencies', 'en', confirm)).toBe(1);
     expect(declined).toEqual({ status: 'declined' });
-    expect(output.join('').trim()).toBe('Cancelled; configuration was not changed.');
+    expect(output.join('').trim()).toBe('Cancelled. This command did not change the dependency allowance.');
+    expect(await allowances()).toEqual(none);
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(await packageApprovals(f)).toEqual([]);
+    // A declined withdrawal keeps the granted row exactly.
+    await f.change('grant');
+    const granted = await allowances();
+    expect(granted).toHaveLength(1);
+    output.length = 0;
+    expect(await cli('--withdraw-dependencies', 'tr', async () => false)).toBe(1);
+    expect(declined).toEqual({ status: 'declined' });
+    expect(output.join('').trim()).toBe('Vazgeçildi. Bu komut bağımlılık iznini değiştirmedi.');
+    expect(await allowances()).toEqual(granted);
   } finally { f.store.close(); }
 });
 

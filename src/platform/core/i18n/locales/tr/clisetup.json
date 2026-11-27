@@ -123,6 +123,7 @@
   "coding.dependencies.allowance.withdrawn": "Paket izni geri çekildi · karar {decisionId} · sürüm {version}",
   "coding.dependencies.allowance.historical": "Kayıtlı paket kararı {decisionId} · sürüm {version} · etkin değil.",
   "coding.dependencies.allowance.absent": "Bu hedef ve profil için paket izni yok.",
+  "coding.dependencies.allowance.declined": "Vazgeçildi. Bu komut bağımlılık iznini değiştirmedi.",
   "coding.dependencies.run": "Görev {taskId} · onaylı dosya listesi SHA-256 {listDigest} · kilit dosyası SHA-256 {lockfileDigest} · çalışma kopyasındaki bağlama yeri {checkoutMount}",
   "coding.dependencies.mountPending": "çalışma kopyasının kaydı bekleniyor",
   "coding.dependencies.empty": "Bu iş için mühürlü paket girdisi yok.",
