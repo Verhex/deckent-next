@@ -154,11 +154,12 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       });
       for (const refresh of [1, 2]) {
         const shown = await capture.readShown(moved);
-        expect(shown.runs[0]!.previousTranscripts?.map(row => row.identity), `refresh ${refresh}`).toEqual([moved[1], moved[2]]);
+        expect(shown.runs[0]!.previousTranscripts, `refresh ${refresh}`).toEqual([moved[1], moved[2]].map(identity => ({ identity, transcript: { state: 'unverified', excerpt: [], truncated: false } })));
         expect(shown.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[0]!.attemptId}:POLICY_UNAVAILABLE`]);
       }
       failing = false;
-      expect((await capture.readShown(moved)).runs[0]!.previousTranscripts?.map(row => row.identity)).toEqual(moved);
+      const label = (identity: (typeof moved)[number]) => ({ identity, transcript: { state: 'unverified', excerpt: [], truncated: false } });
+      expect((await capture.readShown(moved)).runs[0]!.previousTranscripts).toEqual(moved.map(label));
       // N0 R8: with a Monitor page of one there are three chunks and the middle query fails: the first and third keep their labels and only the middle
       // identity is named (its chunk's own failure; the transaction still answers, so nothing is left unsent).
       const all = StatementSync.prototype.all; let selects = 0;
@@ -168,7 +169,7 @@ it('after the operator fixes the environment and resumes, a new attempt is check
       });
       try {
         const paged = await (await prepareMonitorInstall({ ...gConfig, inspection: { ...gConfig.inspection, maxPageSize: 1 } }, g.options.env, async () => true)).readShown(moved);
-        expect(selects).toBe(3); expect(paged.runs[0]!.previousTranscripts?.map(row => row.identity)).toEqual([moved[0], moved[2]]);
+        expect(selects).toBe(3); expect(paged.runs[0]!.previousTranscripts).toEqual([moved[0]!, moved[2]!].map(label));
         expect(paged.diagnostics.filter(note => note.startsWith('attempt-files-unavailable:'))).toEqual([`attempt-files-unavailable:s/${moved[1]!.attemptId}:ERR_SQLITE_ERROR`]);
       } finally { middle.mockRestore(); }
     } finally { g.store.close(); }

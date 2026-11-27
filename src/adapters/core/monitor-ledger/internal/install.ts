@@ -74,7 +74,8 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     // transaction, and an SQL failure is reported only for the identities sent to it. Each failure is this stage's existing per-attempt diagnostic.
     const shown = new Set(identities.map(identity => MonitorApplication.attemptKey(identity))), permitted: AttemptIdentity[] = [];
     const unavailable = (identity: AttemptIdentity, error: unknown) => notes.push(`attempt-files-unavailable:${identity.scopeId}/${identity.attemptId}:${code(error)}`);
-    for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.has(MonitorApplication.attemptKey(identity))) {
+    // N0 R9: `delete` admits each identity once (no identity can land in two chunks and get both a label and a read error).
+    for (const run of reading.runs) for (const { identity } of run.snapshot.previousBindings ?? []) if (shown.delete(MonitorApplication.attemptKey(identity))) {
       try { if (await readOutput(identity)) permitted.push(identity); } catch (error) { unavailable(identity, error); }
     }
     // A failed chunk names its own identities; chunks never sent (the transaction stopped answering) and a read that could not run at all name theirs.
