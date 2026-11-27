@@ -65,6 +65,7 @@
   "recovery.rollout.note.evidence": "Meeting the exit criteria is evidence only: promoting a rule and granting an action stay your decision (deckent policy recovery).",
   "recovery.review.pending": "{count} cases wait for your choice.",
   "recovery.review.none": "No case waits for your choice.",
+  "recovery.review.cancelled": "Review cancelled. No case was answered.",
   "recovery.review.title": "Case {case}: was the worker really lost?",
   "recovery.review.rule": "Rule {rule} · worker {activity} · launcher {launcher}",
   "recovery.review.gate": "Outside work: {result} · settled {settled} · {intents} intents",

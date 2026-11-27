@@ -65,6 +65,7 @@
   "recovery.rollout.note.evidence": "Çıkış ölçütlerinin sağlanması yalnız kanıttır: kuralı canlıya almak ve eyleme izin vermek sizin kararınızdır (deckent policy recovery).",
   "recovery.review.pending": "{count} vaka seçiminizi bekliyor.",
   "recovery.review.none": "Seçiminizi bekleyen vaka yok.",
+  "recovery.review.cancelled": "İnceleme iptal edildi. Hiçbir vaka yanıtlanmadı.",
   "recovery.review.title": "Vaka {case}: işçi gerçekten kayboldu mu?",
   "recovery.review.rule": "Kural {rule} · işçi {activity} · başlatıcı {launcher}",
   "recovery.review.gate": "Dış iş: {result} · tamamlanan {settled} · {intents} niyet",
