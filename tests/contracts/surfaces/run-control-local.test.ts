@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { PassThrough, Writable } from 'node:stream';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -10,6 +11,7 @@ import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } f
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import { main as cliMain } from '#composition/core/cli/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import * as monitor from '#composition/core/monitor/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -158,4 +160,35 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
   relocated.mockRestore(); listed.mockRestore();
   expect(output).toContain(english);
   expect(kept()).toEqual(rows);
+  // The person's card after a real entry repair: a Run absent where the project now points is the binding change, not "not found"; under the
+  // repaired binding a Run that is really absent stays RUN_NOT_FOUND. No card is asked and no row changes.
+  for (const key of [...(await loadComposedConfig(f.root, f.options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  const { issuer, subject } = readLocalOsIdentity();
+  for (const data of ['attached', 'selected']) { // the absent Run may be inspected in both installations, so its absence is what is read
+    await f.configure(data);
+    await writeFile(productResourcePath((await loadComposedConfig(f.root, f.options)).productLayout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'local-control',
+      restrictions: [], grants: [{ id: 'run', effect: 'allow', principals: [{ issuer, subject }], scopes: [scopeId], actions: ['inspect', 'cancel'],
+        resource: { kind: 'run', ids: [runId, 'no-such-run'] } }] }), { mode: 0o600 });
+  }
+  for (const elsewhere of [true, false]) {
+    await f.configure('selected');
+    relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
+    const resolved = vi.spyOn(monitor, 'inspectSurfaceRunIds').mockImplementationOnce(async (...args: Parameters<typeof listIds>) => {
+      try { return await listIds(...args); } finally { if (elsewhere) await f.configure('attached'); }
+    });
+    const asked = vi.spyOn(cards, 'askCliCard').mockResolvedValue('no');
+    output = '';
+    const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
+    const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
+      vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
+    try { expect(await cliMain(['run', 'hold', '--scope', scopeId, '--id', 'no-such-run', '--lang', 'en'])).not.toBe(0); }
+    finally { stdio.forEach(spy => spy.mockRestore()); }
+    expect(relocated).toHaveBeenCalled();
+    expect(resolved).toHaveBeenCalledOnce();
+    expect(asked).not.toHaveBeenCalled();
+    relocated.mockRestore(); resolved.mockRestore(); asked.mockRestore();
+    if (elsewhere) expect(output).toContain(english);
+    else { expect(output).not.toContain(english); expect(output).toContain('no-such-run'); }
+    expect(kept()).toEqual(rows);
+  }
 });
