@@ -60,10 +60,14 @@ const runWaits = (run: RunView): boolean => run.state.kind === 'parked';
  */
 export async function resolveRunId(context: RunCommandContext, scopeId: string, typed: string): Promise<string> {
   let ids: readonly string[];
-  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, repaired = context.repairedRunControlBinding;
+  const repaired = context.repairedRunControlBinding;
   // After an entry repair the list is read only under the repaired binding (owner 2026-11-27); a changed binding stops the call.
-  try { ids = repaired === undefined ? await listRunIds(context, root, scopeId, options) : await context.inspectSurfaceRunIds?.(root, scopeId, options, repaired) ?? []; }
-  catch (error) { if (isCodedError(error, 'RUN_CONTROL_BINDING_CHANGED')) throw error; return typed; }
+  if (repaired !== undefined) {
+    try { ids = await context.inspectSurfaceRunIds?.(context.root ?? process.cwd(), scopeId, { env: context.env ?? process.env }, repaired) ?? []; }
+    catch (error) { if (isCodedError(error, 'RUN_CONTROL_BINDING_CHANGED')) throw error; return typed; }
+  } else {
+    try { ids = await listRunIds(context, context.root ?? process.cwd(), scopeId, { env: context.env ?? process.env }); } catch { return typed; }
+  }
   const match = matchIdPrefix(typed, ids);
   if (match.kind === 'ambiguous') requireIdPrefix(typed, ids);
   return match.kind === 'unique' ? match.id : typed;
