@@ -154,6 +154,14 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
   expect(await readFile(join(h.f.project, 'result.txt'), 'utf8').catch(() => null)).toBeNull();
   // R5c: the prompt states the witnessed person's mode (ask for edits too), not the MCP actor's plain standart.
   expect(h.state.prompt).toContain('- Permission mode: standart (the person also asks for every edit)');
+  // CHAT-ROUTE (W23): the native agent CLI's own tools are off, so the prompt names the offered deckent change tools the policy leaves open
+  // (no plan port here: no propose_work; this policy refuses run_shell in every cell, so it is not named).
+  expect(h.state.prompt).toContain('- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change.'
+    + ' A built-in tool of the CLI stops the turn.'); expect(h.state.prompt).toContain('[Deckent runtime instructions v13]');
+  expect(h.state.prompt).toContain('- When the person asks to change project files or run a command and none of these tools fits, say which action is not available'
+    + ' in this session; do not use another tool in its place.');
+  // This fixture is the Claude CLI family; the Codex CLI family meets the same registry condition, so its turns take the same line.
+  expect(nativeCliAgent('codex-jsonl')?.agent.transport.kind).toBe('codex-mcp');
   const decided = await h.decide(event, 'allow');
   const result = await running;
   expect(decided).toMatchObject({ request: { requester: { issuer: expect.stringMatching(/\/mcp$/u) } }, decision: { deciderClass: 'human-tty' } });

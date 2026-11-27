@@ -28,7 +28,7 @@ type AgentSessionEffect = 'runs' | 'asks' | 'refused';
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type AgentSessionDecision = 'allow' | 'deny' | 'require-approval' | null;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). The shell call input a representative shell cell is decided with: where its calls resolve, and a contained command. */
 export type AgentSessionShellInput = { readonly realm: 'sandbox' | 'host'; readonly contained: true };
-const SCRATCH_EDIT_TOOLS: ReadonlySet<string> = new Set(['scratch_write']);
+export const SCRATCH_EDIT_TOOLS: ReadonlySet<string> = new Set(['scratch_write']);
 /** A read-class tool whose allowed call still opens the person's own window in every mode (the MCP proposal): described as asking. */
 const WINDOW_TOOLS: ReadonlySet<string> = new Set(['propose_mcp_server', AI_PROPOSAL_REGISTRY.tools.work, AI_PROPOSAL_REGISTRY.tools.setting]); // alpha.64: each opens the person's card
 const FETCH_TOOL = 'fetch_url';

@@ -1,8 +1,8 @@
 import { isAbsolute, relative, sep } from 'node:path';
-import type { AgentToolSpec, AgentTurnMessage, ShellRealm } from '#domain/index.js';
+import { AI_PROPOSAL_REGISTRY, type AgentToolSpec, type AgentTurnMessage, type ShellRealm } from '#domain/index.js';
 import { PACKAGE_VERSION, type ProductLayout } from '#platform/index.js';
 import { AGENT_CONTEXT_CARRY_VERSION, AGENT_CONTEXT_RENDER_VERSION } from './carry.js';
-import { renderAgentSessionContext, type AgentSessionSnapshot } from './session-context.js';
+import { renderAgentSessionContext, SCRATCH_EDIT_TOOLS, type AgentSessionSnapshot } from './session-context.js';
 
 /**
  * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
@@ -15,6 +15,8 @@ import { renderAgentSessionContext, type AgentSessionSnapshot } from './session-
  * rendered text.
  */
 export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 12;
+/** v13 CHAT-ROUTE: only a text that carries the change-route section (a native agent CLI turn) is v13; every text without it stays v12, byte for byte. */
+const CHANGE_ROUTE_PROMPT_VERSION = 13;
 /**
  * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
  * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
@@ -68,6 +70,29 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
 }
 
 /**
+ * CHAT-ROUTE (W23/W23B 2026-11-26: on a native agent CLI a cold change request was answered "this session is read-only" although edit_file,
+ * write_file and propose_work were offered): how changes happen when the CLI's own tools are off. Names the offered change tools that the
+ * turn's policy snapshot does not refuse in every cell (project edit tools, the work proposal, the shell); when none fits or none is usable, the model
+ * says which action is not available (no /do pointer: no typed surface data reaches this builder). Text only.
+ */
+function changeRoute(tools: readonly AgentToolSpec[], session: AgentSessionSnapshot | null | undefined): string[] {
+  const usable = (tool: AgentToolSpec) => !session?.tools.find(entry => entry.name === tool.name)?.effects.every(entry => entry.effect === 'refused');
+  const named = (pick: (tool: AgentToolSpec) => boolean) => tools.filter(tool => pick(tool) && usable(tool)).map(tool => tool.name).join(', ');
+  const routes = [[named(tool => tool.toolClass === 'edit' && !SCRATCH_EDIT_TOOLS.has(tool.name)), 'for a direct file change'],
+    [named(tool => tool.name === AI_PROPOSAL_REGISTRY.tools.work), 'for work a worker should do'], [named(tool => tool.toolClass === 'shell'), 'for commands']].filter(([names]) => names);
+  return ['', 'Changes in this session:', '- You run inside a CLI whose own built-in tools are off or refused here. Do not infer what the deckent tools may do from'
+    + ' the CLI\'s own sandbox (it may call itself read-only).',
+  ...(routes.length ? [`- Project files and commands change only through the deckent tools offered here: ${routes.map(([names, use]) => `${names} ${use}`).join('; ')}.`
+    + ' A built-in tool of the CLI stops the turn.',
+    '- When one of these tools fits the request, make the call instead of answering that you cannot or that the session is read-only. Policy and the permission'
+      + ' mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report what the tool result confirms.',
+    '- When the person asks to change project files or run a command and none of these tools fits, say which action is not available in this session;'
+      + ' do not use another tool in its place.']
+    : ['- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks for such a change, say that it is not'
+      + ' available in this session.'])];
+}
+
+/**
  * The service's instructions for an agent turn: which model runs (its catalog reference), where the model works (project root, Deckent
  * data root, configuration, the conversation's scratch area) and that Deckent's own state is protected, which tools exist by class and
  * that policy and the permission mode decide each call, how bounded results continue, and one progress line between tool rounds.
@@ -93,15 +118,18 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
   readonly session?: AgentSessionSnapshot | null;
   /** T6 (alpha.54): the person's configured response style (`terminal.responseStyle`); a null instruction (the default style) adds nothing, so the text and
    * the request digest of a turn without a chosen style stay as they were. */
-  readonly responseStyle?: { readonly id: string; readonly instruction: string | null } | null }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session, responseStyle } = input;
+  readonly responseStyle?: { readonly id: string; readonly instruction: string | null } | null;
+  /** CHAT-ROUTE: the turn runs through a native agent CLI whose own tools are off (its registry agent entry: every effect through deckent's bridge);
+   * true renders the section under the v13 header; absent or false adds nothing and keeps v12, so every other text and request digest stay as they were. */
+  readonly bridgedCli?: boolean | null }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session, responseStyle, bridgedCli } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
   const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
     ['Shell tool', named('shell'), shellNote(shell)]] as const;
   const lines = [
-    `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
+    `[Deckent runtime instructions v${bridgedCli ? CHANGE_ROUTE_PROMPT_VERSION : AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
     `Running deckent: ${PACKAGE_VERSION}; channel: ${PACKAGE_VERSION.includes('-') ? PACKAGE_VERSION.split('-')[1]!.split('.')[0] : 'stable'}.`
       + ' This identifies the running service. A project checkout may be a different revision; verify its version before drawing conclusions about live behavior.',
     'These instructions come from the deckent runtime service, not from the user. You are the coding assistant of the deckent operator'
@@ -119,7 +147,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
       + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
     '', 'deckent features you may point the user to (commands for the user; they are not among your tools):',
-    '- Work: /do <request> plans and runs a job; /runs shows jobs; /approvals shows what waits for the user\'s decision.',
+    `- Work: /do <request> ${bridgedCli ? 'asks for a plan; the person decides on any card it opens' : 'plans and runs a job'}; /runs shows jobs; /approvals shows what waits for the user's decision.`,
     '- Setup: /setup reopens the first-open steps; /model picks the model; /config changes settings; deckent doctor checks the installation.',
     '- Agents and skills: deckent agents (define, define-skill; --example prints a filled file).',
     '- Memory: deckent memory (propose, verify, search). Verified entries reach workers only when a job starts and the person turned'
@@ -148,6 +176,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       '- A read repeated with the same arguments returns a reference to the earlier result, not new content.');
   }
   if (session) lines.push('', renderAgentSessionContext(session));
+  if (bridgedCli) lines.push(...changeRoute(tools, session));
   const offers = (name: string) => tools.some(tool => tool.name === name);
   lines.push('', 'Working style:',
     ...(tools.length ? ['- Between tool rounds, write one short line to the user: what you found or what you will do next.'] : []),
