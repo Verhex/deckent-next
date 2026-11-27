@@ -78,7 +78,8 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     const proof = catalogEvidence(context, authority, command);
     const basis = replay ? await proof.read() : null;
     const children: (typeof command | ModelActivationCommand)[] = replay && channel ? await proof.settled(replay, channel) : [];
-    if (replay && basis !== null && proof.matches(basis, children)) return replay;
+    const verified = (result: NonNullable<typeof replay>) => { verifyCatalogActivationChange(result.receipt, command); return result; };
+    if (replay && basis !== null && proof.matches(basis, children)) return verified(replay);
     const settled = new Set(children.map(child => child.commandId)), prepare = [];
     let selected: string[] = [];
     if (channel) {
@@ -120,7 +121,7 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     }
     if (off && !replay) return off;
     if (replay) {
-      if (basis === null && !prepare.length) return replay;
+      if (basis === null && !prepare.length) return verified(replay);
       if (basis === null || !proof.matches(basis, children)) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
       const current = channel && (command.modelId === null ? channel.activation : channel.models.find(row => row.modelId === command.modelId)?.activation);
       if (current?.revision !== replay.receipt.changes[0]?.revision || current?.state !== (enabling ? 'active' : 'inactive'))

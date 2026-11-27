@@ -164,10 +164,12 @@ it('reads only affected siblings and preserves carry drift refusals', async () =
     { name: 'revision drift', writerError: 'MODEL_ACTIVATION_REVISION_CONFLICT' },
     { name: 'policy drift', writerError: 'POLICY_DENIED' },
     { name: 'binding drift', writerError: 'MODEL_ACTIVATION_CATALOG_CONFLICT' },
+    // The chat model is already on; a change after the profile write stops the worker write too.
+    { name: 'worker drift', current: true },
   ] as const;
   const observed: Record<string, unknown> = {};
   for (const scenario of scenarios) {
-    const existing = 'sameRevision' in scenario ? { ...start, revision: end.revision } : start;
+    const existing = 'current' in scenario ? end : 'sameRevision' in scenario ? { ...start, revision: end.revision } : start;
     const project: Record<string, unknown> = { provider_catalog: existing };
     const binding = (target: ModelReference) => new ModelBindingApplication({ read: async () => project['provider_catalog'] }).inspect(target);
     const record = async (target: ModelReference): Promise<ModelActivationRecord> => {
@@ -187,8 +189,11 @@ it('reads only affected siblings and preserves carry drift refusals', async () =
       register: async () => { throw new Error('unexpected registration'); },
       authorizePlan: async () => {}, workerNeeded, workerActivate: async () => { writes.push('worker'); return true; },
       adapter: () => ({ adapter: { id: 'adapter', version: 1, definition: {} }, protocol, tariff: 'unmetered' }),
+      ...('current' in scenario ? { beforeWrite: async () => {
+        if (writes.includes('provider_invocation_profiles')) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+      } } : {}),
       binding, activation: async target => {
-        if (target.modelId === 'selected') return null;
+        if (target.modelId === 'selected') return 'current' in scenario ? record(target) : null;
         if ('readError' in scenario) throw ErrorRegistry.createError(scenario.readError);
         return sibling;
       },
@@ -213,5 +218,6 @@ it('reads only affected siblings and preserves carry drift refusals', async () =
     'revision drift': { result: { code: 'MODEL_ACTIVATION_REVISION_CONFLICT' }, writes: ['provider_catalog'], workerChecks: 1 },
     'policy drift': { result: { code: 'POLICY_DENIED' }, writes: ['provider_catalog'], workerChecks: 1 },
     'binding drift': { result: { code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }, writes: ['provider_catalog'], workerChecks: 1 },
+    'worker drift': { result: { code: 'CONFIG_CONCURRENT_REVISION_HOLD' }, writes: ['provider_invocation_profiles'], workerChecks: 1 },
   });
 });

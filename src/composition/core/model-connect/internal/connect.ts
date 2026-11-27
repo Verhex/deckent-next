@@ -1,4 +1,4 @@
-import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
+import { configuredSiwcConnect, withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { modelConnectCommandSchema, type ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError, refuseRetiredModelActivation } from '#engine/index.js';
@@ -19,13 +19,14 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
-  let siwc: ReturnType<typeof configuredSiwcConnect> | null = null;
+  let siwc: ReturnType<typeof configuredSiwcConnect> | null = null, scopeId = '';
   let enablingWriteStarted = false;
   let connectPhase: 'before-profile-write' | 'profile-write-started' | 'profile-written' = 'before-profile-write';
   try {
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, command = modelConnectCommandSchema.safeParse(input).data;
-    const kind = registry.kinds.find(row => row.id === command?.connection), scopeId = command?.scopeId ?? '';
+    const kind = registry.kinds.find(row => row.id === command?.connection); scopeId = command?.scopeId ?? '';
     let observed: Awaited<ReturnType<typeof snapshotConfiguredConfig>> | null = null, globalDigest: string | null = null;
+    let own: { layer: 'global' | 'project'; digest: string } | null = null;
     const sameLayers = (snapshot: NonNullable<typeof observed>) => {
       if (observed && (!isDeepStrictEqual(observed.global, snapshot.global) || !isDeepStrictEqual(observed.project, snapshot.project)))
         throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
@@ -108,10 +109,15 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async authorizeDelegation() { await authority!.witness(); },
       principal,
       async layers() {
-        const snapshot = await snapshotConfiguredConfig(projectRoot, options);
+        const snapshot = await snapshotConfiguredConfig(projectRoot, options), written = own, hold = () => ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+        own = null;
+        // A re-read advances the expected state only by this connect's own verified write; any other change stops it.
+        if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !isDeepStrictEqual(observed![layer], snapshot[layer]))
+          || written?.layer === 'project' && snapshot.digest !== written.digest)) throw hold();
         observed = snapshot;
-        if (snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
+        if (written?.layer === 'global' || snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
           const global = await snapshotConfiguredConfig(projectRoot, options, 'global');
+          if (written?.layer === 'global' && global.digest !== written.digest) throw hold();
           sameLayers(global); globalDigest = global.digest;
         }
         return snapshot;
@@ -126,6 +132,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         if (change.keyPath === 'provider_invocation_profiles') connectPhase = 'profile-write-started';
         const outcome = target && profile ? await config.submitCatalogCapabilities(input, { reference: profile.reference, adapter: target.adapter, protocol: target.protocol })
           : await config.submit('set', input);
+        if (outcome.status === 'applied') own = { layer: change.layer, digest: outcome.result.afterDigest };
         if (change.keyPath === 'provider_invocation_profiles' && outcome.status === 'applied') connectPhase = 'profile-written';
         if (outcome.status === 'approval-pending') return { approvalId: outcome.approval.approvalId, keyPath: outcome.keyPath };
         const rebound = target && profile ? await inspectModelBinding(projectRoot, profile.reference, options) : null;
@@ -166,7 +173,10 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (error instanceof ModelConnectError) normalized = ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
     if (error instanceof ProviderConnectError) normalized = ErrorRegistry.createError(error.code);
     const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
-    const oauthConnected = siwc?.connected() === true;
+    // "Connected" only when the stored account record says so now (a renewal can fail after the account was chosen).
+    const chosen = siwc?.connectionId() ?? null;
+    const oauthConnected = chosen !== null && await withConfiguredSiwc(projectRoot, scopeId, options, 'inspect', app => app.list())
+      .then(rows => rows.some(row => row.connectionId === chosen && row.state === 'connected' && row.planUse), () => false);
     const localizeRefusal = oauthConnected ? (locale: Locale) => {
       if (failure.code === 'AUTHORITY_WITNESS_REQUIRED' && !enablingWriteStarted)
         return { ...failure.localize?.(locale), message: t('siwc.connectedActivationRefused', {}, locale) };

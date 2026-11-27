@@ -162,7 +162,7 @@ it('requires an explicit disconnected old account for new authorization and writ
       // Person witness reaches real SIWC models/ensure and real OAuth effects; only network/model listing is synthetic.
       state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
       await expect(connectConfiguredModel(f.project, request, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
-      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['inspect'], ['connect'], ['lease']]);
+      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['inspect'], ['connect'], ['lease'], ['inspect']]); // the refusal reads the stored account state
       expect(state.connect).toHaveBeenCalledTimes(1); expect(state.catalog).toHaveBeenCalledTimes(1);
       expect(storeSet).toHaveBeenCalled(); expect(audit).toHaveBeenCalled(); expect(browser).toHaveBeenCalledTimes(1);
       console.info('F11-R3 local OAuth positive:', JSON.stringify({ model, storeSet: storeSet.mock.calls.length, audit: audit.mock.calls.length, browser: browser.mock.calls.length }));
@@ -185,6 +185,14 @@ it('requires an explicit disconnected old account for new authorization and writ
     expect(state.custody.mock.calls).toEqual([['inspect']]);
     for (const spy of [state.models, state.connect, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
     await writeFile(policyPath, JSON.stringify(policy));
+    // A login to the single existing account decides on that account's own secret, not on the host secret it will not write.
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'oauth-host-secret-denied', grants: [...policy.grants,
+      { id: 'deny-host-secret', effect: 'deny', scopes: ['scope'], principals: me, actions: ['set'], resource: { kind: 'secret', ids: [SIWC_PROTOCOL.hostSecretName] } }] }));
+    await expect.soft(executeConfiguredSiwc(f.project, { operation: 'login', scopeId: 'scope' }, { env: f.env }))
+      .resolves.toMatchObject({ connectionId: connected.connectionId, state: 'connected' });
+    await oauth.disconnect(connected.connectionId).catch(() => undefined);
+    await writeFile(policyPath, JSON.stringify(policy));
+    for (const spy of [state.models, state.connect, state.catalog, storeSet, audit, browser]) spy.mockClear();
     state.custody.mockClear();
     const beforeFresh = await readFile(f.ledger), freshRequest = { operation: 'login', scopeId: 'scope', newAccount: true } as const;
     await expect(executeConfiguredSiwc(f.project, freshRequest, { env: { ...f.env, CLAUDECODE: '1' } }))
@@ -217,6 +225,20 @@ it('requires an explicit disconnected old account for new authorization and writ
     expect(formatHumanError(noWitness, { locale: 'tr' })).toContain('Aboneliğiniz bağlı. Model açılmadı. Modeli yetkili bir terminalden açın.');
     expect(await readFile(f.ledger)).toEqual(beforeFresh);
     expect(await readFile(path, 'utf8')).toBe(before);
+
+    // A subscription that is no longer connected when a later step refuses is not reported as connected.
+    host.witness = true;
+    await oauth.disconnect((await oauth.list()).find(row => row.state === 'connected')!.connectionId);
+    state.catalog.mockImplementationOnce(async () => {
+      await oauth.disconnect((await oauth.list()).find(row => row.state === 'connected')!.connectionId);
+      throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+    });
+    const lapsed = await executeConfiguredSiwc(f.project, freshRequest, { env: f.env }).catch((error: unknown) => error);
+    expect(lapsed).toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    if (!(lapsed instanceof DeckentError)) throw new Error('Expected a typed sign-in refusal');
+    expect.soft(lapsed.params).not.toHaveProperty('connectionState');
+    expect.soft(formatHumanError(lapsed, { locale: 'en' })).not.toContain('Your subscription is connected');
+    expect(await readFile(f.ledger)).toEqual(beforeFresh);
   } finally { host.witness = true; state.oauth = null; state.owner = null; }
 
 });

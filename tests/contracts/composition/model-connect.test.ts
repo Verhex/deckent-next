@@ -87,6 +87,14 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const again = await connect(f.project, command, f.options, { registry: localRegistry });
     expect(again.steps).toEqual({ catalog: 'present', declaration: 'present', profile: 'present', activation: 'present', carried: 0 });
     expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
+    // A reconnect that switches nothing on does not ask for the permission to switch the chat model on.
+    const policyPath = join(f.data, 'policy.json'), policy = await readFile(policyPath, 'utf8');
+    await f.writePolicy([...f.grants, { id: 'deny-current-chat', effect: 'deny', actions: ['activate'], scopes: 'all', principals: me,
+      resource: { kind: 'model-activation', ids: [modelActivationTargetId(reference)] } }]);
+    await expect.soft(connect(f.project, { ...command, commandId: 'connect-current' }, f.options, { registry: localRegistry }))
+      .resolves.toMatchObject({ status: 'connected', steps: { profile: 'present', activation: 'present' } });
+    await writeFile(policyPath, policy); clearConfigCache();
+    expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
       const db = new DatabaseSync(f.ledger);
     try { db.prepare('DELETE FROM model_catalog_activations WHERE channel_id=? AND model_id=?').run('openai-api', 'gpt-6-luna'); }
     finally { db.close(); }
@@ -389,6 +397,29 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
 
   expect(await asPerson(raw)).toMatchObject({ status: 'connected', steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
   expect(methodLog).toEqual(['GET', 'POST', 'GET', 'POST', 'GET', 'POST']);
+
+  // A profile another writer adds after this connect's declaration write is never overwritten: the connect stops instead.
+  const secondId = 'witness-loopback-second', foreign = structuredClone((await f.config()).provider_invocation_profiles.profiles[0]!);
+  Object.assign(foreign, { id: 'concurrent-writer', scopeId: 'scope-concurrent' });
+  const documents = witnessAdapters.createConfigFileDocuments;
+  const concurrent = vi.spyOn(witnessAdapters, 'createConfigFileDocuments').mockImplementation((...args) => {
+    const port = documents(...args);
+    return { ...port, async publish(input, planner) {
+      const written = await port.publish(input, planner);
+      if (input.keyPath === 'provider_catalog') {
+        const config = await f.config(); config.provider_invocation_profiles.profiles.push(foreign);
+        await writeFile(f.path, JSON.stringify(config), { mode: 0o600 });
+      }
+      return written;
+    } };
+  });
+  try {
+    await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-concurrent', model: { nativeId: secondId } }, f.options,
+      { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+        return Response.json(init.method === 'GET' ? { data: [{ id: secondId }] } : { choices: [] });
+      } } }))).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  } finally { concurrent.mockRestore(); }
+  expect.soft((await f.config()).provider_invocation_profiles.profiles).toContainEqual(foreign);
 
 });
 

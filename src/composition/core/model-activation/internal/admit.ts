@@ -56,6 +56,9 @@ async function admit(root: string, input: ModelActivationCommand, options: Confi
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
     const app = configuredChatActivation(command, context, authority);
     const { replay, current } = await app.preflight();
+    // A stored receipt is returned only under the current inspect permission, as the base inspection asked it.
+    if (replay && cascade) await new ModelActivationPolicyAuthorization({ async load() { return context.document; } })
+      .authorize('inspect', { scopeId, reference: command.reference }, context.principal);
     if (replay && (!cascade || current?.revision !== replay.receipt.record.revision)) return replay;
     const off = command.action === 'deactivate' ? replay ?? await app.write() : null;
     const writes = cascade ? await planWorkerWrites(root, scopeId, command.reference, command.commandId, command.action, options, context, authority, false) : [];
@@ -92,10 +95,8 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
     // A chat receipt replay with a newly missing child still requires a witness.
     const planned = await planCatalogWrite(context, authority, child);
-    writes.push(async () => {
-      if (action === 'activate' && planned.replay) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-      return planned.write(channel, [model.modelId]);
-    });
+    if (action === 'activate' && planned.replay) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+    writes.push(() => planned.write(channel, [model.modelId]));
   }
   return writes;
 }

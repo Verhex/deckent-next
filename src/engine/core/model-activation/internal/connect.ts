@@ -517,8 +517,10 @@ export class ModelConnectApplication {
       steps.activation = 'written';
     }
     }
+    // The worker write passes the same before-write check as the other enabling writes.
+    const workerWrite = async () => { if (!ports.workerActivate) return false; await ports.beforeWrite?.(); return ports.workerActivate(target.reference, step(command.commandId, 'worker', String(index))); };
     if (kind.connect.headless && !workerIds?.includes(target.nativeId)) worker = 'image-required'; // the image gates only the worker activation, and the result says so
-    else if ((!ports.authorizePlan || selection[index]?.worker) && await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
+    else if ((!ports.authorizePlan || selection[index]?.worker) && await workerWrite()) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
     }
     if (!profiled) steps.profile = 'skipped';

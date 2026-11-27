@@ -25,7 +25,7 @@ export function configuredSiwcConnect(root: string, command: ModelConnectCommand
     }, presentation);
   };
   return {
-    connected: () => session !== null,
+    connectionId: () => session?.connectionId ?? null,
     async models() {
       const selected = await ensure();
       return withConfiguredSiwc(root, command.scopeId, options, 'lease', (app, caller) => listSiwcModels(signal => app.lease(selected.connectionId, caller, signal)));
