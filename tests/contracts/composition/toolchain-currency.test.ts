@@ -45,10 +45,9 @@ it('reports per provider from admitted preflight pins with one bounded registry 
   expect(report).toMatchObject({ mode: 'report', registryEndpoint: f.endpoint });
   const byProvider = Object.fromEntries(report.providers.map(entry => [entry.provider, entry]));
   expect(byProvider.codex).toMatchObject({ status: 'stale', latest: { version: '0.155.1' }, admitted: [{ profile: { id: 'codex-old' }, version: '0.150.0' }, { profile: { id: 'codex-new' }, version: '0.155.1' }] });
-  // Owner 114: claude's Docker pin runs no image (its login may not be used in Docker), so the report the refresh plans from does not count it.
-  expect(byProvider.claude).toMatchObject({ status: 'not-admitted', admitted: [], latest: null });
+  expect(byProvider.claude).toMatchObject({ status: 'stale', latest: { version: '2.1.300' } });
   expect(byProvider.cursor).toMatchObject({ status: 'not-admitted', mechanism: 'installer-script', latest: null });
-  expect(f.requests.sort()).toEqual(['/%40openai%2Fcodex/latest']);
+  expect(f.requests.sort()).toEqual(['/%40anthropic-ai%2Fclaude-code/latest', '/%40openai%2Fcodex/latest']);
 });
 it('stays offline-honest: disabled mode makes no request and an unreachable registry reports unknown-offline with a reason code', async () => {
   const off = await fixture({ mode: 'off' }, {});
@@ -58,8 +57,7 @@ it('stays offline-honest: disabled mode makes no request and an unreachable regi
   expect(off.requests).toEqual([]);
   const unreachable = await fixture({ registryEndpoint: 'https://127.0.0.1:1', timeoutMs: 500 }, {});
   const report = await inspectToolchainCurrency(unreachable.project, unreachable.options);
-  expect(report.providers.find(entry => entry.provider === 'codex')).toMatchObject({ status: 'unknown-offline', reason: 'NPM_REGISTRY_UNAVAILABLE' });
-  expect(report.providers.find(entry => entry.provider === 'claude')).toMatchObject({ status: 'not-admitted' });
+  expect(report.providers.find(entry => entry.provider === 'claude')).toMatchObject({ status: 'unknown-offline', reason: 'NPM_REGISTRY_UNAVAILABLE' });
   const injected = await inspectToolchainCurrency(unreachable.project, unreachable.options, async () => { throw new Error('boom'); });
   expect(injected.providers.find(entry => entry.provider === 'codex')).toMatchObject({ status: 'unknown-offline', reason: 'NPM_REGISTRY_UNAVAILABLE' });
 });
@@ -74,7 +72,7 @@ it('doctor --toolchains is an explicit opt-in that embeds the report; default do
   await runKernelCommand(['doctor', '--toolchains', '--json'], context);
   const data = JSON.parse(lines.join('')); expect(calls).toBe(1);
   expect(data.toolchains.providers.find((entry: { provider: string }) => entry.provider === 'codex')).toMatchObject({ status: 'stale' });
-  expect(data.toolchains.providers.find((entry: { provider: string }) => entry.provider === 'claude')).toMatchObject({ status: 'not-admitted' });
+  expect(data.toolchains.providers.find((entry: { provider: string }) => entry.provider === 'claude')).toMatchObject({ status: 'ahead' });
   lines.length = 0;
   await runKernelCommand(['doctor', '--toolchains', '--verbose', '--lang', 'tr'], context);
   expect(lines.join('')).toMatch(/Toolchain güncelliği/); expect(lines.join('')).toMatch(/codex: stale/);

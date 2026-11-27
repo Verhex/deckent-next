@@ -6,13 +6,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initializeNativeCodingRegistry, configureNativeCodingTemplate, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { observeSetupPermissions, applySetupPermissions, configuredSetup } from '#composition/core/setup/index.js';
 import { applyPolicyTemplateInstallation, openOwnPermissionMode, inspectPolicyTemplate } from '#composition/core/installation/index.js';
-import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
-import { createNativeCodingTemplate, withLocalPrincipalChannel } from '#adapters/index.js';
+import { withLocalPrincipalChannel } from '#adapters/index.js';
 import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { setupInitCommand, createSetupController } from '#surfaces/core/setup/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
-import { configureNativeTemplate, type NativeTemplatePorts } from '#engine/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 
 const roots: string[] = [];
@@ -68,28 +67,6 @@ it('U4C: an explicit image adds a second provider by preview/CAS while preservin
   expect(applied.status).toBe('applied'); expect(applied.registry.profiles).toHaveLength(2); expect(applied.registry.evaluators).toEqual(first.registry.evaluators);
   expect(f.auditCount()).toBe(audits + 1);
   await expect(addNativeCodingProfile(f.root, { ...next, apply: true, digest: preview.digest, expect: preview.expect }, f.options, deps)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
-  // Owner 114: a template bound to a connection records its host CLI, not the version inside the image it names; a Docker profile for that image measures it.
-  const image = `sha256:${'c'.repeat(64)}`, { executable, ...limits } = docker; void executable;
-  const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque-subscription-fixture',
-    definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: '/fixture/state', ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } };
-  const invocation = { provider: 'codex', cliVersion: '0.170.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' };
-  const bound = createNativeCodingTemplate({ ...limits, imageId: image }, invocation, binding), boundA = createNativeCodingTemplate(limits, invocation, binding);
-  await f.mutate(config => { const registry = (config['admission'] as { registry: { profiles: unknown[]; kinds: unknown[] } }).registry;
-    registry.profiles.push(bound, boundA); registry.kinds.push({ kind: 'connected', profile: { id: bound.id, version: 1 } }, { kind: 'connected-a', profile: { id: boundA.id, version: 1 } }); });
-  const measured = await addNativeCodingProfile(f.root, { provider: 'codex', kind: 'codex-image-c', image, apply: false }, f.options, { ...person, detect: async () => 'codex-cli 0.171.0' });
-  expect(measured.profile.parameters).toMatchObject({ docker: { imageId: image }, invocation: { cliVersion: 'codex-cli 0.171.0' } });
-  // A measurement that fails keeps HEAD's choice (the pin naming that image) instead of refusing where HEAD went on.
-  expect((await addNativeCodingProfile(f.root, { provider: 'codex', kind: 'codex-image-c', image, apply: false }, f.options, { ...person, detect: async () => { throw new Error('daemon down'); } }))
-    .profile.parameters).toMatchObject({ invocation: { cliVersion: '0.170.0' } });
-  // `coding template --docker` takes a connected kind back to Docker as HEAD did (no new refusal).
-  const back = await configureNativeCodingTemplate(f.root, { provider: 'codex', kind: 'connected', detach: true, image, apply: false }, f.options, person);
-  expect(back.status).toBe('preview'); expect(back.profile.parameters['worker']).toBeUndefined();
-  // Binding to a connection keeps HEAD's choice (owner 114 frozen R8, the record file is weak): a re-bound connected kind keeps its recorded version and
-  // a first bind from a Docker template takes that template's pin, whatever the connection's record says.
-  const rebind = (kind: string, observed: string | null) => configureNativeTemplate({ provider: 'codex', kind, connection: 'connection-a', apply: false }, { snapshot: () => snapshotConfiguredConfig(f.root, { ...f.options, heal: false }),
-    template: createNativeCodingTemplate, connection: async () => binding, observed: async () => observed } as unknown as NativeTemplatePorts);
-  for (const [kind, observed, version] of [['connected-a', null, '0.170.0'], ['connected-a', '0.180.0', '0.170.0'], ['feature', '0.180.0', 'codex-cli 0.159.2']] as const)
-    expect((await rebind(kind, observed)).profile.parameters['invocation']).toMatchObject({ cliVersion: version });
 });
 
 it('U4C: witnessed profile defaults resume a partially opened grant and persist the mode through the U5 owner with stale/AI refusals', async () => {

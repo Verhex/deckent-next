@@ -2,7 +2,7 @@ import { NATIVE_CODING_TEMPLATE_ADAPTER_ID, NATIVE_NODE_DEPENDENCY_LAYOUT, persi
 import { isCodedError, ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { affectedToolchainProfiles, imageToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
+import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
 import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
 import type { NativeCliWorkerBinding } from '#capabilities/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
@@ -106,11 +106,8 @@ export async function addNativeProfile(input: unknown, ports: NativeTemplatePort
   if (hold) refuse(hold);
   const existing = executionRegistrySchema.safeParse(read.effective.admission?.registry);
   if (!existing.success) refuse('CODING_TEMPLATE_REGISTRY_INVALID');
-  // Owner 114: the version inside the image: its image pin, else its measurement; only a failed measurement falls back to HEAD's choice (any pin naming it).
-  const same = (pin: { provider: string; imageId: string | null }) => pin.provider === request.provider && pin.imageId === request.image;
-  const fallback = affectedToolchainProfiles(read.effective).find(same)?.cliVersion;
-  const cliVersion = imageToolchainProfiles(read.effective, () => false).find(same)?.cliVersion
-    ?? await ports.detect(request.provider, { ...settings, imageId: request.image }).catch((error: unknown) => { if (fallback === undefined) throw error; return fallback; });
+  const pins = affectedToolchainProfiles(read.effective).filter(pin => pin.provider === request.provider && pin.imageId === request.image);
+  const cliVersion = pins[0]?.cliVersion ?? await ports.detect(request.provider, { ...settings, imageId: request.image });
   const { executable, ...resources } = settings; void executable;
   const candidate = ((): ExecutionProfileDefinition => { try { return ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
     ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) }); } catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); } })();

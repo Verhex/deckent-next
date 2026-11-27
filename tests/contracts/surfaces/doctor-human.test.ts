@@ -39,11 +39,11 @@ async function project(config: unknown = {}) {
 }
 const facts = (extra: Partial<DoctorCheckFacts> = {}): DoctorCheckFacts => ({ scopeId: 'live', toolchainsRequested: false, identityProfile: { state: 'missing' },
   backupPassphraseStored: true, retiringModels: [{ modelId: 'model-x', channelId: 'codex-cli', state: 'deprecated', date: '2026-12-01' }], poolStatus: 'ready',
-  toolchainUpdateEnabled: true, imageRefreshRestarts: true, ...extra });
+  toolchainUpdateEnabled: true, ...extra });
 const report = {
   platform: 'wsl', status: 'ready' as const, node: { version: 'v26.10.0', floor: '24.22.0', status: 'supported' as const },
   host: { cpuCores: 16, totalMemMB: 36081, recommendedMaxWorkers: 15 }, company: { companyId: 'default' }, principal: { id: 'me' },
-  secretStore: { backend: 'core.secret-store.encrypted-file@1', status: 'ready' }, imageRefresh: { status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }, serviceConfig: 'stopped' as const,
+  secretStore: { backend: 'core.secret-store.encrypted-file@1', status: 'ready' }, imageRefresh: { status: 'failed', reason: 'BUILD_FAILED', imageVersion: null },
   installationBinding: { capability: 'supported' as const, strength: 'machine' as const, source: 'platform' },
   shellRealm: { mode: 'prefer-sandbox', selected: 'landlock', marker: 'sandbox: landlock', notice: '[deckent] internal realm notice', code: null, rejected: [], preferSandbox: null,
     selfTest: { status: 'ok' as const, detail: null, durationMs: 4 } },
@@ -116,7 +116,8 @@ describe('doctor rows (pure)', () => {
     expect(renderDoctorReport(report, [], 'tr')).toContain("deckent'in işçileri ve yalıtım alanı bu anahtarları okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir.");
     expect(renderDoctorReport(report, [], 'en')).toContain("deckent's workers and sandbox cannot read them; other programs running as your user can.");
     const checks = doctorChecks(report, facts(), 'tr');
-    for (const check of checks.filter(row => row.state === 'warning' || row.state === 'error')) expect(check.next, check.id).toBeTruthy();
+    // Owner 114: the failed image refresh row alone offers no step (asserted below); every other warning keeps its next step.
+    for (const check of checks.filter(row => (row.state === 'warning' || row.state === 'error') && row.id !== 'work.image')) expect(check.next, check.id).toBeTruthy();
     const budget = doctorChecks(report, facts({ budgetPeriodText: 'No API budget yet' }), 'en').find(row => row.id === 'work.budgetPeriod');
     expect(budget).toMatchObject({ state: 'warning', next: 'deckent models create-budget --usd <amount> --scope live' });
     const text = renderDoctorChecks(checks, 'tr');
@@ -168,14 +169,8 @@ describe('doctor rows (pure)', () => {
     expect(doctorChecks(image, facts(), 'en').find(row => row.id === 'work.image')?.text).toBe('Worker image is current');
     expect(doctorChecks({ ...image, imageRefresh: { status: 'current', reason: null, imageVersion: 'v7' } }, facts({ imageId: id }), 'en').find(row => row.id === 'work.image')?.text)
       .toBe('Worker image is current (v7)');
-    for (const locale of ['en', 'tr'] as const) { const failed = doctorChecks(report, facts({ imageId: id }), locale).find(row => row.id === 'work.image')!; expect(failed.fix).toBeUndefined(); // owner 114
-      expect(failed).toMatchObject({ state: 'warning', needsAttention: true, next: expect.stringMatching(/deckent runtime restart$/u), text: locale === 'en' ? 'The last worker image refresh failed (BUILD_FAILED); task kinds keep the image they pin' : 'Son işçi imajı yenilemesi başarısız (BUILD_FAILED); iş türleri sabitledikleri imajı korur' }); }
-    // ...and promises a rerun only where a service start runs one and the code is not one that repeats (registry data): otherwise no step.
-    // A running service may refuse `runtime restart` (external manager, no managed shutdown, a build to wait for), and a marker without a code names no cause.
-    const failedWith = (reason: string | null) => ({ ...report, imageRefresh: { status: 'failed', reason, imageVersion: null } });
-    for (const [input, extra] of [[report, { imageRefreshRestarts: false }], [failedWith('WORKER_IMAGE_CONSENT_MISSING'), {}], [{ ...report, serviceConfig: 'current' as const }, {}],
-      [{ ...report, serviceConfig: 'stale' as const, imageBuilding: true }, {}], [failedWith(null), {}]] as const)
-      expect(doctorChecks(input as never, facts(extra), 'en').find(row => row.id === 'work.image')!.next).toBeUndefined();
+    for (const locale of ['en', 'tr'] as const) { const failed = doctorChecks(report, facts({ imageId: id }), locale).find(row => row.id === 'work.image')!; expect(failed.fix).toBeUndefined(); expect(failed.next).toBeUndefined(); // owner 114
+      expect(failed).toMatchObject({ state: 'warning', needsAttention: true, text: locale === 'en' ? 'The last worker image refresh failed (BUILD_FAILED); task kinds keep the image they pin' : 'Son işçi imajı yenilemesi başarısız (BUILD_FAILED); iş türleri sabitledikleri imajı korur' }); }
   });
   it('PRE-34: the verbose pool line names the pool row and capacity it read, never a bare "(-)"', () => {
     const pool = { schemaVersion: 1, poolId: 'live', capacity: { executionSlots: 4, inFlightSlots: 6 } } as never;

@@ -1,21 +1,20 @@
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { imageToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, toolchainCatalog,
-  type AdmittedToolchain, type LatestLookup, type ToolchainCurrencyReport, type ToolchainAdmissionSource } from '#engine/index.js';
+import { admittedToolchains, imageToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, toolchainCatalog,
+  type LatestLookup, type ToolchainAdmissionSource, type ToolchainCurrencyReport } from '#engine/index.js';
 import { fetchNpmLatestVersion, nativeDockerCredential, NpmRegistryError, type NpmLatestVersion, type NpmLatestVersionInput } from '#adapters/index.js';
 
 export type NpmLatestVersionFetcher = (input: NpmLatestVersionInput) => Promise<NpmLatestVersion>;
 /** Owner 114 (2026-11-08 custody data): a CLI whose login may not be used in Docker; a CLI the adapter catalog does not list stays counted. */
 export const dockerLoginClosed = (provider: string) => { try { return nativeDockerCredential(provider as Parameters<typeof nativeDockerCredential>[0]) === 'prohibited'; } catch { return false; } };
-/** The pins the image refresh may rebuild and re-pin; report, plan and the builder's receipt check all read this one view. */
+/** Owner 114 option 0: the pins whose kind runs its image, the only ones the refresh builds and re-pins; the report itself keeps every admitted pin. */
 export const imagePins = (config: ToolchainAdmissionSource) => imageToolchainProfiles(config, dockerLoginClosed);
 /** Read-only currency report. Network is used only when `toolchains.currency.mode` is `report`, one bounded request per npm package;
- * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. `pins` is the image view; the update's consent basis
- * reads HEAD's view of every pin (`admittedToolchains`). */
+ * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. */
 export async function inspectConfiguredToolchainCurrency(projectRoot: string, options: ConfigLoadOptions = {},
-  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion, pins: (config: ToolchainAdmissionSource) => readonly AdmittedToolchain[] = imagePins): Promise<ToolchainCurrencyReport> {
+  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> {
   const config = await loadConfig(projectRoot, options);
   const policy = config.toolchains.currency;
-  const admitted = pins(config).map(({ profile, provider, cliVersion }) => ({ profile, provider, cliVersion }));
+  const admitted = admittedToolchains(config);
   const lookups = new Map<string, Promise<LatestLookup>>();
   const lookup = (pkg: string): Promise<LatestLookup> => {
     const cached = lookups.get(pkg); if (cached) return cached;

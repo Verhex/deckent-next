@@ -5,7 +5,7 @@ import {
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { executionRegistrySchema, NATIVE_CODING_TEMPLATE_ADAPTER_ID } from '#domain/index.js';
-import { configuredInvocationProfiles, configServiceState, hasCapacityRoom, refreshTriggerAllowed } from '#engine/index.js';
+import { configuredInvocationProfiles, configServiceState, hasCapacityRoom } from '#engine/index.js';
 import { firstJobKind, DOCTOR_NATIVE_PLUGIN_SCAN, DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, doctorReadinessChecks, doctorCounts, doctorNeedsAttention, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { modelRetirementWarnings, scopeHasMeteredModel, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
@@ -89,7 +89,6 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
       })),
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus: poolReadiness.status, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
-    imageRefreshRestarts: refreshTriggerAllowed(config.toolchains.update, 'startup') && !!config.execution?.docker,
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry, connection: !!config.execution && !docker }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },

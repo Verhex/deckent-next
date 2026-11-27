@@ -47,7 +47,7 @@ export function insertHistoryLine(dockerfile: string, line: string): string {
   return dockerfile.slice(0, index) + line + '\n' + dockerfile.slice(index);
 }
 /** Pure plan: a build is proposed only when an npm provider is stale; nothing here touches packages, images or config. `only` (owner 114): the
- * providers the consent basis judged stale; a provider outside it is never built. */
+ * providers with an image-running pin behind the published version; a stale provider outside it is never built. */
 export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[]; heldVersion?: string | null; only?: readonly string[] }>): ToolchainUpdatePlan {
   const recipe = workerImageRecipeSchema.safeParse(input.recipe);
   if (!recipe.success) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID');
