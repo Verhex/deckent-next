@@ -23,7 +23,7 @@ export function activationAuthority(root: string, scopeId: string, options: Conf
   let operation: string | undefined;
   const guards: ((current: Context) => Promise<void>)[] = [];
   const conflict = () => new ModelActivationStoreError('MODEL_ACTIVATION_CATALOG_CONFLICT');
-  const check = async (current: Context, publishing = false) => {
+  const same = (current: Context, publishing = false) => {
     if (localPrincipalChannel() !== channel || localPrincipalPeer() !== peer
       || !isDeepStrictEqual(current.principal, initial.principal)
       || current.config.company.id !== initial.config.company.id || current.config.projectRoot !== initial.config.projectRoot
@@ -32,10 +32,15 @@ export function activationAuthority(root: string, scopeId: string, options: Conf
       || (!publishing || projectId !== null) && current.projectId !== projectId) {
       throw conflict();
     }
+  };
+  const check = async (current: Context, publishing = false) => {
+    same(current, publishing);
     for (const guard of guards) await guard(current);
     if (operation) await assertConfiguredActivationWitness(operation, current, options);
   };
   return {
+    /** A later read of the same command: the first operation's channel, person, company, project, layout and installation, or a conflict. */
+    bound(current: Context) { same(current); return current; },
     pin<T>(basis: T, observe: (current: Context) => T | Promise<T>) {
       guards.push(async current => { if (!isDeepStrictEqual(basis, await observe(current))) throw conflict(); });
     },
