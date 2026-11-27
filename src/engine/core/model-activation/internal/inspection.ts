@@ -1,4 +1,4 @@
-import { parseModelActivationQuery, type ModelActivationQuery, type ModelActivationRecord } from '#domain/index.js';
+import { parseModelActivationQuery, type ModelActivationQuery, type ModelActivationRecord, type ModelActivationReceipt } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { verifyModelActivationRecord } from './evidence.js';
 import { ModelActivationStoreError } from './port.js';
@@ -6,6 +6,7 @@ import type { ModelActivationAuthorizer } from './application.js';
 
 export interface ModelActivationReader {
   loadRecord(scopeId: string, reference: ModelActivationQuery['reference']): Promise<ModelActivationRecord | null>;
+  loadReceipt?(scopeId: string, commandId: string): Promise<ModelActivationReceipt | null>;
   close(): void;
 }
 export type ModelActivationInspection = Readonly<{ schemaVersion: 1; scopeId: string;

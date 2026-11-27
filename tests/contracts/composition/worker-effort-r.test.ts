@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -51,8 +52,8 @@ async function fixture(efforts = ['ultra'], ultraTarget = false) {
     lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
     protocols: [{ family: 'fixture', version: 'v1', capabilities: [] }] }] }] };
   await applyModelCatalog(project, { schemaVersion: 1, commandId: 'catalog-register', scopeId: 's', action: 'register', catalog }, options);
-  for (const id of [null, modelId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: `activate-${id}`, scopeId: 's',
-    action: 'activate', channelId, modelId: id, expectedRevision: 0 }, options);
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, modelId].map(id => ({ schemaVersion: 1, commandId: `activate-${id}`, scopeId: 's',
+    action: 'activate', channelId, modelId: id, expectedRevision: 0 })));
   const profile = (runId: string) => { const db = new DatabaseSync(path, { readOnly: true });
     try { const row = db.prepare('SELECT snapshot FROM runs WHERE run_id = ?').get(runId) as { snapshot: string };
       return JSON.parse(row.snapshot).execution.tasks[0].profile; } finally { db.close(); } };

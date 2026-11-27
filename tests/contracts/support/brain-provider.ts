@@ -17,6 +17,7 @@ import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
 import { nativeClaudeWorkers } from './native-claude-worker.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { businessWorkClasses, fixtureDockerRegistry } from './execution-registry.js';
+import { witnessedModelActivation } from './witnessed-model-activation.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string | ((body: string) => string); hold?: boolean;
@@ -136,8 +137,10 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   }
   if (seed) {
     await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-seed', scopeId: 's', action: 'register', catalog: seed }, loadOptions);
-    for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,
-      scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }, loadOptions);
+    const commands = [null, workerModel.nativeId].map(modelId => ({ schemaVersion: 1, commandId: 'worker-activate-' + modelId,
+      scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }));
+    const seeded = await witnessedModelActivation('applyModelCatalog', project, loadOptions, commands);
+    if (JSON.stringify(seeded.map(result => result.replayed)) !== '[false,false]') throw new Error('Worker activation fixture did not write both activations');
     // Owner 2026-11-08: a Claude subscription worker runs tokenless on the person's login (v2 binding), never in Docker.
     const workers = await nativeClaudeWorkers(project, 's', loadOptions), configPath = join(project, '.deckent', 'config.json');
     Object.assign(config, JSON.parse(await readFile(configPath, 'utf8')));

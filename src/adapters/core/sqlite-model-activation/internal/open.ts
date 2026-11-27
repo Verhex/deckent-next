@@ -1,9 +1,9 @@
-import type { SupervisorProfileValidator } from '#engine/index.js';
+import { activationReceiptRead, type SupervisorProfileValidator } from '#engine/index.js';
 import type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { openLedgerDatabase, MODEL_CATALOG_LEDGER_VERSION, openSqliteLedger, requireLedgerVersion, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteModelActivationStore } from './store.js';
-import { SqliteModelCatalogReader, SqliteModelCatalogStore } from './catalog.js';
+import { SqliteModelCatalogAdmissionReader, SqliteModelCatalogReader, SqliteModelCatalogStore } from './catalog.js';
 
 export function openSqliteModelActivationStore(path: string, options: SqliteLedgerOptions,
   migrationMode: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator) {
@@ -14,12 +14,12 @@ export function openSqliteModelCatalogStore(path: string, options: SqliteLedgerO
   return new SqliteModelCatalogStore(openSqliteLedger(path, options, migrationMode));
 }
 /** Read-only catalog view for Run admission: never migrates or writes; a ledger older than v43 or newer than this build is refused. */
-export function openSqliteModelCatalogReader(path: string, options: { readonly busyTimeoutMs: number }) {
+export function openSqliteModelCatalogReader(path: string, options: { readonly busyTimeoutMs: number; readonly [activationReceiptRead]?: true }) {
   let db: DatabaseSync | undefined;
   try {
     db = openLedgerDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_CATALOG_LEDGER_VERSION);
-    return new SqliteModelCatalogReader(db);
+    return options[activationReceiptRead] ? new SqliteModelCatalogAdmissionReader(db) : new SqliteModelCatalogReader(db);
   } catch (error) {
     try { db?.close(); } catch { /* Read-only open failed; nothing was written. */ }
     throw sqliteFailure(error);

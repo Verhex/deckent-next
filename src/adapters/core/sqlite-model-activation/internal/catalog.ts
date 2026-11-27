@@ -30,6 +30,10 @@ const modelKey = (value: unknown) => { const parsed = exactModelIdSchema.safePar
 /** Row access shared by the writer and the admission reader; every row is verified against its key columns. */
 class CatalogRows {
   constructor(protected readonly db: DatabaseSync) {}
+  protected receipt(scopeId: string, commandId: string): ModelCatalogReceipt | null {
+    const row = this.db.prepare('SELECT record FROM model_catalog_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId) as Row | undefined;
+    return decode(row, parseModelCatalogReceipt, value => value.command.scopeId === scopeId && value.command.commandId === commandId);
+  }
   channelRow(channelId: string): ModelCatalogChannelRecord | null {
     const row = this.db.prepare('SELECT channel_id,revision,record FROM model_catalog_channels WHERE channel_id=?').get(channelId) as Row | undefined;
     return decode(row, parseModelCatalogChannelRecord, value => value.channelId === row!['channel_id'] && value.revision === row!['revision']);
@@ -62,11 +66,13 @@ export class SqliteModelCatalogReader extends CatalogRows implements ModelCatalo
   close(): void { this.db.close(); }
 }
 
-export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalogStore {
-  private receipt(scopeId: string, commandId: string): ModelCatalogReceipt | null {
-    const row = this.db.prepare('SELECT record FROM model_catalog_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId) as Row | undefined;
-    return decode(row, parseModelCatalogReceipt, value => value.command.scopeId === scopeId && value.command.commandId === commandId);
+export class SqliteModelCatalogAdmissionReader extends SqliteModelCatalogReader {
+  async loadReceipt(scopeId: string, commandId: string) {
+    try { return this.receipt(id(scopeId), id(commandId)); } catch (error) { return failure(error); }
   }
+}
+
+export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalogStore {
   async apply(admission: ModelCatalogAdmission): Promise<ModelCatalogResult> {
     try {
       const { command, actor } = admission;

@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -7,10 +8,11 @@ import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterAll, beforeAll, describe, expect, it, type TestContext } from 'vitest';
-import { modelActivationTargetId, type ModelActivationInspection, type ModelActivationResult,
+import { modelActivationTargetId, modelCatalogTargetId, type ModelActivationInspection, type ModelActivationResult,
   type ModelBindingInspection } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { runInTerminal, lastJson } from '../support/terminal-cli.js';
 import { mcpPrincipalRef } from '#domain/index.js';
 
 const execute = promisify(execFile), roots: string[] = [];
@@ -28,14 +30,16 @@ const [entry, operation, project, encoded] = process.argv.slice(1), api = await 
 try {
   const value = operation === 'binding' ? await api.inspectModelBinding(project, input, { env: process.env })
     : operation === 'inspect' ? await api.inspectModelActivation(project, input, { env: process.env })
+    : operation === 'register' ? await api.applyModelCatalog(project, input, { env: process.env })
     : await api.admitModelActivation(project, input, { env: process.env });
-  process.stdout.write(JSON.stringify({ ok: true, value }));
-} catch (error) { process.stdout.write(JSON.stringify({ ok: false, code: error?.code ?? 'UNKNOWN' })); }
+  console.log(JSON.stringify({ ok: true, value }));
+} catch (error) { console.log(JSON.stringify({ ok: false, code: error?.code ?? 'UNKNOWN' })); }
 `;
-async function callSdk<T>(project: string, env: Record<string, string>, operation: 'binding' | 'inspect' | 'admit', input: unknown) {
-  const output = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, operation, project, JSON.stringify(input)],
-    { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
-  return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
+async function callSdk<T>(project: string, env: Record<string, string>, operation: 'binding' | 'inspect' | 'admit' | 'register', input: unknown, terminal = false) {
+  const argv = ['--input-type=module', '-e', sdkProgram, sdk, operation, project, JSON.stringify(input)];
+  const output = terminal ? (await runInTerminal([process.execPath, ...argv], project, env)).output
+    : (await execute(process.execPath, argv, { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout;
+  return lastJson(output) as { ok: true; value: T } | { ok: false; code: string };
 }
 async function callMcp(project: string, env: Record<string, string>, name: string, args: Record<string, unknown>, expectedError?: string) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', project], env, stderr: 'pipe' });
@@ -76,8 +80,9 @@ describe.skipIf(process.platform === 'win32')('requires POSIX managed storage; M
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'provider', version: 1,
     models: [{ id: 'model', version: 1, nativeId: 'vendor/native:model', protocols: [{ family: 'responses', version: '1', capabilities: [] }] }] }] };
   const target = modelActivationTargetId(reference), principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+  const catalogTargets = [null, 'vendor/native:model'].map(modelId => modelCatalogTargetId({ channelId: reference.providerId, modelId }));
   const grant = { id: 'model-owner', effect: 'allow', actions: ['activate', 'deactivate', 'inspect'], scopes: ['scope-a'], principals,
-    resource: { kind: 'model-activation', ids: [target] } };
+    resource: { kind: 'model-activation', ids: [target, ...catalogTargets] } };
   const flags = ['--scope', 'scope-a', '--provider', 'provider', '--provider-version', '1', '--model', 'model', '--model-version', '1', '--json'];
   let project: string, data: string, configPath: string, config: Record<string, unknown>, ledger: string, policyPath: string;
   let observed: Extract<ModelBindingInspection, { status: 'declared' }>, activated: ModelActivationResult;
@@ -93,7 +98,30 @@ describe.skipIf(process.platform === 'win32')('requires POSIX managed storage; M
     await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
     ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
     const seed = await openSqliteModelActivationStore(ledger, sqlite); seed.close();
-    policyPath = join(data, 'policy.json'); await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-1', restrictions: [], grants: [grant] }), { mode: 0o600 });
+    policyPath = join(data, 'policy.json');
+    await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-1', restrictions: [], grants: [grant,
+      { ...grant, id: 'catalog-registration', scopes: 'all', actions: ['activate'], resource: { kind: 'model-activation', ids: [catalogTargets[0]] } }] }), { mode: 0o600 });
+  });
+
+  step('requires a real unmarked PTY and current policy before any configured activation write', async () => {
+    const binding = await callSdk<ModelBindingInspection>(project, env, 'binding', reference);
+    if (!binding.ok || binding.value.status !== 'declared') throw new Error('FIXTURE_BINDING_MISSING');
+    const input = { schemaVersion: 1, action: 'activate', commandId: 'refused', scopeId: 'scope-a', reference,
+      expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding.value.binding };
+    const before = await readFile(ledger);
+    expect(await callSdk(project, env, 'admit', input)).toEqual({ ok: false, code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await callSdk(project, { ...env, CI: 'true' }, 'admit', input, true)).toEqual({ ok: false, code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await callSdk(project, env, 'admit', { ...input, witness: true })).toEqual({ ok: false, code: 'MODEL_ACTIVATION_INVALID' });
+    const cliRefusal = await runInTerminal([process.execPath, cli, 'models', 'activate', ...flags.slice(0, -1), '--command-id', input.commandId,
+      '--expected-revision', '0', '--binding-digest', binding.value.binding.digest, '--catalog-revision', catalog.revision, '--json'], project, { ...env, CI: 'true' });
+    expect(cliRefusal.code).toBe(1);
+    expect(cliRefusal.output).toContain('AUTHORITY_WITNESS_REQUIRED');
+    const policy = await readFile(policyPath);
+    await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'denied', restrictions: [], grants: [{ ...grant, actions: ['inspect'] }] }));
+    try {
+      expect(await callSdk(project, env, 'admit', input, true)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+      expect(await readFile(ledger)).toEqual(before);
+    } finally { await writeFile(policyPath, policy); }
   });
 
   step('SDK activates the declared binding and the compiled CLI inspection equals the SDK inspection', async () => {
@@ -103,10 +131,46 @@ describe.skipIf(process.platform === 'win32')('requires POSIX managed storage; M
     observed = binding;
     activate = { schemaVersion: 1 as const, action: 'activate' as const, commandId: 'activate-a', scopeId: 'scope-a', reference,
       expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: observed.binding };
-    const activationResult = await callSdk<ModelActivationResult>(project, env, 'admit', activate); expect(activationResult.ok).toBe(true);
+    const provider = catalog.providers[0]!;
+    const registration = await callSdk(project, env, 'register', { schemaVersion: 1, commandId: 'catalog-seed', scopeId: 'scope-a', action: 'register',
+      catalog: { schemaVersion: 2, revision: catalog.revision, providers: [{ ...provider,
+        channel: { kind: 'http-api', cli: null, aliases: [] }, models: provider.models.map(model => ({ ...model,
+          lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null }, minCliVersion: null, efforts: [], aliases: [] })) }] } });
+    expect(registration.ok).toBe(true);
+    const activationResult = await callSdk<ModelActivationResult>(project, env, 'admit', activate, true); expect(activationResult.ok).toBe(true);
     activated = (activationResult as { ok: true; value: ModelActivationResult }).value;
     expect(activated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
 
+    const db = new DatabaseSync(ledger, { readOnly: true });
+    try {
+      expect(db.prepare('SELECT channel_id,model_id,revision,state FROM model_catalog_activations ORDER BY model_id').all()).toEqual([
+        { channel_id: 'provider', model_id: '', revision: 1, state: 'active' },
+        { channel_id: 'provider', model_id: 'vendor/native:model', revision: 1, state: 'active' },
+      ]);
+    } finally { db.close(); }
+    const written = await readFile(ledger);
+    expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: true, value: { ...activated, replayed: true } });
+    expect(await callSdk(project, env, 'admit', { ...activate, commandId: 'new-receipt-for-active-binding', expectedRevision: 1 }))
+      .toEqual({ ok: false, code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(ledger)).toEqual(written);
+
+    // A retained chat-only response from before the worker child committed is a new effect on replay.
+    const partial = new DatabaseSync(ledger);
+    try {
+      const childId = `model-state-${createHash('sha256').update(String(activate['commandId'])).digest('hex')}-1`;
+      partial.prepare('DELETE FROM model_catalog_receipts WHERE scope_id=? AND command_id=?').run('scope-a', childId);
+      partial.prepare('DELETE FROM model_catalog_activations WHERE scope_id=? AND channel_id=? AND model_id=?')
+        .run('scope-a', 'provider', 'vendor/native:model');
+    } finally { partial.close(); }
+    const partialBytes = await readFile(ledger);
+    expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: false, code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(ledger)).toEqual(partialBytes);
+    expect(await callSdk(project, env, 'admit', activate, true)).toEqual({ ok: true, value: { ...activated, replayed: true } });
+    const repaired = new DatabaseSync(ledger, { readOnly: true });
+    try {
+      expect(repaired.prepare('SELECT revision,state FROM model_catalog_activations WHERE model_id=?').get('vendor/native:model'))
+        .toEqual({ revision: 1, state: 'active' });
+    } finally { repaired.close(); }
     const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'activation', ...flags],
       { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
     const inspected = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
@@ -138,8 +202,9 @@ describe.skipIf(process.platform === 'win32')('requires POSIX managed storage; M
     await writeFile(configPath, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
     const activateFlags = ['models', 'activate', ...flags.slice(0, -1), '--command-id', 'activate-b', '--expected-revision', '2',
       '--binding-digest', observed.binding.digest, '--catalog-revision', catalog.revision, '--json'];
-    const cliActivated = JSON.parse((await execute(process.execPath, [cli, ...activateFlags],
-      { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
+    const terminal = await runInTerminal([process.execPath, cli, ...activateFlags], project, env);
+    expect(terminal.code).toBe(0);
+    const cliActivated = lastJson(terminal.output);
     expect(cliActivated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 3 } } });
     const mcpInspection = await callMcp(project, env, 'inspect_model_activation', { schemaVersion: 1, scopeId: 'scope-a', reference });
     const sdkInspection = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });

@@ -1,6 +1,7 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { DeckentError, formatHumanError } from '#platform/index.js';
 const state = vi.hoisted(() => ({ records: [] as { connectionId: string; state: string; planUse: boolean }[], connect: vi.fn(),
-  models: vi.fn(), custody: vi.fn(), catalog: vi.fn(), oauth: null as OAuthConnectionApplication | null, owner: null as { issuer: string; subject: string } | null }));
+  models: vi.fn(), disconnect: vi.fn(), custody: vi.fn(), catalog: vi.fn(), oauth: null as OAuthConnectionApplication | null, owner: null as { issuer: string; subject: string } | null }));
 vi.mock('../../../src/composition/core/siwc/internal/connect.js', async original => {
   const real = await original<typeof import('../../../src/composition/core/siwc/internal/connect.js')>();
   return { ...real, configuredSiwcConnect: (...args: Parameters<typeof real.configuredSiwcConnect>) => {
@@ -12,14 +13,17 @@ vi.mock('../../../src/composition/core/siwc/internal/connection.js', () => ({
   withConfiguredSiwc: async (_root: string, _scope: string, _options: unknown, _operation: string,
     work: (app: unknown, caller: unknown) => Promise<unknown>) => {
     state.custody(_operation);
-    return work({ list: async () => state.oauth ? state.oauth.list() : state.records, connect: state.connect },
+    return work({ list: async () => state.oauth ? state.oauth.list() : state.records, connect: state.connect, disconnect: state.disconnect },
       { principal: { id: 'person', ...(state.owner ?? { issuer: 'host', subject: '1000' }), assurance: 'os-user', scopeIds: ['scope'] } });
   },
 }));
 vi.mock('#composition/core/scoped-request/index.js', async original => {
   const real = await original<typeof import('#composition/core/scoped-request/index.js')>();
   return { ...real, loadConfiguredScopeContext: async (...args: Parameters<typeof real.loadConfiguredScopeContext>) => args[0] === '/fixture'
-    ? { principal: { id: 'person', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['scope'] } } : real.loadConfiguredScopeContext(...args) };
+    ? { config: { cli: { agentEnvironment: ['CLAUDECODE'] }, storage: { sqlite: { busyTimeoutMs: 100 } } },
+      document: { schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [{ id: 'secret', effect: 'allow', scopes: 'all',
+        principals: [{ issuer: 'host', subject: '1000' }], actions: ['set'], resource: { kind: 'secret', ids: 'all' } }] },
+      principal: { id: 'person', issuer: 'host', subject: '1000', assurance: 'os-user', scopeIds: ['scope'] } } : real.loadConfiguredScopeContext(...args) };
 });
 const host = vi.hoisted(() => ({ available: true, root: '', witness: true }));
 vi.mock('#adapters/index.js', async original => {
@@ -31,12 +35,16 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
-import { runtime } from '../support/chat-turn-harness.js';
+import { personMarkersUnset } from '../support/person-env.js';
+import { me, runtime } from '../support/chat-turn-harness.js';
 import { connectConfiguredModel, executeConfiguredSiwc } from '#composition/core/model-connect/index.js';
-import { assertAuthorityWitness, ModelConnectApplication, type ModelConnectPorts, OAuthConnectionApplication, personalCustodyEvidenceSchema, OAuthConnectionError } from '#engine/index.js';
+import { assertAuthorityWitness, modelActivationTargetId, ModelConnectApplication, type ModelConnectPorts, OAuthConnectionApplication, personalCustodyEvidenceSchema, OAuthConnectionError } from '#engine/index.js';
 import { SIWC_PROTOCOL, SIWC_INFERENCE, PROVIDER_CONNECT_REGISTRY, discoveredProviderCatalog } from '#adapters/index.js';
 import { resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { encodeModelBindingDefinition, modelConnectCommandSchema } from '#domain/index.js';
+
+beforeEach(() => { for (const key of Object.keys(personMarkersUnset())) vi.stubEnv(key, undefined); });
+afterEach(() => vi.unstubAllEnvs());
 
 it('requires an explicit disconnected old account for new authorization and writes only the owner reference into a default-off profile', async () => {
   // Synthetic lifecycle ports; this is not a TTY witness, browser login or account entitlement proof.
@@ -80,7 +88,12 @@ it('requires an explicit disconnected old account for new authorization and writ
       reason: 'managed POSIX private ledgers unsupported; shared delegation refusal verified above' }));
     return;
   }
-  const f = await runtime({ noServer: true }), path = join(f.project, '.deckent/config.json');
+  const f = await runtime({ noServer: true, extraGrants: [
+    { id: 'connect-policy', effect: 'allow', scopes: 'all', principals: me, actions: ['write'], resource: { kind: 'config', ids: 'all' } },
+    { id: 'connect-models', effect: 'allow', scopes: 'all', principals: me, actions: ['inspect', 'activate'], resource: { kind: 'model-activation', ids: 'all' } },
+    { id: 'connect-secrets', effect: 'allow', scopes: 'all', principals: me, actions: ['set'], resource: { kind: 'secret', ids: 'all' } },
+    { id: 'inspect-subscription', effect: 'allow', scopes: ['scope'], principals: me, actions: ['inspect'], resource: { kind: 'model-invocation', ids: 'all' } },
+  ] }), path = join(f.project, '.deckent/config.json');
   const principal = await resolveConfiguredConfigPrincipal(f.project, 'scope', { env: f.env });
   const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(row => row.id === 'chatgpt-login')!;
   const seed = discoveredProviderCatalog(kind, '', 'a'), provider = seed.providers[0]!, entry = provider.models[0]!;
@@ -97,10 +110,11 @@ it('requires an explicit disconnected old account for new authorization and writ
   const values = new Map<string, string>();
   const owner = { installationId: 'fixture-installation', companyId: 'fixture-company', scopeId: 'scope', principal: { issuer: principal.issuer, subject: principal.subject } };
   const storeSet = vi.fn(async (name: string, value: string) => { values.set(name, value); }), audit = vi.fn(async () => {});
+  let registrations = 0;
   const browser = vi.fn(async (makeUrl: (redirect: string) => string) => {
     const redirectUri = 'http://127.0.0.1:43210/auth/callback', url = new URL(makeUrl(redirectUri)), callback = new URL(redirectUri);
     callback.search = new URLSearchParams({ code: 'fixture-code', state: url.searchParams.get('state')!,
-      client_id: url.searchParams.get('client_id') === SIWC_PROTOCOL.dynamicClientId ? 'oaiapp_fixture' : url.searchParams.get('client_id')! }).toString();
+      client_id: url.searchParams.get('client_id') === SIWC_PROTOCOL.dynamicClientId ? `oaiapp_fixture_${++registrations}` : url.searchParams.get('client_id')! }).toString();
     return { callback: callback.href, redirectUri };
   });
   const oauth = new OAuthConnectionApplication({ owner, protocol: SIWC_PROTOCOL, now: Date.now, connectionLock: async (_id, work) => work(),
@@ -124,6 +138,8 @@ it('requires an explicit disconnected old account for new authorization and writ
   state.oauth = oauth; state.owner = owner.principal; state.connect.mockImplementation((input, signal) => oauth.connect(input, signal));
   host.witness = true;
   try {
+    await expect(executeConfiguredSiwc(f.project, { operation: 'usage', scopeId: 'scope', connectionId: connected.connectionId },
+      { env: { ...f.env, CLAUDECODE: '1' } })).resolves.toHaveProperty('usage');
     for (const model of [{ nativeId: 'b' }, { pull: 'available' }, { nativeId: 'a' }]) {
       await oauth.disconnect(connected.connectionId);
       state.connect.mockClear(); state.models.mockClear(); state.custody.mockClear(); state.catalog.mockClear();
@@ -146,12 +162,61 @@ it('requires an explicit disconnected old account for new authorization and writ
       // Person witness reaches real SIWC models/ensure and real OAuth effects; only network/model listing is synthetic.
       state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
       await expect(connectConfiguredModel(f.project, request, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
-      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['connect'], ['lease']]);
+      expect(state.models).toHaveBeenCalledTimes(1); expect(state.custody.mock.calls).toEqual([['inspect'], ['connect'], ['lease']]);
       expect(state.connect).toHaveBeenCalledTimes(1); expect(state.catalog).toHaveBeenCalledTimes(1);
       expect(storeSet).toHaveBeenCalled(); expect(audit).toHaveBeenCalled(); expect(browser).toHaveBeenCalledTimes(1);
       console.info('F11-R3 local OAuth positive:', JSON.stringify({ model, storeSet: storeSet.mock.calls.length, audit: audit.mock.calls.length, browser: browser.mock.calls.length }));
       expect(await readFile(path, 'utf8')).toBe(before);
     }
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    const secretName = `${SIWC_PROTOCOL.connectionSecretPrefix}${connected.connectionId.replaceAll('-', '').toUpperCase()}`;
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'oauth-unused-secret', grants: [...policy.grants,
+      { id: 'deny-account-secret', effect: 'deny', scopes: ['scope'], principals: me, actions: ['set'],
+        resource: { kind: 'secret', ids: [secretName] } }] }));
+    const named = { ...command, connection: 'chatgpt-login', model: { nativeId: 'a' }, delegate: ['ai'], subscription: { connectionId: connected.connectionId } };
+    for (const spy of [state.models, state.connect, state.custody, state.catalog, storeSet, audit, browser]) spy.mockClear();
+    state.catalog.mockRejectedValue(new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE'));
+    await expect(connectConfiguredModel(f.project, named, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    expect(state.models).toHaveBeenCalledTimes(1);
+    for (const spy of [state.connect, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
+    await oauth.disconnect(connected.connectionId);
+    for (const spy of [state.models, state.connect, state.custody, state.catalog, storeSet, audit, browser]) spy.mockClear();
+    await expect(connectConfiguredModel(f.project, named, { env: f.env })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_DENIED' });
+    expect(state.custody.mock.calls).toEqual([['inspect']]);
+    for (const spy of [state.models, state.connect, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
+    await writeFile(policyPath, JSON.stringify(policy));
+    state.custody.mockClear();
+    const beforeFresh = await readFile(f.ledger), freshRequest = { operation: 'login', scopeId: 'scope', newAccount: true } as const;
+    await expect(executeConfiguredSiwc(f.project, freshRequest, { env: { ...f.env, CLAUDECODE: '1' } }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    for (const spy of [state.connect, state.custody, state.catalog, storeSet, audit, browser]) expect(spy).not.toHaveBeenCalled();
+    expect(await readFile(f.ledger)).toEqual(beforeFresh);
+
+    await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'late-oauth-deny', grants: [...policy.grants,
+      { id: 'late-deny', effect: 'deny', scopes: ['scope'], principals: me, actions: ['activate'],
+        resource: { kind: 'model-activation', ids: [modelActivationTargetId(a)] } }] }));
+    state.catalog.mockResolvedValue([{ slug: 'a' }]);
+    const refused = await executeConfiguredSiwc(f.project, freshRequest, { env: f.env }).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'POLICY_DENIED', params: { connectionState: 'connected', activationState: 'unfinished' } });
+    if (!(refused instanceof DeckentError)) throw new Error('Expected a typed connection refusal');
+    expect(formatHumanError(refused, { locale: 'en' })).toContain('Your subscription is connected. The model was not switched on. Policy does not permit the requested operation');
+    expect(formatHumanError(refused, { locale: 'tr' })).toContain('Aboneliğiniz bağlı. Model açılmadı. Politika bu kaynak üzerinde istenen işleme izin vermiyor');
+    expect(browser).toHaveBeenCalledTimes(1);
+    expect(storeSet).toHaveBeenCalled();
+    expect(await readFile(f.ledger)).toEqual(beforeFresh);
+    expect(await readFile(path, 'utf8')).toBe(before);
+
+    await writeFile(policyPath, JSON.stringify(policy));
+    const activeAccount = (await oauth.list()).find(row => row.state === 'connected')!;
+    await oauth.disconnect(activeAccount.connectionId);
+    state.catalog.mockImplementationOnce(async () => { host.witness = false; return [{ slug: 'a' }]; });
+    const noWitness = await executeConfiguredSiwc(f.project, freshRequest, { env: f.env }).catch((error: unknown) => error);
+    expect(noWitness).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED', params: { connectionState: 'connected', activationState: 'unfinished' } });
+    if (!(noWitness instanceof DeckentError)) throw new Error('Expected a typed witness refusal');
+    expect(formatHumanError(noWitness, { locale: 'en' })).toContain('Your subscription is connected. The model was not switched on. Switch it on from an authorized terminal.');
+    expect(formatHumanError(noWitness, { locale: 'tr' })).toContain('Aboneliğiniz bağlı. Model açılmadı. Modeli yetkili bir terminalden açın.');
+    expect(await readFile(f.ledger)).toEqual(beforeFresh);
+    expect(await readFile(path, 'utf8')).toBe(before);
   } finally { host.witness = true; state.oauth = null; state.owner = null; }
 
 });
@@ -162,7 +227,23 @@ it('gates sign-in on the registry row for CLI and terminal alike and gives a cus
   await expect(executeConfiguredSiwc('/fixture', login, {})).rejects.toMatchObject({ code: 'MODEL_CONNECT_NOT_CONNECTABLE' });
   await expect(executeConfiguredSiwc('/fixture', { operation: 'prepare', scopeId: 'scope' }, {})).rejects.toMatchObject({ code: 'MODEL_CONNECT_NOT_CONNECTABLE' });
   expect(state.connect).not.toHaveBeenCalled();
-  host.available = true; host.root = await mkdtemp(join(tmpdir(), 'siwc-root-'));
+  host.available = true;
+  const marked = { env: { CLAUDECODE: '1' } };
+  const connectionId = '00000000-0000-4000-8000-000000000001';
+  const usage = { operation: 'usage', scopeId: 'scope', connectionId } as const;
+  const logout = { operation: 'logout', scopeId: 'scope', connectionId } as const;
+  await expect(executeConfiguredSiwc('/fixture', { operation: 'prepare', scopeId: 'scope' }, marked)).resolves.toMatchObject({ apiTargets: [] });
+  await expect(executeConfiguredSiwc('/fixture', usage, marked)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_DENIED' });
+  state.disconnect.mockResolvedValue({ state: 'disconnected', connectionId });
+  await expect(executeConfiguredSiwc('/fixture', logout, marked)).resolves.toMatchObject({ state: 'disconnected', connectionId });
+  host.witness = false;
+  try {
+    for (const request of [usage, logout, { operation: 'prepare', scopeId: 'scope' }] as const)
+      await expect(executeConfiguredSiwc('/fixture', request, {})).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(state.disconnect).toHaveBeenCalledTimes(1);
+  } finally { host.witness = true; }
+  await expect(executeConfiguredSiwc('/fixture', login, marked)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  host.root = await mkdtemp(join(tmpdir(), 'siwc-root-'));
   try {
     await chmod(host.root, 0o755);
     state.connect.mockRejectedValue(new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL', 'unsafe-root'));

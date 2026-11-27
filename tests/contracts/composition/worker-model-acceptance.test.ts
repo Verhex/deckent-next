@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -59,7 +60,10 @@ async function fixture(kind: 'claude' | 'codex' = 'claude', retainOutput = true)
     { id: 'catalog', effect: 'allow', actions: ['activate', 'deactivate', 'inspect'], scopes: 'all', principals, resource: { kind: 'model-activation', ids: 'all' } },
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  const catalog = (fields: Record<string, unknown>) => fields['action'] === 'activate'
+    ? witnessedModelActivation('applyModelCatalog', project, options, command(fields))
+    : applyModelCatalog(project, command(fields), options);
   await catalog({ action: 'register', catalog: await seedCatalog() }); await catalog({ action: 'register', catalog: codexCatalog });
   // Law 6 (owner Q-L6): a channel activation already activates its fresh priced models; activate only what is still inactive, at its revision.
   for (const [channelId, modelId] of [[SEED_CHANNEL, null], [SEED_CHANNEL, SONNET], [SEED_CHANNEL, HAIKU], [CODEX_CHANNEL, null], [CODEX_CHANNEL, 'gpt-exact-1']] as const) {

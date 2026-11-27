@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -48,10 +49,10 @@ async function seeded(mode: 'off' | 'shadow' | 'on', memoryActions = ['inspect',
     { id: 'memory', effect: 'allow', actions: memoryActions, scopes: ['s'], principals, resource: { kind: 'memory', ids: 'all' } },
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', expectedRevision: 0 });
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  await applyModelCatalog(project, command({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') }), options);
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, 'gpt-6.1-sol'].map(modelId =>
+    command({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 })));
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
   const delivery = (runId: string) => (JSON.parse(read<{ snapshot: string }>('SELECT snapshot FROM runs WHERE run_id = ?', runId)[0]!.snapshot).execution.tasks[0].profile.parameters
     .nativeSubscription.promptDelivery) as { task: string; segments: { kind: string; id: string; version: number; sha256: string }[] };

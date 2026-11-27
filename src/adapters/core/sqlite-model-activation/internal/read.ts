@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, ModelActivationError, parseModelActivationReference,
   type ModelActivationRecord, type ModelReference } from '#domain/index.js';
-import { ModelActivationStoreError, verifyModelActivationRecord } from '#engine/index.js';
+import { ModelActivationStoreError, verifyModelActivationRecord, verifyModelActivationReceipt } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 type ActivationRow = Readonly<Record<string, unknown>>;
@@ -37,5 +37,20 @@ export function loadActivationRecord(db: DatabaseSync, scopeInput: unknown, refe
     const scopeId = activationIdentity(scopeInput), reference = parseModelActivationReference(referenceInput);
     const row = activationRecordRow(db, scopeId, reference);
     return row ? decodeActivationRecord(row, scopeId, reference) : null;
+  } catch (error) { return activationFailure(error); }
+}
+
+export function loadActivationReceipt(db: DatabaseSync, scopeInput: string, commandInput: string) {
+  try {
+    const scopeId = activationIdentity(scopeInput), commandId = activationIdentity(commandInput);
+    const row = db.prepare('SELECT scope_id,command_id,record FROM model_activation_receipts WHERE scope_id=? AND command_id=?')
+      .get(scopeId, commandId) as ActivationRow | undefined;
+    if (!row) return null;
+    try {
+      if (row['scope_id'] !== scopeId || row['command_id'] !== commandId || typeof row['record'] !== 'string') throw new Error();
+      const receipt = verifyModelActivationReceipt(JSON.parse(row['record']));
+      if (receipt.command.scopeId !== scopeId || receipt.command.commandId !== commandId) throw new Error();
+      return receipt;
+    } catch { throw new ModelActivationStoreError('MODEL_ACTIVATION_CORRUPT'); }
   } catch (error) { return activationFailure(error); }
 }

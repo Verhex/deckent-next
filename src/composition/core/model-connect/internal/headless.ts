@@ -1,18 +1,18 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import { DEFAULT_DELEGATED_CLASSES, type ModelConnectCommand } from '#domain/index.js';
+import { DEFAULT_DELEGATED_CLASSES, type ModelConnectCommand, type ModelInvocationProfile } from '#domain/index.js';
 import { ModelConnectError, assertAuthorityWitness, configuredInvocationProfiles, prepareSubscriptionConsent, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
-  bindCapacityResource, headlessCapacityBinding, openSqliteLedger,
+  bindCapacityResource, headlessCapacityBinding, invocationCapacityResource, nativeCliAgent, openSqliteLedger, openSqliteLedgerReadOnly, readHeadlessSealedVersion,
   prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, type HeadlessLoginResult,
   type ProviderConnectKind } from '#adapters/index.js';
 import { nativeCliHeadlessDefinitionSchema } from '#capabilities/index.js';
 import { configuredBubblewrap } from '#composition/core/model-invocation/index.js';
 import { ErrorRegistry, automationMarker, inspectNativeStateCustody, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
-  resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
-
+  resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions } from '#platform/index.js';
+import type { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 type Env = NodeJS.ProcessEnv;
 const stateRoot = (env: Env) => resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
 const loginsLayout = (env: Env) => { const root = stateRoot(env); return resolveProductLayout({ projectRoot: root, root }); };
@@ -30,59 +30,90 @@ export async function headlessIsolationRefusal(options: ConfigLoadOptions = {}):
 }
 /** The person at this terminal: a controlling TTY and no AI-agent or CI marker of the installation's list (PV: an agent with a PTY tool is not the person). */
 export const headlessPersonWitness = (env: Env, agents: readonly string[]): AuthorityWitness =>
-  ({ attest: async () => automationMarker(env, agents) === null && await attestLocalInteractiveTerminal() });
-/**
- * S3-3: the CLI kind's connect ports. The adapter part is prepared once per command after the engine's person check (S3-5: the isolation realm
- * first, then executable, login dir — s3c: the Brain's own unless the person names one —, uid, preflight inside the realm; no model call), and the
- * consent is the person's own choice on each written layer. State lives under the person's global state dir, one fixed dir per connection.
- */
-export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>,
-  ledger: () => Promise<Readonly<{ installationId: string | null; config: ResolvedConfig; path: () => Promise<string>; }>>) {
+  ({ attest: async () => automationMarker(process.env, agents) === null && automationMarker(env, agents) === null && await attestLocalInteractiveTerminal() });
+// Preparation runs after the person check, once per model. Consent remains specific to each authored layer.
+export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions,
+  ledger: (access: 'read' | 'write') => ReturnType<typeof loadConfiguredScopeContext>) {
   const env = options.env ?? process.env;
-  const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string;
-    custody: Awaited<ReturnType<typeof inspectNativeStateCustody>> }>>>();
-  const prepare = (kind: ProviderConnectKind, nativeId: string) => {
-    const held = prepared.get(nativeId); if (held) return held;
-    const next = (async () => {
-    const seed = await readProviderConnectSeed(kind.connect!.seed!), model = seed.providers.flatMap(provider => provider.models).find(row => row.nativeId === nativeId);
-    const protocol = model?.protocols.find(row => row.family === kind.connect!.protocolFamily), minCliVersion = (model as { minCliVersion?: string | null } | undefined)?.minCliVersion;
-    if (!protocol || !minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+  let seed: ReturnType<typeof readProviderConnectSeed> | undefined;
+  const seedTarget = async (kind: ProviderConnectKind, nativeId: string) => {
+    const { providers } = await (seed ??= readProviderConnectSeed(kind.connect!.seed!));
+    const model = providers.flatMap(provider => provider.models).find(row => row.nativeId === nativeId);
+    const protocol = model?.protocols.find(row => row.family === kind.connect!.protocolFamily);
+    if (!protocol || !model?.minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     const stateDir = join(stateRoot(env), 'headless', createHash('sha256').update(JSON.stringify([kind.id, command.scopeId, nativeId])).digest('hex').slice(0, 16));
-    const owned = await ownedLoginDir(protocol.family, env);
-      const base = await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
-        ownedConfigDir: owned, env, now: Date.now, isolation: configuredBubblewrap(options) });
-      const custody = await inspectNativeStateCustody(base, env);
-      return Object.freeze({ protocol, owned, base, custody });
-    })(); prepared.set(nativeId, next); return next;
+    return { protocol, minCliVersion: model.minCliVersion, stateDir, providers };
   };
+  const prepared = new Map<string, ReturnType<typeof prepare>>();
+  async function prepare({ protocol, minCliVersion, stateDir }: Awaited<ReturnType<typeof seedTarget>>) {
+    const owned = await ownedLoginDir(protocol.family, env);
+    const base = await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, ...command.cli, ownedConfigDir: owned,
+      env, now: Date.now, isolation: configuredBubblewrap(options) });
+    return { protocol, owned, base };
+  }
+  const source = ({ installationId, config, principal }: Awaited<ReturnType<typeof ledger>>) => ({
+    schemaVersion: 1 as const, installationId: installationId!, companyId: config.company.id, scopeId: command.scopeId,
+    principal: { issuer: principal.issuer, subject: principal.subject },
+  });
+  const shape = async (definition: Parameters<typeof headlessConnectionAdapter>[0], protocol: Parameters<typeof headlessConnectionAdapter>[1], owned: string | null) => {
+    const adapter = headlessConnectionAdapter(definition, protocol), custody = await inspectNativeStateCustody(definition, env);
+    return { ...adapter, cli: { configDir: definition.configDir, owned: definition.configDir === owned, delegate: definition.delegatedUse?.classes ?? [],
+      ...(custody === 'outside-installation' ? { governedUse: 'outside-installation' as const } : {}) } };
+  };
+  const bindings = new Map<string, { binding: ReturnType<typeof headlessCapacityBinding>; slots: number }>();
   return {
+    async observe(kind: ProviderConnectKind, nativeId: string, profile: ModelInvocationProfile) {
+      const { cli } = command, existing = profile.adapter.definition, parsed = nativeCliHeadlessDefinitionSchema.safeParse(existing);
+      if (!parsed.success || !cli?.executable || !cli.configDir) return null;
+      const definition = parsed.data, context = await ledger('read');
+      if (!context.installationId || !context.projectId || context.identity.installation.pendingWrite || !isDeepStrictEqual(definition.sourceBinding, source(context))) return null;
+      const { protocol, minCliVersion, stateDir } = await seedTarget(kind, nativeId);
+      if (cli.executable !== definition.executable || cli.configDir !== definition.configDir || definition.ownerUid !== context.ownerUid
+        || definition.stateDir !== stateDir || definition.minCliVersion !== minCliVersion || await realpath(cli.configDir).catch(() => null) !== definition.configDir
+        || !await readHeadlessSealedVersion(definition, protocol.family)) return null;
+      const login = await lstat(definition.configDir).catch(() => null);
+      if (!login?.isDirectory() || login.uid !== definition.ownerUid) return null;
+      const consent = prepareSubscriptionConsent(existing, command.delegate, context.principal, Date.now());
+      if (!isDeepStrictEqual(consent, definition.delegatedUse)) return null;
+      const agent = nativeCliAgent(protocol.family);
+      if (!agent) return null;
+      const owned = await realpath(join(configuredHeadlessLoginRoot(options), agent.id)).catch(() => null);
+      const adapter = await shape(definition, protocol, owned);
+      const db = await context.path().then(path => openSqliteLedgerReadOnly(path, context.config.storage.sqlite)).catch(() => null);
+      if (!db) return null;
+      try {
+        const held = invocationCapacityResource(db, profile);
+        return held?.capacity.executionSlots === adapter.maxInFlight && held.capacity.inFlightSlots === adapter.maxInFlight ? adapter : null;
+      } catch { return null; } finally { db.close(); }
+    },
+    async commit() {
+      const context = await ledger('write'), db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
+      try {
+        for (const { binding, slots } of bindings.values()) bindCapacityResource(db, binding, { executionSlots: slots, inFlightSlots: slots });
+      } finally { db.close(); }
+    },
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
-      const context = await ledger();
+      const observed = await ledger('read');
+      const context = observed.installationId ? observed : await ledger('write');
       if (!context.installationId) throw ErrorRegistry.createError('NATIVE_AGENT_RECONNECT_REQUIRED');
-      const principal = await person(), sourceBinding = { schemaVersion: 1 as const, installationId: context.installationId,
-        companyId: context.config.company.id, scopeId: command.scopeId, principal: { issuer: principal.issuer, subject: principal.subject } };
-      const seed = await readProviderConnectSeed(kind.connect!.seed!);
-      const references = seed.providers.flatMap(provider => provider.models.filter(model => model.nativeId === value.nativeId)
-        .map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version })));
-      const profiles = configuredInvocationProfiles(context.config);
-      const existing = [value.existing, ...profiles.filter(profile => profile.scopeId === command.scopeId
-        && references.some(reference => isDeepStrictEqual(reference, profile.reference))).map(profile => profile.adapter.definition)];
+      const target = await seedTarget(kind, value.nativeId), sourceBinding = source(context);
+      const existing = [value.existing, ...configuredInvocationProfiles(context.config).filter(({ scopeId, reference }) =>
+        scopeId === command.scopeId && target.providers.some(provider => provider.id === reference.providerId && provider.version === reference.providerVersion
+          && provider.models.some(model => model.nativeId === value.nativeId && model.id === reference.modelId && model.version === reference.modelVersion)))
+        .map(profile => profile.adapter.definition)];
       if (existing.some(definition => {
         if (definition?.['sourceBinding'] === undefined) return false;
         const parsed = nativeCliHeadlessDefinitionSchema.safeParse(definition);
         return !parsed.success || !isDeepStrictEqual(parsed.data.sourceBinding, sourceBinding);
       }))
         throw ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED');
-      if (!existing.some(Boolean) || existing.some(definition => definition && definition['sourceBinding'] === undefined))
-        await assertAuthorityWitness('models.connect', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined),
-          headlessPersonWitness(env, context.config.cli.agentEnvironment));
-      const { base, protocol, owned, custody } = await prepare(kind, value.nativeId), consent = prepareSubscriptionConsent(value.existing as never,
-        command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), principal, Date.now()); // a first connect takes the owner default
-      const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = headlessConnectionAdapter(definition, protocol);
-      const db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
-      try { bindCapacityResource(db, headlessCapacityBinding(definition), { executionSlots: adapter.maxInFlight, inFlightSlots: adapter.maxInFlight }); } finally { db.close(); }
-      return { ...adapter, cli: { configDir: base.configDir, owned: base.configDir === owned, delegate: consent?.classes ?? [],
-        ...(custody === 'outside-installation' ? { governedUse: custody } : {}) } };
+      let preparation = prepared.get(value.nativeId);
+      if (!preparation) { preparation = prepare(target); prepared.set(value.nativeId, preparation); }
+      const { base, protocol, owned } = await preparation, consent = prepareSubscriptionConsent(value.existing as never,
+        command.delegate ?? (existing.some(Boolean) ? undefined : DEFAULT_DELEGATED_CLASSES), context.principal, Date.now()); // a first connect takes the owner default
+      const definition = { ...base, delegatedUse: consent, sourceBinding }, adapter = await shape(definition, protocol, owned);
+      bindings.set(value.nativeId, { binding: headlessCapacityBinding(definition), slots: adapter.maxInFlight });
+      return adapter;
     },
   };
 }

@@ -1,5 +1,6 @@
 // S3-3 `models connect claude-cli-subscription` through the real configured paths (governed config writer, ledger catalog, activation, audit) with
 // a scripted fake CLI: no real CLI and no model call. Model ids come from the packaged seed, never from this file.
+import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
@@ -8,7 +9,7 @@ import * as adapters from '#adapters/index.js';
 import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
@@ -44,7 +45,10 @@ import { initLine, assistantLine, resultLine, rateLimitLine, writeFakeCli } from
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
-import { personEnv } from '../support/person-env.js';
+import { personEnv, personMarkersUnset } from '../support/person-env.js';
+
+beforeEach(() => { for (const key of Object.keys(personMarkersUnset())) vi.stubEnv(key, undefined); });
+afterEach(() => vi.unstubAllEnvs());
 
 // The MCP actor holds the same grants, so the refusal below is the person-only rule itself, not a missing grant.
 const both = [...me, { issuer: `${me[0]!.issuer}/mcp`, subject: me[0]!.subject }];
@@ -384,7 +388,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {
     const h = await harness(true);
     const path = join(h.f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');
-    await expect(withMcpPrincipal(() => h.connect('c-0'))).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
+    const ledgerBefore = await readFile(h.f.ledger);
+    await expect(withMcpPrincipal(() => h.connect('c-0'))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     await expect(withMcpPrincipal(() => h.connect('c-1', { delegate: ['ai'] }))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     const server = createMcpServer({ connectModel: command => withMcpPrincipal(() => connectModel(h.f.project, command, { env: h.f.env })) } as McpApplications,
       { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
@@ -395,13 +400,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
         connection: 'claude-cli-subscription', model: { nativeId }, cli: { executable: h.executable, configDir: h.configDir }, delegate: ['ai', 'system'] } });
       expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('AUTHORITY_WITNESS_REQUIRED');
     } finally { await client.close(); await server.close(); }
+    expect(await readFile(h.f.ledger)).toEqual(ledgerBefore);
     expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual([]);
   });
   it('the person connects: preflight without a model call, uid floor and login dir sealed, subscription profile with no key; consent is theirs to give, keep and withdraw', async () => {
     const h = await harness(true), { person, cli, argv } = await unwitnessedDelegation(h), path = join(h.f.project, '.deckent/config.json');
     vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
     const first = await h.connect('c-1');
-    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
     // Owner 2026-11-08: a first connect without a choice lets the person's AI actor use the login (`system` stays opt-in).
     expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: ['ai'] },
       steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
@@ -420,13 +425,33 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.connect('c-3')).toMatchObject({ steps: { profile: 'present' }, cli: { delegate: ['ai', 'system'] } });
     expect(await h.connect('c-4', { delegate: ['ai', 'system'] })).toMatchObject({ steps: { profile: 'present' } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toEqual(consent);
+    const globalPath = platform.resolveGlobalConfigPaths(h.f.env).platformPath;
+    const durable = async () => ({ project: await readFile(path), global: await readFile(globalPath), ledger: await readFile(h.f.ledger), spawns: await h.spawns() });
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
+    const exact = await durable();
+    expect(await h.connect('c-read', { delegate: ['ai', 'system'] })).toMatchObject({ status: 'connected', reference: first.reference,
+      cli: first.cli && { ...first.cli, delegate: ['ai', 'system'] }, steps: { catalog: 'present', declaration: 'present', profile: 'present', activation: 'present', carried: 0 } });
+    expect(await durable()).toEqual(exact);
+    const db = new DatabaseSync(h.f.ledger);
+    try { db.prepare('DELETE FROM model_activations WHERE scope_id=? AND provider_id=? AND provider_version=? AND model_id=? AND model_version=?')
+      .run('scope', first.reference.providerId, first.reference.providerVersion, first.reference.modelId, first.reference.modelVersion); }
+    finally { db.close(); }
+    const incomplete = await durable();
+    expect(incomplete.ledger).not.toEqual(exact.ledger);
+    await expect(h.connect('c-read', { delegate: ['ai', 'system'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await durable()).toEqual(incomplete);
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(true);
+    await h.connect('c-repair');
     expect(await h.connect('c-shrink', { delegate: ['ai'] })).toMatchObject({ cli: { delegate: ['ai'] } });
+    vi.mocked(adapters.attestLocalInteractiveTerminal).mockResolvedValue(false);
     const beforeExpand = await readFile(path, 'utf8');
     await expect(h.connect('c-expand', { delegate: ['ai', 'system'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(await readFile(path, 'utf8')).toBe(beforeExpand);
-    const revoked = await promisify(execFile)(process.execPath, [cli, ...argv.map(value => value === 'ai,system' ? 'none' : value === 'f11-cli' ? 'c-5' : value)],
+    const revocation = argv.map(value => value === 'ai,system' ? 'none' : value === 'f11-cli' ? 'c-5' : value);
+    const revoked = await promisify(execFile)(process.execPath, [cli, ...revocation],
       { cwd: h.f.project, env: { ...h.f.env, CLAUDECODE: '1', AI_AGENT: 'fixture-agent' } });
     expect(JSON.parse(revoked.stdout)).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
+    await expect(withMcpPrincipal(() => h.connect('c-mcp-withdraw', { delegate: [] }))).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toBeNull();
     vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     // R5: real config publication followed by a rejected prune/read/binding, through the production provider port.

@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir, hostname, userInfo } from 'node:os';
@@ -198,7 +199,7 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     output = ''; expect(await main(['coding', 'template', '--provider', 'codex', '--kind', 'feature', '--apply'], terminal), error).toBe(0);
     expect((JSON.parse(await readFile(f.path, 'utf8')) as { admission: { registry: { kinds: { kind: string }[] } } }).admission.registry.kinds.map(entry => entry.kind)).toContain('feature');
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: await seedCatalog('codex-cli-subscription') }, f.options);
-    await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-channel', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }, f.options);
+    await witnessedModelActivation('applyModelCatalog', f.root, f.options, { schemaVersion: 1, commandId: 'activate-channel', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 });
     // Law 6 (owner Q-L6): activating the channel already activates its fresh priced models, so the model needs no second activation.
     const channel = (await inspectModelCatalog(f.root, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, f.options)).channels.find(row => row.access === 'allowed');
     expect(channel?.access === 'allowed' ? channel.models.find(row => row.modelId === 'gpt-6.1-sol')?.activation?.state : null).toBe('active');

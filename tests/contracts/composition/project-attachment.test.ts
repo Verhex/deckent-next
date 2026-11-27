@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
 import { execFileSync } from 'node:child_process';
 import * as platform from '#platform/index.js';
@@ -426,8 +427,8 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     const sourceProfile = configuredModelProfiles(sourceContext.config)[0]!;
     const binding = await new ModelBindingApplication({ read: async () => sourceContext.config['provider_catalog'] }).inspect(sourceProfile.reference);
     if (binding.status !== 'declared') throw new Error('fixture binding missing');
-    await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-active', action: 'activate',
-      reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 0 }, f.options);
+    await witnessedModelActivation('carryConfiguredModelActivation', f.a, f.options, { schemaVersion: 1, scopeId: 'source', commandId: 'source-active', action: 'activate',
+      reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 0 });
     // Synthetic person, inside this test's own disposable install only.
     for (const key of [...sourceContext.config.cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined); // a person's terminal: no agent or CI marker
     vi.spyOn(localPrincipal, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
@@ -453,8 +454,8 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
     await expect(resolveConfiguredModelUse(f.b, leased, leasedContext.principal, f.options, opening)).rejects.toMatchObject({ code: 'MODEL_USE_NOT_ACTIVE' });
     opening.dispose();
-    await carryConfiguredModelActivation(f.a, { schemaVersion: 1, scopeId: 'source', commandId: 'source-reactivate', action: 'activate',
-      reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 2 }, f.options);
+    await witnessedModelActivation('carryConfiguredModelActivation', f.a, f.options, { schemaVersion: 1, scopeId: 'source', commandId: 'source-reactivate', action: 'activate',
+      reference: sourceProfile.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, expectedRevision: 2 });
     await expect(resolveConfiguredModelUse(f.b, leased, { ...leasedContext.principal, issuer: 'foreign-person' }, f.options)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_PERSON_MISMATCH' });
     const sourceBytes = await readFile(sourcePath);
     expect((await applyConfiguredProviderSpendTemplate(f.b, 'target', { root: f.a, scopeId: 'source' }, f.options)).status).toBe('created');

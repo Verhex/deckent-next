@@ -1,9 +1,11 @@
+import * as witnessAdapters from '#adapters/index.js';
+import { personMarkersUnset } from '../support/person-env.js';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, afterEach, expect, it } from 'vitest';
-import { admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { describe, afterEach, expect, it, vi } from 'vitest';
+import { admitConfiguredModelActivation as admit } from '#composition/core/model-activation/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
@@ -56,7 +58,7 @@ async function fixture(responseMaxBytes: number | null, serviceResponseMaxBytes 
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const activate = { schemaVersion: 1 as const, action: 'activate' as const, commandId: 'activate-a', scopeId: 'scope-a', reference,
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding };
-  return { project, env, activate, ledger };
+  return { project, data, env, activate, ledger };
 }
 
 describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
@@ -115,4 +117,50 @@ it('admits activation when no profile is declared yet for this reference (the co
   expect(result).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
 });
 
+it('admits only relevant concurrent changes during a witnessed activation', async () => {
+  for (const change of ['marker-order', 'harmless-marker', 'effective-marker', 'unrelated-profile', 'selected-profile', 'binding', 'target-policy'] as const) {
+    const f = await fixture(null);
+    const path = join(f.project, '.deckent/config.json'), policyPath = join(f.data, 'policy.json');
+    const authored = { ...JSON.parse(await readFile(path, 'utf8')), cli: { agentEnvironment: ['FIXTURE_AGENT_A', 'FIXTURE_AGENT_B'] } };
+    const write = (value: unknown) => writeFile(path, JSON.stringify(value), { mode: 0o600 });
+    await write(authored);
+    const policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    const activate = () => admit(f.project, f.activate, { env: f.env });
+    if (change === 'effective-marker') vi.stubEnv('FIXTURE_AGENT_C', '1');
+    const result = await asPerson(activate, async () => {
+      if (change === 'marker-order' || change === 'harmless-marker' || change === 'effective-marker') {
+        const agentEnvironment = change === 'marker-order' ? ['FIXTURE_AGENT_B', 'FIXTURE_AGENT_A'] : ['FIXTURE_AGENT_A', 'FIXTURE_AGENT_C'];
+        await write({ ...authored, cli: { agentEnvironment } });
+      } else if (change === 'unrelated-profile' || change === 'selected-profile') {
+        const added = profile(4096);
+        if (change === 'unrelated-profile') added.reference = { ...reference, modelId: 'unrelated' };
+        await write({ ...authored, provider_invocation_profiles: { schemaVersion: 1, profiles: [added] } });
+      } else if (change === 'binding') {
+        await write({ ...authored, provider_catalog: { ...catalog, revision: 'changed' } });
+      } else {
+        await writeFile(policyPath, JSON.stringify({ ...policy, grants: policy.grants.map((grant: object) => ({ ...grant, id: 'changed' })) }));
+      }
+      return true;
+    }).catch(error => error).finally(() => vi.unstubAllEnvs());
+    if (change === 'effective-marker') expect.soft(result, change).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    else if (change === 'selected-profile' || change === 'binding' || change === 'target-policy')
+      expect.soft(result, change).toMatchObject({ code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' });
+    else expect.soft(result, change).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
+  }
 });
+
+});
+
+const admitConfiguredModelActivation: typeof admit = (...args) => asPerson(() => admit(...args));
+
+async function asPerson<T>(operation: () => Promise<T>, attest = async () => true): Promise<T> {
+  const witness = vi.spyOn(witnessAdapters, 'attestLocalInteractiveTerminal').mockImplementationOnce(attest).mockResolvedValue(true);
+  const markers = Object.keys(personMarkersUnset()).filter(key => process.env[key] !== undefined);
+  const values = markers.map(key => process.env[key]!);
+  for (const key of markers) delete process.env[key];
+  try { return await operation(); }
+  finally {
+    witness.mockRestore();
+    for (const [index, key] of markers.entries()) process.env[key] = values[index]!;
+  }
+}

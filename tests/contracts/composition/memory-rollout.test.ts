@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -51,10 +52,10 @@ async function seeded(context: readonly { id: string; version: number; text: str
     { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'], principals, resource: { kind: 'config', ids: 'all' } },
   ] }), { mode: 0o600 });
   let sequence = 0;
-  const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  await catalog({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 });
-  await catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId: 'gpt-6.1-sol', expectedRevision: 0 });
+  const command = (fields: Record<string, unknown>) => ({ schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...fields });
+  await applyModelCatalog(project, command({ action: 'register', catalog: await seedCatalog('codex-cli-subscription') }), options);
+  await witnessedModelActivation('applyModelCatalog', project, options, [null, 'gpt-6.1-sol'].map(modelId =>
+    command({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 })));
   await proposeConfiguredMemory(project, { schemaVersion: 1, commandId: 'm1', scopeId: 's', content: { kind: 'fact', title: 'Invoice approval',
     body: 'Invoices without a delivery note go to the approval queue.', tags: [], lesson: null }, origin: { kind: 'human', ref: null } }, options);
   await verifyConfiguredMemory(project, { schemaVersion: 1, commandId: 'v-m1', scopeId: 's', entryId: 'm1', expectedRevision: 1, basis: { kind: 'human-review', note: 'checked' } }, options,

@@ -1,3 +1,4 @@
+import { witnessedModelActivation } from '../support/witnessed-model-activation.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -89,7 +90,7 @@ describe('terminal read-only management (S09)', () => {
       const mark = locale === 'en' ? '<- current' : '<- geçerli';
       expect(first.split('\n').filter(line => line.includes(mark)).map(line => /\(([^)]+)\)/u.exec(line)?.[1])).toEqual(['claude-opus-5-5']); expect(first).toContain(locale === 'en' ? 'not enabled' : 'etkin değil');
       // Activation changes what the very next call shows: nothing is remembered between calls.
-      await applyModelCatalog(project, { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-opus-5-5', expectedRevision: 0 }, options);
+      await witnessedModelActivation('applyModelCatalog', project, options, { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-opus-5-5', expectedRevision: 0 });
       const second = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
       expect(second).toMatch(/claude-opus-5-5\) · \S+( \S+)* · (enabled|etkin)\b/u);
     });
