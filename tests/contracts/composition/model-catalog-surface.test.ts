@@ -222,6 +222,22 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     finally { raced.mockRestore(); }
     expect.soft(await inspectModelActivation(f.project, { schemaVersion: 1, scopeId: 's', reference: f.reference }, f.options))
       .toMatchObject({ activation: { state: 'inactive' } });
+    // A replay the writer returns passes the replay permission for that target, on the policy read again when it arrives.
+    const fPolicy = join(f.project, 'd', 'policy.json'), fRules = await readFile(fPolicy, 'utf8'), rules = JSON.parse(fRules);
+    const later = { ...off, commandId: 'off-again', expectedRevision: 3 };
+    const revoked = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        if (admission.command.commandId !== later.commandId) return write(admission);
+        await write(admission);
+        await writeFile(fPolicy, JSON.stringify({ ...rules, grants: [...rules.grants, { ...rules.grants[1], id: 'deny-replay', effect: 'deny', actions: ['deactivate', 'inspect'],
+          resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: f.model.nativeId })] } }] }));
+        return write(admission);
+      };
+      return store;
+    });
+    try { await expect.soft(applyModelCatalog(f.project, later, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' }); }
+    finally { revoked.mockRestore(); await writeFile(fPolicy, fRules); }
 
     const partial = await declaredFixture();
     await asPerson(() => applyModelCatalog(partial.project, command, partial.options));
@@ -298,18 +314,37 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       return store;
     });
     try { await expect.soft(asPerson(fresh('direct-race', 2))).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { twin.mockRestore(); }
+    // The replay decision uses the policy read again when the replay arrives: inspect removed during the call is honoured.
+    await writeFile(policyPath, JSON.stringify(policy));
+    const lateDeny = JSON.stringify({ ...policy, grants: [...policy.grants, { ...policy.grants[1], id: 'deny-late-inspect', effect: 'deny',
+      actions: ['inspect'], resource: { kind: 'model-activation', ids: [modelActivationTargetId(direct.reference)] } }] });
+    const late = vi.spyOn(witnessAdapters, 'openSqliteModelActivationStore').mockImplementation(async (...args) => {
+      const store = await openActivation(...args), write = store.admit.bind(store);
+      store.admit = async admission => { await write(admission); await writeFile(policyPath, lateDeny); return write(admission); };
+      return store;
+    });
+    try { await expect.soft(asPerson(fresh('direct-late', 3))).rejects.toMatchObject({ code: 'POLICY_DENIED' }); } finally { late.mockRestore(); }
     // A child receipt whose row no longer holds its change refuses before any write, after the witness.
     await writeFile(policyPath, JSON.stringify(policy));
-    const child = fresh('direct-child', 3);
+    const child = fresh('direct-child', 4);
     const remove = (where: string) => { const db = new DatabaseSync(direct.path); try { db.prepare(`DELETE FROM model_catalog_activations${where}`).run(); } finally { db.close(); } };
     remove(` WHERE model_id='${f.model.nativeId}'`);
     await expect(child()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-    await expect(asPerson(child)).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 4 } } });
+    await expect(asPerson(child)).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 5 } } });
     remove('');
     const tampered = direct.tables();
     await expect.soft(child()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     await expect.soft(asPerson(child)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
     expect.soft(direct.tables()).toEqual(tampered);
+    // A conflict on the first child does not cut off the planning of the next one: that child's policy refusal keeps its place.
+    await expect(asPerson(fresh('direct-model', 5))).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 6 } } });
+    remove(" WHERE model_id=''");
+    await expect(asPerson(fresh('direct-first', 6))).resolves.toMatchObject({ replayed: false, receipt: { record: { revision: 7 } } });
+    remove('');
+    await writeFile(policyPath, JSON.stringify({ ...policy, grants: [...policy.grants, { ...policy.grants[1], id: 'deny-second-child', effect: 'deny', actions: ['activate'],
+      resource: { kind: 'model-activation', ids: [modelCatalogTargetId({ channelId: SEED_CHANNEL, modelId: f.model.nativeId })] } }] }));
+    await expect.soft(fresh('direct-first', 6)()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect.soft(asPerson(fresh('direct-first', 6))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
 
   it('settles missing catalog children after interruption, then replays their receipts without another write', async () => {
@@ -373,6 +408,11 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await writeFile(policyPath, readable);
     // The sealed parent receipt is verified before the re-run reports the command complete.
     const original = parent();
+    await expect.soft(apply()).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' });
+    // Its stored authority entries name the command's own target too.
+    const entries = JSON.parse(original);
+    entries.authorizations[0].target.modelId = 'claude-sonnet-5-5';
+    parent(JSON.stringify(entries));
     await expect.soft(apply()).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' });
     parent(original);
     const db = new DatabaseSync(f.path);

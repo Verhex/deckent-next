@@ -444,6 +444,12 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
     { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
       return Response.json(init.method === 'GET' ? { data: [{ id: sharedId }] } : { choices: [] });
     } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
+  // The same file read only as the installation layer (`globalOnly`): the published global write is checked against its own read.
+  const globalId = 'witness-loopback-global-only';
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-global-only', model: { nativeId: globalId } }, { ...shared, globalOnly: true },
+    { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: globalId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
 
 });
 

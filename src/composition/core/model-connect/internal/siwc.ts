@@ -59,12 +59,12 @@ async function siwcOperation(root: string, request: SubscriptionConnectionReques
     }
     return { apiTargets, usageUrl: SIWC_USAGE_SUMMARY.manageUrl };
   }
-  // A login to the single existing account decides on that account's secret, observed read-only first. An unreadable list leaves the decision
-  // on the real secret to the witnessed OAuth owner, as the base did.
+  // The pre-check decides only on a known account's secret (named, or the single one the read-only list shows). With no account, several,
+  // or an unreadable list, the witnessed OAuth owner decides on the real secret, as the base did.
   if (request.operation === 'login' && !request.newAccount) {
-    const rows = request.connectionId ? [] : await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.list(), {}, undefined, undefined, 'read')
-      .catch(() => null);
-    if (rows) await authorizeSiwcConnect(context, request.scopeId, request.connectionId ?? (rows.length === 1 ? rows[0]!.connectionId : undefined));
+    const connectionId = request.connectionId ?? await withConfiguredSiwc(root, request.scopeId, options, 'inspect', app => app.list(), {}, undefined, undefined, 'read')
+      .then(rows => rows.length === 1 ? rows[0]!.connectionId : undefined, () => undefined);
+    if (connectionId) await authorizeSiwcConnect(context, request.scopeId, connectionId);
   }
   if (request.operation === 'logout' || request.operation === 'login' && !request.newAccount) return withConfiguredSiwc(root, request.scopeId, options,
     request.operation === 'logout' ? 'logout' : 'connect', async app => {

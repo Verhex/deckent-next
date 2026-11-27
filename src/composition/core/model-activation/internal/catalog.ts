@@ -70,9 +70,14 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     if (command.action === 'register') return await catalogApplication(context, undefined, true).apply(command);
     const authority = activationAuthority(root, scopeId, options, context), enabling = command.action === 'activate';
     const parent = await planCatalogWrite(context, authority, command, true);
-    // The parent receipt is verified completely when it is obtained (stored, or returned by the writer), before any child.
+    // The parent receipt is verified when it is obtained (stored, or returned by the writer), before any child. A replay the writer returns
+    // passes the same replay permission as a stored one, on the scope read again now (the base re-read it).
     const verified = <T extends { readonly receipt: Parameters<typeof verifyCatalogActivationChange>[0] }>(result: T) => { verifyCatalogActivationChange(result.receipt, command); return result; };
-    const off = !parent.replay && !enabling ? verified(await parent.write()) : null;
+    const written = async <T extends { readonly replayed: boolean }>(result: T) => {
+      if (result.replayed) await catalogApplication(await loadConfiguredScopeContext(root, scopeId, options, 'read')).preflight(command, true);
+      return result;
+    };
+    const off = !parent.replay && !enabling ? verified(await written(await parent.write())) : null;
     const replay = parent.replay ? verified(parent.replay) : off?.replayed ? off : null;
     const channel = (await catalogApplication(context, authority).inspect({ schemaVersion: 1, scopeId, channelId: command.channelId }))
       .channels.find(row => row.access === 'allowed');
@@ -133,7 +138,7 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     const writes = [];
     for (const preflight of prepare) writes.push(await preflight());
     if (!replay && enabling) { await parent.check(channel, selected); await proof.record(children); }
-    const result = replay ?? verified(await parent.write(channel, selected));
+    const result = replay ?? verified(await written(await parent.write(channel, selected)));
     for (const write of writes) await write();
     return result;
   } catch (error) { throw queryFailure(error); }

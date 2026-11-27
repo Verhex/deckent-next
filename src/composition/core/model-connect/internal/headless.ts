@@ -86,10 +86,10 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
         return held?.capacity.executionSlots === adapter.maxInFlight && held.capacity.inFlightSlots === adapter.maxInFlight ? adapter : null;
       } catch { return null; } finally { db.close(); }
     },
-    async commit() {
+    async commit(beforeWrite?: () => Promise<void>) {
       const context = await ledger('write'), db = openSqliteLedger(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
-        for (const { binding, slots } of bindings.values()) bindCapacityResource(db, binding, { executionSlots: slots, inFlightSlots: slots });
+        for (const { binding, slots } of bindings.values()) { await beforeWrite?.(); bindCapacityResource(db, binding, { executionSlots: slots, inFlightSlots: slots }); }
       } finally { db.close(); }
     },
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {

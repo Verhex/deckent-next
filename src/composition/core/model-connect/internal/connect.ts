@@ -1,4 +1,4 @@
-import { configuredSiwcConnect, withConfiguredSiwc } from '#composition/core/siwc/index.js';
+import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
 import { modelConnectCommandSchema, type ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError, refuseRetiredModelActivation } from '#engine/index.js';
@@ -19,12 +19,12 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
-  let siwc: ReturnType<typeof configuredSiwcConnect> | null = null, scopeId = '';
+  let siwc: ReturnType<typeof configuredSiwcConnect> | null = null;
   let enablingWriteStarted = false;
   let connectPhase: 'before-profile-write' | 'profile-write-started' | 'profile-written' = 'before-profile-write';
   try {
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, command = modelConnectCommandSchema.safeParse(input).data;
-    const kind = registry.kinds.find(row => row.id === command?.connection); scopeId = command?.scopeId ?? '';
+    const kind = registry.kinds.find(row => row.id === command?.connection), scopeId = command?.scopeId ?? '';
     let observed: Awaited<ReturnType<typeof snapshotConfiguredConfig>> | null = null, globalDigest: string | null = null;
     let own: { layer: 'global' | 'project'; digest: string } | null = null;
     const oneFile = configuredLayersShareFile(projectRoot, options);
@@ -112,11 +112,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async layers() {
         const snapshot = await snapshotConfiguredConfig(projectRoot, options), written = own, hold = () => ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
         own = null;
-        // A re-read advances the expected state only by this connect's own verified write; any other change stops it. When both layers are one
-        // file (the reader then reads it once), both views are that written file and only its digest is compared.
+        // A re-read advances the expected state only by this connect's own verified write: the published layer's own read has its digest (the
+        // global one below), and any other change stops it. When both read layers are one file, the other view is that same written file.
         const shared = written !== null && oneFile;
         if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !shared && !isDeepStrictEqual(observed![layer], snapshot[layer]))
-          || written !== null && (written.layer === 'project' || shared) && snapshot.digest !== written.digest)) throw hold();
+          || written?.layer === 'project' && snapshot.digest !== written.digest)) throw hold();
         observed = snapshot;
         if (written?.layer === 'global' || snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
           const global = await snapshotConfiguredConfig(projectRoot, options, 'global');
@@ -176,10 +176,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (error instanceof ModelConnectError) normalized = ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
     if (error instanceof ProviderConnectError) normalized = ErrorRegistry.createError(error.code);
     const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
-    // "Connected" only when the stored account record says so now (a renewal can fail after the account was chosen).
-    const chosen = siwc?.connectionId() ?? null;
-    const oauthConnected = chosen !== null && await withConfiguredSiwc(projectRoot, scopeId, options, 'inspect', app => app.inspect(chosen), {}, undefined, undefined, 'read')
-      .then(view => view.state === 'connected' && view.planUse, () => false);
+    // "Connected" from the chosen session in memory, as at HEAD, but not when the OAuth owner itself refused (a failed renewal or lease after the
+    // account was chosen can leave the stored connection revoked or unknown). Nothing is read or written to explain the refusal.
+    const oauthConnected = siwc?.connected() === true && !(error instanceof OAuthConnectionError);
     const localizeRefusal = oauthConnected ? (locale: Locale) => {
       if (failure.code === 'AUTHORITY_WITNESS_REQUIRED' && !enablingWriteStarted)
         return { ...failure.localize?.(locale), message: t('siwc.connectedActivationRefused', {}, locale) };

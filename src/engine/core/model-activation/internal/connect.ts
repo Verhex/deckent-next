@@ -52,7 +52,8 @@ export interface ModelConnectPorts {
   authorizeCarry?(reference: ModelReference, binding: Extract<ModelConnectBinding, { status: 'declared' }>): Promise<void>;
   workerNeeded?(reference: ModelReference, registering: ProviderCatalogDocument | null): Promise<boolean>;
   beforeWrite?(): Promise<void>;
-  commitAdapter?(): Promise<void>;
+  /** `beforeWrite` runs right before each durable adapter record (a capacity binding). */
+  commitAdapter?(beforeWrite?: () => Promise<void>): Promise<void>;
   /** Seedless kinds: a fresh bounded endpoint list must contain the selected exact id before any write. */
   discover?(kind: string, endpoint: string, nativeId: string): Promise<ProviderCatalogDocument>;
   /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
@@ -477,7 +478,7 @@ export class ModelConnectApplication {
         isDeepStrictEqual(withoutDelegation(planned.get(layer)!), withoutDelegation(authored.get(layer)!)));
       await ports.authorizePlan({ registrationTargets, profiled, delegationOnly, writes, selections: selection });
       if (registration || writes.length || selection.some(item => item.activate || item.worker) || ports.commitAdapter) {
-        if (ports.commitAdapter) { await ports.beforeWrite?.(); await ports.commitAdapter(); }
+        if (ports.commitAdapter) { await ports.beforeWrite?.(); await ports.commitAdapter(async () => { await ports.beforeWrite?.(); }); }
         const stopped = await publish();
         if (stopped) return stopped;
       } else {
