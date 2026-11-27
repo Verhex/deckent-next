@@ -693,10 +693,13 @@ it('tells the model its per-answer output limit and how to write large content i
   const call = '- When one of these tools fits the request, make the call instead of answering that you cannot or that the session is read-only. Policy and the'
     + ' permission mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report'
     + ' what the tool result confirms.';
-  const plan = 'point the person to /do <request> to ask for a plan; the person decides on any card it opens.';
-  const unfit = `- When none of them fits, do not call another tool to act: say which action is not available in this session, and ${plan}`;
+  const unfit = '- When the person asks to change project files or run a command and none of these tools fits, say which action is not available in this session;'
+    + ' do not use another tool in its place.';
   // v13 only for the text that carries the section; every text without it keeps the v12 header.
   expect(routed(changeTools)[0]).toBe('[Deckent runtime instructions v13]'); expect(render(changeTools, 8192)[0]).toBe('[Deckent runtime instructions v12]');
+  // The shared feature line promises no run in v13; v12 keeps its words.
+  expect(routed(changeTools)).toContain('- Work: /do <request> asks for a plan; the person decides on any card it opens; /runs shows jobs; /approvals shows what waits for the user\'s decision.');
+  expect(render(changeTools, 8192)).toContain('- Work: /do <request> plans and runs a job; /runs shows jobs; /approvals shows what waits for the user\'s decision.');
   expect(section(routed(changeTools))).toEqual(['Changes in this session:', cli,
     '- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change; propose_work for work'
       + ' a worker should do; run_shell for commands. A built-in tool of the CLI stops the turn.', call, unfit]);
@@ -705,8 +708,10 @@ it('tells the model its per-answer output limit and how to write large content i
   // Only the edit tools listed (the native fixture's layout): a command request has no fitting call, so the text says so instead of pushing one.
   expect(section(routed(changeTools, ['run_shell', 'propose_work']))).toEqual(['Changes in this session:', cli, '- Project files and commands change only through'
     + ' the deckent tools offered here: edit_file, write_file for a direct file change. A built-in tool of the CLI stops the turn.', call, unfit]);
+  // A settings change asked while only the edit tools are listed: the section never calls propose_setting unavailable (its scope is files and commands).
+  expect(section(routed([...changeTools, ['propose_setting', 'read']], ['run_shell', 'propose_work'])).join('\n')).not.toMatch(/propose_setting|setting/u);
   const none = ['Changes in this session:', cli, '- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks'
-    + ` for such a change, say that it is not available in this session and ${plan}`];
+    + ' for such a change, say that it is not available in this session.'];
   expect(section(routed([['read_file', 'read'], ['scratch_write', 'edit']]))).toEqual(none);
   expect(section(routed(changeTools, ['edit_file', 'write_file', 'run_shell', 'propose_work']))).toEqual(none);
   const plainLines = render(changeTools, 8192);

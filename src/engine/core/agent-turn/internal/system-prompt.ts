@@ -79,16 +79,16 @@ function changeRoute(tools: readonly AgentToolSpec[], session: AgentSessionSnaps
   const named = (pick: (tool: AgentToolSpec) => boolean) => tools.filter(tool => pick(tool) && usable(tool)).map(tool => tool.name).join(', ');
   const routes = [[named(tool => tool.toolClass === 'edit' && !SCRATCH_EDIT_TOOLS.has(tool.name)), 'for a direct file change'],
     [named(tool => tool.name === AI_PROPOSAL_REGISTRY.tools.work), 'for work a worker should do'], [named(tool => tool.toolClass === 'shell'), 'for commands']].filter(([names]) => names);
-  const plan = 'point the person to /do <request> to ask for a plan; the person decides on any card it opens';
   return ['', 'Changes in this session:', '- You run inside a CLI whose own built-in tools are off or refused here. Do not infer what the deckent tools may do from'
     + ' the CLI\'s own sandbox (it may call itself read-only).',
   ...(routes.length ? [`- Project files and commands change only through the deckent tools offered here: ${routes.map(([names, use]) => `${names} ${use}`).join('; ')}.`
     + ' A built-in tool of the CLI stops the turn.',
     '- When one of these tools fits the request, make the call instead of answering that you cannot or that the session is read-only. Policy and the permission'
       + ' mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report what the tool result confirms.',
-    `- When none of them fits, do not call another tool to act: say which action is not available in this session, and ${plan}.`]
-    : [`- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks for such a change, say that it is not`
-      + ` available in this session and ${plan}.`])];
+    '- When the person asks to change project files or run a command and none of these tools fits, say which action is not available in this session;'
+      + ' do not use another tool in its place.']
+    : ['- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks for such a change, say that it is not'
+      + ' available in this session.'])];
 }
 
 /**
@@ -146,7 +146,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
       + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
     '', 'deckent features you may point the user to (commands for the user; they are not among your tools):',
-    '- Work: /do <request> plans and runs a job; /runs shows jobs; /approvals shows what waits for the user\'s decision.',
+    `- Work: /do <request> ${bridgedCli ? 'asks for a plan; the person decides on any card it opens' : 'plans and runs a job'}; /runs shows jobs; /approvals shows what waits for the user's decision.`,
     '- Setup: /setup reopens the first-open steps; /model picks the model; /config changes settings; deckent doctor checks the installation.',
     '- Agents and skills: deckent agents (define, define-skill; --example prints a filled file).',
     '- Memory: deckent memory (propose, verify, search). Verified entries reach workers only when a job starts and the person turned'
