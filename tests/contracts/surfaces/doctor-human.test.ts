@@ -23,6 +23,7 @@ import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import { EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-kit/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { closedPreflightRefusal } from '#adapters/core/native-cli-headless/index.js';
+import { argumentCountRefusal } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { producedSandboxRefusal, UNPRODUCIBLE_SANDBOX_REFUSAL } from '../../fixtures/native-headless/sandbox-refusal.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, doctorReadinessChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
@@ -524,8 +525,13 @@ describe('deckent doctor (command)', () => {
     const withRefusal = JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''));
     expect(withRefusal.headlessLoginRefusals).toEqual([{ connection: 'claude-cli-subscription', code: 'SANDBOX_VIEW_TOO_LARGE',
       params: readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandbox).params, message: sandbox }]);
-    // An altered sum, a missing check and the earlier example (its sum and text hold, but no isolated view yields "other setup 4") add nothing.
-    for (const old of [sandbox.replace(/needs (\d+)/u, (_, n: string) => `needs ${Number(n) + 1}`), null, UNPRODUCIBLE_SANDBOX_REFUSAL]) {
+    const hidden = producedSandboxRefusal('en', 1_500, true); logins = [login(hidden)];
+    expect(JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, '')).headlessLoginRefusals).toMatchObject([{ code: 'SANDBOX_VIEW_TOO_LARGE', message: hidden }]);
+    // An altered sum, a missing check, the earlier example (its sum and text hold, but no isolated view yields "other setup 4") and one or four
+    // "other setup" arguments more than the producer's (no composition of its groups gives them) add nothing.
+    const made = readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandbox).params as Record<string, number>;
+    const more = (extra: number) => argumentCountRefusal(made['count']! + extra, { home: 0, protective: made['protective']!, pins: 0, remounts: 2, tail: made['tail']! }, { DECKENT_LANGUAGE: 'en' }, true);
+    for (const old of [sandbox.replace(/needs (\d+)/u, (_, n: string) => `needs ${Number(n) + 1}`), null, UNPRODUCIBLE_SANDBOX_REFUSAL, more(1), more(4)]) {
       logins = [login(old)];
       expect(JSON.parse((await run(['--json'])).replace(/\[[A-Z_]+\]$/u, ''))).not.toHaveProperty('headlessLoginRefusals');
     }

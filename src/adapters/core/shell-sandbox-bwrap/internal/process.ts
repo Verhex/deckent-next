@@ -61,18 +61,31 @@ export const withinByteBound = (args: readonly string[]) =>
 // The view's argument groups. The argument-count refusal reports them and the reader of a stored refusal checks them, so both use these.
 const viewHead = (size: string) => ['--unshare-all', '--unshare-user', '--disable-userns', '--die-with-parent', '--proc', '/proc', '--dev', '/dev', '--size', size, '--tmpfs', '/tmp'];
 const systemBind = (path: string) => ['--ro-bind-try', path, path];
+const hiddenMemory = (size: string, path: string) => ['--perms', '0755', '--size', size, '--tmpfs', path], hiddenRemount = (path: string) => ['--remount-ro', path];
+const pinnedBind = (fd: string, target: string) => ['--ro-bind-fd', fd, target], readOnlyBind = (source: string, target: string) => ['--ro-bind', source, target];
 const privateMemory = (size: string, path: string) => ['--perms', '0700', '--size', size, '--tmpfs', path];
-const stateBind = (dir: string) => ['--bind', dir, dir], fileMask = (path: string) => ['--ro-bind', '/dev/null', path];
+const stateBind = (dir: string) => ['--bind', dir, dir], fileMask = (path: string) => ['--ro-bind', '/dev/null', path], copyBind = (source: string, target: string) => ['--bind', source, target];
 const ROOT_REMOUNT = ['--remount-ro', '/'], chdir = (dir: string) => ['--chdir', dir];
 const tailHead = (shell: string, limits: string) => ['--', shell, '-c', limits];
-/** Whether the isolated launcher can report these counts: no HOME masks or pins, its root remount, a protective group of whole masks (every
- * directory mask is two file masks long), a tail with its head, and at least the arguments every view has (plus the state bind with masks). */
+/**
+ * Whether the isolated launcher can report these counts, composed as `isolatedViewPrefix` builds them. protective = directory masks ·
+ * privateMemory + file masks · fileMask. other = viewHead + system paths · systemBind + workDir privateMemory + chdir + (masks: stateBind)
+ * + h · (hiddenMemory + hiddenRemount) + (h > 0: pinnedBind) + k · ordinary bind, where h ≤ 1 + system paths (the package root and its
+ * system aliases) and every optional bind (a pin without hidden paths, a state bind without masks, executables, copies, work files, sockets)
+ * is one ordinary bind long. Both checks try each value of the smaller group's count below the other group's length (a bounded search:
+ * a larger count has the same remainder and less room), so the arithmetic follows the builders' lengths.
+ */
 export function producibleIsolatedArgumentCounts(c: Readonly<Record<string, unknown>>): boolean {
-  const fixed = viewHead('').length + BUBBLEWRAP_SYSTEM_PATHS.length * systemBind('').length + privateMemory('', '').length + chdir('').length;
-  const n = (name: string) => typeof c[name] === 'number' ? c[name] as number : NaN;
-  return n('home') === 0 && n('pins') === 0 && n('remounts') === ROOT_REMOUNT.length && n('protective') % fileMask('').length === 0
-    && 2 * fileMask('').length === privateMemory('', '').length && n('tail') >= tailHead('', '').length
-    && n('other') >= fixed + (n('protective') > 0 ? stateBind('').length : 0);
+  const n = (name: string) => typeof c[name] === 'number' && Number.isSafeInteger(c[name]) && (c[name] as number) >= 0 ? c[name] as number : NaN;
+  const bind = readOnlyBind('', '').length, mask = privateMemory('', '').length, file = fileMask('').length, hidden = hiddenMemory('', '').length + hiddenRemount('').length;
+  if ([pinnedBind('', '').length, stateBind('').length, copyBind('', '').length].some(length => length !== bind)) return false;
+  const protective = n('protective'), masked = protective > 0;
+  const other = n('other') - viewHead('').length - BUBBLEWRAP_SYSTEM_PATHS.length * systemBind('').length - privateMemory('', '').length - chdir('').length
+    - (masked ? stateBind('').length : 0);
+  const masks = Array.from({ length: file }, (_, d) => protective - d * mask).some(rest => rest >= 0 && rest % file === 0);
+  const views = Array.from({ length: Math.min(BUBBLEWRAP_SYSTEM_PATHS.length + 1, bind - 1) + 1 }, (_, h) => other - h * hidden - (h > 0 ? pinnedBind('', '').length : 0))
+    .some(rest => rest >= 0 && rest % bind === 0);
+  return n('home') === 0 && n('pins') === 0 && n('remounts') === ROOT_REMOUNT.length && n('tail') >= tailHead('', '').length && masks && views;
 }
 
 function isolatedViewPrefix(view: IsolatedProcessView): string[] {
@@ -81,19 +94,19 @@ function isolatedViewPrefix(view: IsolatedProcessView): string[] {
   for (const path of BUBBLEWRAP_SYSTEM_PATHS) args.push(...systemBind(path));
   const pinned = view.pinnedExecutable;
   const hidden = pinned?.hideDirectory ? packageMountPaths(pinned.hideDirectory) : [];
-  for (const path of hidden) args.push('--perms', '0755', '--size', size, '--tmpfs', path);
-  if (pinned) args.push('--ro-bind-fd', String(pinned.fd), pinned.target);
-  for (const path of hidden) args.push('--remount-ro', path);
-  for (const path of view.executables) args.push('--ro-bind', path, path);
+  for (const path of hidden) args.push(...hiddenMemory(size, path));
+  if (pinned) args.push(...pinnedBind(String(pinned.fd), pinned.target));
+  for (const path of hidden) args.push(...hiddenRemount(path));
+  for (const path of view.executables) args.push(...readOnlyBind(path, path));
   args.push(...privateMemory(size, view.workDir));
   if (view.stateDir) {
     args.push(...stateBind(view.stateDir));
     for (const path of view.stateMasks.directories) args.push(...privateMemory(size, path));
     for (const path of view.stateMasks.files) args.push(...fileMask(path));
-    for (const file of view.stateCopies ?? []) args.push('--bind', file.source, file.target);
+    for (const file of view.stateCopies ?? []) args.push(...copyBind(file.source, file.target));
   }
-  for (const path of view.workFiles) args.push('--ro-bind', path, path);
-  for (const socket of view.sockets) args.push('--ro-bind', socket.source, socket.target);
+  for (const path of view.workFiles) args.push(...readOnlyBind(path, path));
+  for (const socket of view.sockets) args.push(...readOnlyBind(socket.source, socket.target));
   // The realm's own root (bubblewrap's tmpfs holding the mount points) read-only last: a write outside the private memories and the bound login
   // dir fails instead of landing in memory (`--remount-ro` changes only that mount point).
   args.push(...ROOT_REMOUNT, ...chdir(view.workDir));

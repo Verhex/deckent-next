@@ -369,20 +369,23 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     // The sandbox's argument-count refusal keeps its writer's sentence. A refusal the isolated launcher really produces is shown with its
     // counts in the reader's language; nothing of any other text is shown.
     const sandboxEn = producedSandboxRefusal('en'), sandboxTr = producedSandboxRefusal('tr');
-    const produced = readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', sandboxEn).params as Record<string, number>;
-    for (const stored of [sandboxEn, sandboxTr]) {
+    const counts = (text: string) => readHeadlessDiagnosticRecord('SANDBOX_VIEW_TOO_LARGE', text).params as Record<string, number>, produced = counts(sandboxEn);
+    // Without and with a hidden launcher package path (its tmpfs, remount and pin also land in "other setup").
+    for (const [stored, en, tr] of [[sandboxEn, sandboxEn, sandboxTr], [producedSandboxRefusal('tr', 1_500, true), producedSandboxRefusal('en', 1_500, true), producedSandboxRefusal('tr', 1_500, true)]]) {
       await writeFile(join(c.root, 'state', 'preflight.json'), JSON.stringify({ schemaVersion: 1, state: 'closed', refusal: 'SANDBOX_VIEW_TOO_LARGE', check: stored }));
       const sandbox = await logins();
-      expect.soft(sandbox[0]?.diagnostic).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE', params: produced });
-      expect.soft(doctor(sandbox, 'en')).toContain(sandboxEn);
-      expect.soft(doctor(sandbox, 'tr')).toContain(sandboxTr);
+      expect.soft(sandbox[0]?.diagnostic).toMatchObject({ code: 'SANDBOX_VIEW_TOO_LARGE', params: counts(en!) });
+      expect.soft(doctor(sandbox, 'en')).toContain(en);
+      expect.soft(doctor(sandbox, 'tr')).toContain(tr);
     }
     // Only what the writer can produce counts. The earlier example (sum and text hold, other setup 4) and each single departure from the
     // producer (protective not whole masks, a tail without its head, HOME masks, another root remount, a count within the bound, another bound,
     // the general shell advice, a missing or future record version) keep the generic reading.
     const en = { DECKENT_LANGUAGE: 'en' }, base = { home: 0, protective: produced['protective']!, pins: 0, remounts: 2, tail: produced['tail']! };
     const count = produced['count']!, within = 3 * Math.ceil((count - 9000) / 3);
-    for (const [schemaVersion, check] of [[1, UNPRODUCIBLE_SANDBOX_REFUSAL], [1, argumentCountRefusal(count + 1, { ...base, protective: base.protective + 1 }, en, true)],
+    // "Other setup" above its fixed part is whole ordinary binds plus hidden paths with their pin: one or four arguments more cannot be built.
+    for (const [schemaVersion, check] of [[1, UNPRODUCIBLE_SANDBOX_REFUSAL], [1, argumentCountRefusal(count + 1, base, en, true)], [1, argumentCountRefusal(count + 4, base, en, true)],
+      [1, argumentCountRefusal(count + 1, { ...base, protective: base.protective + 1 }, en, true)],
       [1, argumentCountRefusal(count, { ...base, tail: 3 }, en, true)], [1, argumentCountRefusal(count + 6, { ...base, home: 6 }, en, true)],
       [1, argumentCountRefusal(count + 1, { ...base, remounts: 3 }, en, true)], [1, argumentCountRefusal(count - within, { ...base, protective: base.protective - within }, en, true)],
       [1, sandboxEn.replace('at most 9000', 'at most 9001')], [1, argumentCountRefusal(count, base, en, false)], [undefined, sandboxEn], [2, sandboxEn]] as const) {
