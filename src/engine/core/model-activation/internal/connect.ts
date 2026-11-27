@@ -35,7 +35,8 @@ export interface ModelConnectPorts {
   registered?(channelId: string, nativeId: string): Promise<ModelConnectCatalogRow | null>;
   available?(kind: string, endpoint: string): Promise<readonly string[] | null>;
   priced?(kind: string, nativeId: string, endpoint: string): boolean;
-  workerActivate?(reference: ModelReference, commandId: string): Promise<boolean | void>;
+  /** `beforeWrite` runs right before each durable worker write. */
+  workerActivate?(reference: ModelReference, commandId: string, beforeWrite?: () => Promise<void>): Promise<boolean | void>;
   preflight?(scopeId: string, principal: VerifiedPrincipal, target?: Readonly<{ reference: ModelReference; nativeId: string }>): Promise<void>;
   beforeDiscovery?(command: ModelConnectCommand, kind: ModelConnectKind, base: string | null, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
   beforeProbes?(kind: ModelConnectKind, base: string, nativeIds: readonly string[], layers: Awaited<ReturnType<ModelConnectPorts['layers']>>): Promise<void>;
@@ -51,7 +52,8 @@ export interface ModelConnectPorts {
   authorizeCarry?(reference: ModelReference, binding: Extract<ModelConnectBinding, { status: 'declared' }>): Promise<void>;
   workerNeeded?(reference: ModelReference, registering: ProviderCatalogDocument | null): Promise<boolean>;
   beforeWrite?(): Promise<void>;
-  commitAdapter?(): Promise<void>;
+  /** `beforeWrite` runs right before each durable adapter record (a capacity binding). */
+  commitAdapter?(beforeWrite?: () => Promise<void>): Promise<void>;
   /** Seedless kinds: a fresh bounded endpoint list must contain the selected exact id before any write. */
   discover?(kind: string, endpoint: string, nativeId: string): Promise<ProviderCatalogDocument>;
   /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
@@ -476,7 +478,7 @@ export class ModelConnectApplication {
         isDeepStrictEqual(withoutDelegation(planned.get(layer)!), withoutDelegation(authored.get(layer)!)));
       await ports.authorizePlan({ registrationTargets, profiled, delegationOnly, writes, selections: selection });
       if (registration || writes.length || selection.some(item => item.activate || item.worker) || ports.commitAdapter) {
-        if (ports.commitAdapter) { await ports.beforeWrite?.(); await ports.commitAdapter(); }
+        if (ports.commitAdapter) { await ports.beforeWrite?.(); await ports.commitAdapter(async () => { await ports.beforeWrite?.(); }); }
         const stopped = await publish();
         if (stopped) return stopped;
       } else {
@@ -517,8 +519,10 @@ export class ModelConnectApplication {
       steps.activation = 'written';
     }
     }
+    // Each durable worker write passes the same before-write check as the other enabling writes.
+    const workerWrite = () => ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)), async () => { await ports.beforeWrite?.(); });
     if (kind.connect.headless && !workerIds?.includes(target.nativeId)) worker = 'image-required'; // the image gates only the worker activation, and the result says so
-    else if ((!ports.authorizePlan || selection[index]?.worker) && await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
+    else if ((!ports.authorizePlan || selection[index]?.worker) && await workerWrite()) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
     }
     if (!profiled) steps.profile = 'skipped';

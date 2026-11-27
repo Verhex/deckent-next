@@ -198,7 +198,10 @@ export async function checkCatalogActivationFacts(reader: ModelCatalogReader, sc
 
 export function verifyCatalogActivationChange(receipt: ModelCatalogReceipt, command: Exclude<ModelCatalogCommand, { action: 'register' }>): void {
   const { channelId, modelId, expectedRevision } = command;
-  if (!isDeepStrictEqual(receipt.changes, [{ kind: 'activation', channelId, modelId, revision: expectedRevision + 1 }]))
+  // The stored authority entries name the command's own targets, action and level, as the writer's admission built them.
+  const authorized = modelCatalogTargets(command).map(target => ({ target, action: command.action, level: 'scope' }));
+  if (!isDeepStrictEqual(receipt.changes, [{ kind: 'activation', channelId, modelId, revision: expectedRevision + 1 }])
+    || !isDeepStrictEqual(receipt.authorizations.map(({ target, action, level }) => ({ target, action, level })), authorized))
     throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
 }
 

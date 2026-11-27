@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { configuredInvocationProfiles, OAuthConnectionError, ModelConnectApplication, ModelConnectError, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan, ModelActivationStoreError, refuseRetiredModelActivation } from '#engine/index.js';
 import { SIWC_INFERENCE, providerSpendingConfiguredBudget, PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { configuredLayersShareFile, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -26,6 +26,8 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, command = modelConnectCommandSchema.safeParse(input).data;
     const kind = registry.kinds.find(row => row.id === command?.connection), scopeId = command?.scopeId ?? '';
     let observed: Awaited<ReturnType<typeof snapshotConfiguredConfig>> | null = null, globalDigest: string | null = null;
+    let own: { layer: 'global' | 'project'; digest: string } | null = null;
+    const oneFile = configuredLayersShareFile(projectRoot, options);
     const sameLayers = (snapshot: NonNullable<typeof observed>) => {
       if (observed && (!isDeepStrictEqual(observed.global, snapshot.global) || !isDeepStrictEqual(observed.project, snapshot.project)))
         throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
@@ -103,15 +105,24 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
           : discoverConfiguredConnectionModel(projectRoot, scopeId, id, base, nativeId, options, host);
       },
       adapter: (_id, value) => siwc ? siwc.adapter(value.existing) : cli ? cli.adapter(kind!, value) : connectionAdapter(kind!, { ...value, endpoint: value.endpoint ?? '' }),
-      workerActivate: (reference, commandId) => authority!.applyWorker(reference,
-        () => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options)),
+      workerActivate: (reference, commandId, beforeWrite) => authority!.applyWorker(reference,
+        () => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options, beforeWrite)),
       async authorizeDelegation() { await authority!.witness(); },
       principal,
       async layers() {
-        const snapshot = await snapshotConfiguredConfig(projectRoot, options);
+        const snapshot = await snapshotConfiguredConfig(projectRoot, options), written = own, hold = () => ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+        own = null;
+        // A re-read advances the expected state only by this connect's own verified write: the published layer's own read has its digest (the
+        // global one below), and any other change stops it. When both read layers are one file, the other view is that same written file.
+        // Under `globalOnly` the project layer is not read, so a project write is checked against the published file's own digest.
+        const shared = written !== null && oneFile, published = written?.layer === 'project' && options.globalOnly
+          ? (await snapshotConfiguredConfig(projectRoot, { ...options, globalOnly: false })).digest : snapshot.digest;
+        if (observed && ((['global', 'project'] as const).some(layer => layer !== written?.layer && !shared && !isDeepStrictEqual(observed![layer], snapshot[layer]))
+          || written?.layer === 'project' && published !== written.digest)) throw hold();
         observed = snapshot;
-        if (snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
+        if (written?.layer === 'global' || snapshot.global['provider_catalog'] !== undefined || snapshot.global['provider_invocation_profiles'] !== undefined) {
           const global = await snapshotConfiguredConfig(projectRoot, options, 'global');
+          if (written?.layer === 'global' && global.digest !== written.digest) throw hold();
           sameLayers(global); globalDigest = global.digest;
         }
         return snapshot;
@@ -126,6 +137,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         if (change.keyPath === 'provider_invocation_profiles') connectPhase = 'profile-write-started';
         const outcome = target && profile ? await config.submitCatalogCapabilities(input, { reference: profile.reference, adapter: target.adapter, protocol: target.protocol })
           : await config.submit('set', input);
+        if (outcome.status === 'applied') own = { layer: change.layer, digest: outcome.result.afterDigest };
         if (change.keyPath === 'provider_invocation_profiles' && outcome.status === 'applied') connectPhase = 'profile-written';
         if (outcome.status === 'approval-pending') return { approvalId: outcome.approval.approvalId, keyPath: outcome.keyPath };
         const rebound = target && profile ? await inspectModelBinding(projectRoot, profile.reference, options) : null;
@@ -166,7 +178,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (error instanceof ModelConnectError) normalized = ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
     if (error instanceof ProviderConnectError) normalized = ErrorRegistry.createError(error.code);
     const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
-    const oauthConnected = siwc?.connected() === true;
+    // "Connected" from the chosen session in memory, as at HEAD, but not when the OAuth owner itself refused (a failed renewal or lease after the
+    // account was chosen can leave the stored connection revoked or unknown). Nothing is read or written to explain the refusal.
+    const oauthConnected = siwc?.connected() === true && !(error instanceof OAuthConnectionError);
     const localizeRefusal = oauthConnected ? (locale: Locale) => {
       if (failure.code === 'AUTHORITY_WITNESS_REQUIRED' && !enablingWriteStarted)
         return { ...failure.localize?.(locale), message: t('siwc.connectedActivationRefused', {}, locale) };

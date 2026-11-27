@@ -105,13 +105,14 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
     const currentCatalogs = new Map<string, ReturnType<typeof readCatalog>>();
     for (const target of plan.registrationTargets) await catalog(context, target.channelId, target.modelId, 'activate', 'installation');
     for (const item of plan.selections) {
-      if (plan.profiled && !observation) await chat(context, item.reference);
+      // Activate permission only for a chat activation or a worker child this connect will write.
+      if (item.activate && !observation) await chat(context, item.reference);
       const expected = plannedWorkers.get(key(item.reference));
       if (!expected) continue;
       const channelId = item.reference.providerId;
       if (!currentCatalogs.has(channelId)) currentCatalogs.set(channelId, readCatalog(channelId));
       const worker = await workerFacts(item.reference, null, () => currentCatalogs.get(channelId)!);
-      const required = !observation && (item.worker || item.activate || kind.connect!.catalogOnly === true);
+      const required = !observation && (item.worker || item.activate);
       for (const id of ModelConnectApplication.workerTargets(expected, worker, required, item.worker, Date.now()))
         await catalog(context, channelId, id);
     }

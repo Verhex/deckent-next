@@ -56,11 +56,25 @@ async function admit(root: string, input: ModelActivationCommand, options: Confi
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
     const app = configuredChatActivation(command, context, authority);
     const { replay, current } = await app.preflight();
+    // As the base did, a replay (also one the writer returns) is shown only under inspect on the scope read again now, and a child write
+    // still due stays behind that decision. A caller without it meets the activation witness first, as for a command with no receipt.
+    const inspect = async (current: Context) => (await new ModelActivationPolicyAuthorization({ async load() { return current.document; } })
+      .authorize('inspect', { scopeId, reference: command.reference }, current.principal)).ruleId;
+    const visible = async <T extends { readonly replayed: boolean } | null>(result: T) => {
+      if (!cascade || !result?.replayed) return result;
+      const ruleId = await inspect(await loadConfiguredScopeContext(root, scopeId, options, 'read'))
+        .catch(async (refusal: unknown) => { if (command.action === 'activate') await authority.witness('models.activate'); throw refusal; });
+      authority.pin(ruleId, inspect);
+      return result;
+    };
+    await visible(replay);
     if (replay && (!cascade || current?.revision !== replay.receipt.record.revision)) return replay;
-    const off = command.action === 'deactivate' ? replay ?? await app.write() : null;
-    const writes = cascade ? await planWorkerWrites(root, scopeId, command.reference, command.commandId, command.action, options, context, authority, false) : [];
-    if (command.action === 'activate' && (!replay || writes.length)) await authority.witness('models.activate');
-    const result = off ?? replay ?? await app.write();
+    const off = command.action === 'deactivate' ? replay ?? await visible(await app.write()) : null;
+    const { writes, conflict } = cascade ? await planWorkerWrites(root, scopeId, command.reference, command.commandId, command.action, options, context, authority, false)
+      : { writes: [], conflict: false };
+    if (command.action === 'activate' && (!replay || writes.length || conflict)) await authority.witness('models.activate');
+    if (conflict) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+    const result = off ?? replay ?? await visible(await app.write());
     for (const write of writes) await write();
     return result;
   } catch (error) { throw queryFailure(error); }
@@ -77,9 +91,10 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
     ? row.model.id === reference.modelId && row.model.version === reference.modelVersion : row.model.nativeId === nativeId) : undefined;
   if (channel?.access !== 'allowed' || !model) {
     if (workerOnly) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-    return [];
+    return { writes: [], conflict: false };
   }
-  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes = [];
+  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes: (() => Promise<unknown>)[] = [];
+  let conflict = false;
   const prefix = workerOnly ? commandId : `model-state-${createHash('sha256').update(commandId).digest('hex')}`;
   if (action === 'activate') {
     refuseRetiredModelActivation(channel.models, model.modelId, Date.now());
@@ -92,22 +107,24 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
     // A chat receipt replay with a newly missing child still requires a witness.
     const planned = await planCatalogWrite(context, authority, child);
-    writes.push(async () => {
-      if (action === 'activate' && planned.replay) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-      return planned.write(channel, [model.modelId]);
-    });
+    // A child receipt whose row no longer holds its change is noted; every child is still planned, so a later child's refusal keeps its place.
+    if (action === 'activate' && planned.replay) { conflict = true; continue; }
+    writes.push(() => planned.write(channel, [model.modelId]));
   }
-  return writes;
+  return { writes, conflict };
 }
 
 /** A named worker-only model has no chat declaration or whole-channel cascade. */
-export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {}): Promise<boolean> {
+export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {},
+  beforeWrite?: () => Promise<void>): Promise<boolean> {
   try {
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
-    const writes = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
-    if (!writes.length) return false;
+    const { writes, conflict } = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
+    if (!writes.length && !conflict) return false;
     await authority.witness('models.activate');
-    for (const write of writes) await write();
+    if (conflict) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+    // A caller's own check (a connect's wide check) runs right before each durable write.
+    for (const write of writes) { await beforeWrite?.(); await write(); }
     return true;
   } catch (error) { throw queryFailure(error); }
 }

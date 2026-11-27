@@ -3,7 +3,7 @@ import { personMarkersUnset } from '../support/person-env.js';
 import { DatabaseSync } from 'node:sqlite';
 import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { describe, expect, it, vi } from 'vitest';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, readProviderConnectSeed, parseProviderConnectRegistry } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation as admit, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -87,6 +87,14 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const again = await connect(f.project, command, f.options, { registry: localRegistry });
     expect(again.steps).toEqual({ catalog: 'present', declaration: 'present', profile: 'present', activation: 'present', carried: 0 });
     expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
+    // A reconnect that switches nothing on does not ask for the permission to switch the chat model on.
+    const policyPath = join(f.data, 'policy.json'), policy = await readFile(policyPath, 'utf8');
+    await f.writePolicy([...f.grants, { id: 'deny-current-chat', effect: 'deny', actions: ['activate'], scopes: 'all', principals: me,
+      resource: { kind: 'model-activation', ids: [modelActivationTargetId(reference)] } }]);
+    await expect.soft(connect(f.project, { ...command, commandId: 'connect-current' }, f.options, { registry: localRegistry }))
+      .resolves.toMatchObject({ status: 'connected', steps: { profile: 'present', activation: 'present' } });
+    await writeFile(policyPath, policy); clearConfigCache();
+    expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
       const db = new DatabaseSync(f.ledger);
     try { db.prepare('DELETE FROM model_catalog_activations WHERE channel_id=? AND model_id=?').run('openai-api', 'gpt-6-luna'); }
     finally { db.close(); }
@@ -94,6 +102,24 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     await expect(connect(f.project, command, f.options, { registry: localRegistry })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(f.rows('SELECT * FROM model_catalog_activations')).toEqual(missing);
     expect(f.rows('SELECT * FROM audit_events')).toEqual(beforeReplay);
+    // The wide check runs before each worker write: a settings change after the channel write stops the model write.
+    const unset = new DatabaseSync(f.ledger);
+    try { unset.prepare("DELETE FROM model_catalog_activations WHERE channel_id='openai-api'").run(); } finally { unset.close(); }
+    const openCatalog = witnessAdapters.openSqliteModelCatalogStore;
+    const drifted = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+      const store = await openCatalog(...args), write = store.apply.bind(store);
+      store.apply = async admission => {
+        const written = await write(admission);
+        if (admission.command.commandId.endsWith('.worker.0.0')) await writeFile(f.path, JSON.stringify({ ...await f.config(), language: 'tr' }), { mode: 0o600 });
+        return written;
+      };
+      return store;
+    });
+    try {
+      await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-worker-drift' }, f.options, { registry: localRegistry }))
+        .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    } finally { drifted.mockRestore(); }
+    expect.soft(f.rows("SELECT model_id FROM model_catalog_activations WHERE channel_id='openai-api'").map(row => row['model_id'])).not.toContain('gpt-6-luna');
   // Canary: no result, configuration file, ledger row or model request carries the key.
     expect(JSON.stringify([result, again])).not.toContain(CANARY);
     expect(await allText(f.project)).not.toContain(CANARY);
@@ -389,6 +415,53 @@ it.skipIf(process.platform !== 'linux')('refuses unwitnessed seedless connect be
 
   expect(await asPerson(raw)).toMatchObject({ status: 'connected', steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
   expect(methodLog).toEqual(['GET', 'POST', 'GET', 'POST', 'GET', 'POST']);
+
+  // A profile another writer adds after this connect's declaration write is never overwritten: the connect stops instead.
+  const secondId = 'witness-loopback-second', foreign = structuredClone((await f.config()).provider_invocation_profiles.profiles[0]!);
+  Object.assign(foreign, { id: 'concurrent-writer', scopeId: 'scope-concurrent' });
+  const documents = witnessAdapters.createConfigFileDocuments;
+  const concurrent = vi.spyOn(witnessAdapters, 'createConfigFileDocuments').mockImplementation((...args) => {
+    const port = documents(...args);
+    return { ...port, async publish(input, planner) {
+      const written = await port.publish(input, planner);
+      if (input.keyPath === 'provider_catalog') {
+        const config = await f.config(); config.provider_invocation_profiles.profiles.push(foreign);
+        await writeFile(f.path, JSON.stringify(config), { mode: 0o600 });
+      }
+      return written;
+    } };
+  });
+  try {
+    await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-concurrent', model: { nativeId: secondId } }, f.options,
+      { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+        return Response.json(init.method === 'GET' ? { data: [{ id: secondId }] } : { choices: [] });
+      } } }))).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  } finally { concurrent.mockRestore(); }
+  expect.soft((await f.config()).provider_invocation_profiles.profiles).toContainEqual(foreign);
+  // One file serving as both the project and the installation settings: the connect's own write is not taken for a foreign one.
+  const sharedId = 'witness-loopback-shared', shared = { env: { ...f.options.env, DECKENT_GLOBAL_HOME: join(f.project, '.deckent') } };
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-shared', model: { nativeId: sharedId } }, shared,
+    { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: sharedId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
+  // The same file read only as the installation layer (`globalOnly`): the published global write is checked against its own read.
+  const globalId = 'witness-loopback-global-only';
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-global-only', model: { nativeId: globalId } }, { ...shared, globalOnly: true },
+    { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: globalId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
+  // `globalOnly` with its own installation file, no profile section and no project file yet: the first profile is written to the project
+  // file, and the connect checks that write against the file it published.
+  const ownHome = join(f.data, 'own-global'), installation: Record<string, unknown> = { ...await f.config() };
+  delete installation['provider_invocation_profiles'];
+  await mkdir(ownHome, { recursive: true, mode: 0o700 });
+  await writeFile(join(ownHome, 'config.json'), JSON.stringify(installation), { mode: 0o600 });
+  await rm(f.path); clearConfigCache();
+  const projectId = 'witness-loopback-project-profile';
+  await expect.soft(asPerson(() => connect(f.project, { ...command, commandId: 'witness-project-profile', model: { nativeId: projectId } },
+    { env: { ...f.options.env, DECKENT_GLOBAL_HOME: ownHome }, globalOnly: true }, { discoveryOptions: { async fetch(_url: string, init: RequestInit) {
+      return Response.json(init.method === 'GET' ? { data: [{ id: projectId }] } : { choices: [] });
+    } } }))).resolves.toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written' } });
 
 });
 

@@ -33,6 +33,13 @@ export function createConfigFileDocuments(projectRoot: string, options: ConfigLo
   } };
 }
 
+/** Whether the project and installation layers are one physical file (the config reader then reads it once, as the installation layer). */
+export function configLayersShareFile(projectRoot: string, options: ConfigLoadOptions = {}): boolean {
+  const env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  return productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config')
+    === resolveGlobalConfigPaths(env, platform).platformPath;
+}
+
 /** Read-only layer projection; an action always goes through the document port above. */
 export async function readConfigFileSnapshot(projectRoot: string, options: ConfigLoadOptions, layer: ConfigLayer, effective?: ConfigSnapshot['effective']): Promise<ConfigSnapshot> {
   const env = options.env ?? process.env, platform = options.platform ?? process.platform;
