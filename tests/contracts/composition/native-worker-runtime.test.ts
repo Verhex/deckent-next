@@ -288,9 +288,9 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const unstartedRow = (await store.loadWorkerEventLog('s', 'unstarted'))!; expect(unstartedRow).toMatchObject({ identity: unstarted, eventCount: 1, events: expect.any(Object) });
       expect((await store.loadSealedWorkerEvents(unstartedRow.identity, artifactReader))?.map(event => event.kind)).toEqual(['model.verification']);
       await finish(unstarted);
-      // A rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
-      // The hold's scope above: this Attempt first waited for capacity and was resumed, so its wait leaves no readable row; its
-      // terminal, offer-less end whose close fails before the seal leaves no readable seal at all.
+      // A rejecting earlier clean-up (the supervisor's close) still closes the opened sink and the caller keeps that same rejection. The hold's scope
+      // above: this Attempt first waited for capacity and was resumed, so its wait leaves no readable row; its terminal, offer-less end whose close
+      // fails before the seal leaves no readable seal, and (owner decision) the failure row records that its log could not be verified.
       const cleanup = await reserveRun('cleanup'), sinkClose = vi.fn(async () => ({ events: [], projectionComplete: true }));
       expect((await executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } })).execution).toMatchObject({ waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
@@ -302,9 +302,23 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       vi.spyOn(adapterExports, 'openWorkerEventSink').mockResolvedValueOnce({ accept() {}, close: sinkClose } as never);
       await expect(executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } })).rejects.toMatchObject({ code: 'NATIVE_WORKER_CUSTODY_UNKNOWN' });
-      expect(sinkClose).toHaveBeenCalledOnce(); expect(await store.loadWorkerEventLog('s', 'cleanup')).toBeNull();
-      expect((await store.loadBoundDispatch(cleanup))?.terminal).toMatchObject({ exitCode: 0 });
+      const cleanupRow = (await store.loadWorkerEventLog('s', 'cleanup'))!;
+      expect(sinkClose).toHaveBeenCalledOnce(); expect(cleanupRow).toMatchObject({ identity: cleanup, outcome: 'unverified' }); expect(cleanupRow).not.toHaveProperty('events');
+      expect((await store.loadBoundDispatch(cleanup))?.terminal).toMatchObject({ exitCode: 0 }); expect(await store.loadSealedWorkerEvents(cleanupRow.identity, artifactReader)).toBeNull();
+      expect(await inspectConfiguredWorkerTranscript(project, cleanupRow.identity, options)).toMatchObject({ sealed: null, logFailure: 'unverified' });
       await finish(cleanup);
+      // A terminal, offer-less end whose ordinary log artifact cannot be written also records the failure row (the caller sees the typed failure).
+      const unwritten = await reserveRun('unwritten'), put = adapterExports.FileArtifactStore.prototype.put;
+      const refusePut = vi.spyOn(adapterExports.FileArtifactStore.prototype, 'put').mockImplementation(function (this: InstanceType<typeof adapterExports.FileArtifactStore>, ...args: Parameters<typeof put>) {
+        return Buffer.from(args[1]).includes('"kind":"model.verification"') ? Promise.reject(Object.assign(new Error('disk full'), { code: 'ENOSPC' })) : put.apply(this, args); });
+      try {
+        expect((await executeConfiguredTask(project, unwritten, { ...options, nativeCliWorker: { projectionRetired: true,
+          ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } })).execution)
+          .toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: 'ENOSPC' } });
+      } finally { refusePut.mockRestore(); }
+      const unwrittenRow = (await store.loadWorkerEventLog('s', 'unwritten'))!; expect(unwrittenRow).toMatchObject({ identity: unwritten, outcome: 'unverified' });
+      expect(await inspectConfiguredWorkerTranscript(project, unwrittenRow.identity, options)).toMatchObject({ sealed: null, logFailure: 'unverified' });
+      await finish(unwritten);
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,

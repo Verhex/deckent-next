@@ -2,4 +2,4 @@ export { startWorkerObservation } from './internal/writer.js';
 export { readWorkerSidecars, readWorkerEventTail } from './internal/files.js';
 export { inspectLegacyWorkers } from './internal/legacy.js';
 export { openWorkerEventSink, sealWorkerEventLog, WORKER_EVENT_SEAL_RESERVE_BYTES } from './internal/events.js';
-export { sealAttemptWorkerEvents, closeAndSealAttemptWorkerEvents, type WorkerEventSealing } from './internal/seal.js';
+export { sealAttemptWorkerEvents, closeAndSealAttemptWorkerEvents, recordUnreachedWorkerEventSeal, type WorkerEventSealing } from './internal/seal.js';
