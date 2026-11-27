@@ -418,7 +418,7 @@ it('K17: Claude worker transport preserves task limits and private files through
   try {
     const events: WorkerEvent[] = [], driver = createNativeCliWorkerDriver({ ...f.input, onEvents: batch => events.push(...batch) }, f.transport, new AbortController().signal);
     expect(await readdir(f.stateDir)).toEqual([]); expect(f.isolated).not.toHaveBeenCalled();
-    expect(await driver.run(f.bridge, new AbortController().signal)).toMatchObject({ termination: 'confirmed', status: 'completed', text: 'answer' });
+    expect(await driver.run(f.bridge, new AbortController().signal)).toMatchObject({ termination: 'confirmed', status: 'completed', text: 'answer', started: true });
     const [, spawn, bounds] = f.isolated.mock.calls[0]!;
     expect(spawn.args).toEqual(expect.arrayContaining(['--max-turns', '3', f.input.model]));
     expect(spawn.args).not.toContain(f.bridge.turnToken); expect(spawn).not.toHaveProperty('workspace'); expect(spawn).not.toHaveProperty('inputs');
@@ -429,6 +429,17 @@ it('K17: Claude worker transport preserves task limits and private files through
     expect(Buffer.from(bounds.stdinBase64!, 'base64').toString()).toBe(f.input.user); expect(events.some(row => row.kind === 'session.ended')).toBe(true);
     await driver.close(); expect(await readdir(f.stateDir)).toEqual([]);
     await expect(driver.run(f.bridge, new AbortController().signal)).rejects.toThrow('NATIVE_CLI_WORKER_UNAVAILABLE');
+    // N0 R5 (owner D5): the isolated runner's own start fact reaches the driver result unchanged, and only a runner that may have started offers the
+    // count-only observation (`started: false`: a realm cancelled before its callback).
+    const facts = { ...f.transport, claudeDriver: (options: Parameters<NativeCliWorkerTransport['claudeDriver']>[0]) => ({ ...f.transport.claudeDriver(options),
+      observedFacts: () => ({ builtinPluginCount: 2, paidExtraUsage: null, terminal: false }) }) };
+    for (const started of [true, false]) {
+      if (!started) f.isolated.mockResolvedValueOnce({ schemaVersion: 1, requestId: '12345678-1234-4234-8234-123456789abc', started: false, reason: 'cancelled', exitCode: null, signal: null,
+        stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 0, egress: { connected: 0, refused: 0, hosts: {}, other: 0 }, limit: null });
+      const seen: WorkerEvent[] = [], again = createNativeCliWorkerDriver({ ...f.input, onEvents: batch => seen.push(...batch) }, facts, new AbortController().signal);
+      expect(await again.run(f.bridge, new AbortController().signal)).toMatchObject({ started }); await again.close();
+      expect(seen.filter(row => row.kind === 'cli.observation')).toHaveLength(started ? 1 : 0);
+    }
   } finally { await rm(f.stateDir, { recursive: true, force: true }); }
 });
 it('K17: Codex worker uses the real K3 stream guard, token env and no invented turn limit', async () => {
@@ -728,7 +739,8 @@ it('K24 cancellation during preflight settles without spawning; a genuine prefli
     });
     const driver = createNativeCliWorkerDriver(f.input, f.transport, cancel.signal), pending = driver.run(f.bridge, cancel.signal);
     cancel.abort();
-    expect(await pending).toMatchObject({ status: 'cancelled', termination: 'confirmed' });
+    // N0 R5 (owner D5): a preflight cancel reports that no process started.
+    expect(await pending).toMatchObject({ status: 'cancelled', termination: 'confirmed', started: false });
     await driver.close(); expect(f.isolated).not.toHaveBeenCalled(); expect(await readdir(f.stateDir)).toEqual([]);
     const race = new AbortController();
     preflight.mockImplementationOnce(async signal => {

@@ -113,6 +113,8 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
         return attempt(db, version, binding, reserved.get(attemptKey) ?? null, models.get(attemptKey) ?? null,
           snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found);
       });
+      // N0 R5 (owner D4): a past Attempt (moved by a quota, stall, lost or refused transition) carries only the close owner's failure label.
+      for (const { identity } of version >= WORKER_EVENT_LOG_LEDGER_VERSION ? snapshot.previousBindings ?? [] : []) { const past = pastFailure(db, identity); if (past) found.push(past); }
       const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
       // Supplemental cost projection cannot invalidate the canonical Run or its producer acceptance receipt.
       let costMetrics: MonitorLedgerRun['costMetrics'];
@@ -143,6 +145,15 @@ function catalog(db: DatabaseSync, version: number): MonitorMap | null {
       return Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: false,
         vendorId: 'vendorId' in model ? model.vendorId : null, billing: 'billing' in channel ? channel.billing : null });
     })) });
+}
+
+/** Only a failure row bound to the past Attempt's full identity counts; any other row (sealed, corrupt or another identity) is not read here and
+ * never invalidates the Run. An SQLite failure still fails the read. */
+function pastFailure(db: DatabaseSync, identity: AttemptIdentity): MonitorAttemptFiles | null {
+  const row = db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
+  const stored = row ? workerEventLogSchema.safeParse(json(row.record)) : null;
+  return stored?.success && !sealedWorkerEventLog(stored.data) && sameAttemptIdentity(stored.data.identity, identity) ? Object.freeze({ identity, patch: null, output: null,
+    events: null, workspace: null, failed: false, open: false, finished: true, sealed: false, unverified: true }) : null;
 }
 
 function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['snapshot']['bindings'][number], reservedAtMs: number | null,

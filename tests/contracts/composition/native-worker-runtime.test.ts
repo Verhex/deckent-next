@@ -6,7 +6,7 @@ import { brainProviderFixture } from '../support/brain-provider.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
+import { applyConfiguredRunLifecycle, recheckNativeWorkerUse } from '#composition/core/runs/index.js';
 import * as adapterExports from '#adapters/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
   resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding, type NativeCliWorkerPorts } from '#adapters/index.js';
@@ -124,7 +124,8 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
       await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'native-fixture', restrictions: [], grants: [
         { id: 'attempt', effect: 'allow', principals, scopes: ['s'], actions: ['execute', 'read-output', 'reconcile'], resource: { kind: 'attempt', ids: 'all' } },
-        { id: 'run', effect: 'allow', principals, scopes: ['s'], actions: ['inspect', 'cancel'], resource: { kind: 'run', ids: 'all' } },
+        { id: 'run', effect: 'allow', principals, scopes: ['s'], actions: ['inspect', 'cancel', 'reserve'], resource: { kind: 'run', ids: 'all' } },
+        { id: 'resume', effect: 'allow', principals, scopes: ['s'], actions: ['resume'], resource: { kind: 'run-decision', ids: 'all' } },
       ] }), { mode: 0o600 }); clearConfigCache();
       const entry = nativeCliAgent('claude-code-stream-json')!, identity = { scopeId: 's', runId: 'run', taskId: 't', attemptId: 'attempt', generation: 1, layoutRevision: opened.layout.revision };
       const bound: NativeCliWorkerBinding = { schemaVersion: 1, connectionId: '12345678-1234-4234-8234-123456789abc', resourceKey: 'synthetic-resource',
@@ -203,7 +204,7 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         if (cause !== 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
       }
       // N0: two separate close faults, each through task.ts on its own Attempt: (unheld) an observation offered before the provider's start, healthy sink;
-      // (sink) a held observation whose live sink close rejects. Both: terminal exit 0, the failure value (`cause: null`), no ledger row, one spawn, capacity
+      // (sink) a held observation whose live sink close rejects. Both: terminal exit 0, the failure value (`cause: null`), no sealed log, one spawn, capacity
       // released once and the supervisor closed once. Without the offered flag the first would seal and the second would reject the task.
       const prepare = adapterExports.prepareNativeCliWorker;
       for (const fault of ['unheld', 'sink'] as const) {
@@ -228,20 +229,55 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         await store.cancelRun({ commandId: `cancel-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: (await store.loadRun('s', fault))!.revision });
         await store.settleCancelledAttempt(faulted);
       }
-      // N0 R4 (owner D5): an invocation that never started the worker (login capacity busy) seals neither a verdict-only nor a failure row,
-      // so the real run's own seal can still be written for that Attempt.
-      const waited = { ...identity, runId: 'waited', attemptId: 'waited' };
-      await store.createRun({ commandId: 'create-waited', actor, identity: { scopeId: 's', runId: 'waited', layoutRevision: identity.layoutRevision }, graph,
-        execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
-        policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
-      await store.reserveRunTasks({ commandId: 'reserve-waited', actor, scopeId: 's', runId: 'waited', expectedRevision: 0, now: 0, identities: [waited] });
+      // N0 R4/R5 (owner D5): an invocation that never started the worker (login capacity busy) seals neither a verdict-only nor a failure row; the
+      // parked Run is resumed by command (no wait) and the same Attempt's real start and close then seal its own log.
+      const reserveRun = async (runId: string) => {
+        await store.createRun({ commandId: `create-${runId}`, actor, identity: { scopeId: 's', runId, layoutRevision: identity.layoutRevision }, graph,
+          execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+          policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+        const reserved = { ...identity, runId, attemptId: runId };
+        await store.reserveRunTasks({ commandId: `reserve-${runId}`, actor, scopeId: 's', runId, expectedRevision: 0, now: 0, identities: [reserved] }); return reserved;
+      };
+      const finish = async (done: typeof identity) => {
+        await store.cancelRun({ commandId: `cancel-${done.runId}`, actor, scopeId: 's', runId: done.runId, expectedRevision: (await store.loadRun('s', done.runId))!.revision });
+        await store.settleCancelledAttempt(done);
+      };
+      const own = (run: () => Promise<{ termination: 'confirmed'; status: 'completed' | 'cancelled'; text: string; started?: boolean }>, rows: readonly (typeof reported)[number][] = []) => ({ ...ports,
+        capacity: { acquire: async () => ({ state: 'acquired' as const, release: async () => undefined }) },
+        driver: vi.fn(async (input: Parameters<NativeCliWorkerPorts['driver']>[0]) => ({ tools: input.tools, run: () => { if (rows.length) input.onEvents?.(rows); return run(); }, close: async () => undefined })) });
+      const waited = await reserveRun('waited'), done = JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] });
       const busy = await executeConfiguredTask(project, waited, { ...options, nativeCliWorker: { projectionRetired: true,
         ports: { ...ports, capacity: { acquire: async () => ({ state: 'busy' }) as never } } } });
       expect(busy.execution).toMatchObject({ status: 'unresolved', waiting: { reason: 'NATIVE_WORKER_CAPACITY_WAIT' } });
       expect(await store.loadWorkerEventLog('s', 'waited')).toBeNull();
-      const real = { ...(await store.loadWorkerEventLog('s', 'attempt'))!, identity: waited } as Parameters<typeof store.saveWorkerEventLog>[0];
-      expect(await store.saveWorkerEventLog(real)).toEqual(real);
-      await store.cancelRun({ commandId: 'cancel-waited', actor, scopeId: 's', runId: 'waited', expectedRevision: (await store.loadRun('s', 'waited'))!.revision });
+      const parkedWaited = (await store.loadRun('s', 'waited'))!; expect(parkedWaited.state.kind).toBe('parked');
+      await applyConfiguredRunLifecycle(project, { schemaVersion: 1, scopeId: 's', runId: 'waited', commandId: 'resume-waited', action: 'resume', expectedRevision: parkedWaited.revision }, options);
+      const resumed = await executeConfiguredTask(project, waited, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } });
+      expect(resumed.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 } });
+      expect(await store.loadWorkerEventLog('s', 'waited')).toMatchObject({ identity: waited, eventCount: 2 });
+      await finish(waited);
+      // N0 R5 (owner D5): the runner's own start fact decides. A preflight cancel that started no process leaves no row of either shape; a really
+      // started worker cancelled before its first event still seals its log (the host verdict alone).
+      for (const started of [false, true]) {
+        const quiet = await reserveRun(started ? 'silent' : 'unstarted');
+        const settledQuiet = await executeConfiguredTask(project, quiet, { ...options, nativeCliWorker: { projectionRetired: true,
+          ports: own(async () => ({ termination: 'confirmed' as const, status: 'cancelled' as const, text: '', started })) } });
+        expect(settledQuiet.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 1 } });
+        if (started) expect(await store.loadWorkerEventLog('s', 'silent')).toMatchObject({ identity: quiet, eventCount: 1, events: expect.any(Object) });
+        else expect(await store.loadWorkerEventLog('s', 'unstarted')).toBeNull();
+        await finish(quiet);
+      }
+      // N0 R5: a rejecting earlier clean-up (the supervisor's close) still closes the opened sink; the caller keeps that same rejection and no row is written.
+      const cleanup = await reserveRun('cleanup'), sinkClose = vi.fn(async () => ({ events: [], projectionComplete: true }));
+      vi.spyOn(adapterExports, 'prepareNativeCliWorker').mockImplementationOnce(async (...args: Parameters<typeof prepare>) => {
+        const ready = await prepare(...args); if (ready.state !== 'ready') return ready;
+        ready.supervisor.close = async () => { throw ErrorRegistry.createError('NATIVE_WORKER_CUSTODY_UNKNOWN'); }; return ready; });
+      vi.spyOn(adapterExports, 'openWorkerEventSink').mockResolvedValueOnce({ accept() {}, close: sinkClose } as never);
+      await expect(executeConfiguredTask(project, cleanup, { ...options, nativeCliWorker: { projectionRetired: true,
+        ports: own(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: done }), [reported[0]]) } })).rejects.toMatchObject({ code: 'NATIVE_WORKER_CUSTODY_UNKNOWN' });
+      expect(sinkClose).toHaveBeenCalledOnce(); expect(await store.loadWorkerEventLog('s', 'cleanup')).toBeNull();
+      await finish(cleanup);
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,

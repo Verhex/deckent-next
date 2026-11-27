@@ -57,8 +57,11 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   /** N0 R2: one in-flight release; a concurrent custody sweep or patch preparation joins it, a rejection lets the next call retry as before. */
   private releasing: Promise<'absent'> | undefined;
   offeredObservation(): boolean { return this.offered; }
-  /** Owner D5: whether this supervisor spawned its worker; an invocation that never did publishes no Attempt log. */
-  startedWorker(): boolean { return this.started; }
+  /** N0 R5 (owner D5): the driver's report of its runner's start fact; `false` only when the runner proved no CLI process started. */
+  private spawned: boolean | undefined;
+  /** Owner D5: whether this invocation may have started its worker; one that provably never did publishes no Attempt log. `started` (the
+   * spawn guard was passed) keeps its release meaning; the runner's own fact narrows it, and an unknown one (a thrown run) counts as started. */
+  startedWorker(): boolean { return this.started && this.spawned !== false; }
   private result: SandboxResult | undefined;
   private running: Promise<SandboxResult> | undefined;
   private driver: NativeCliWorkerDriver | undefined;
@@ -135,7 +138,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         ...(this.input.knownSecrets ? { knownSecrets: this.input.knownSecrets } : {}) });
       // The last fence and lease check is immediately before the sole CLI spawn; the runtime receives no workspace path.
       await guard(); this.started = true; this.acceptingEvents = true;
-      const result = await this.driver.run(this.bridge, combined);
+      const result = await this.driver.run(this.bridge, combined); this.spawned = result.started;
       primaryFailure = result.refusal ?? result.failureCode;
       if (result.cleanupError) {
         settledFailure = primaryFailure

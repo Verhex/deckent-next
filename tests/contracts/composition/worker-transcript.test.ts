@@ -94,14 +94,20 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
   } finally { ledger.store.close(); }
   expect(await inspectConfiguredWorkerTranscript(f.project, unverified, f.options)).toMatchObject({ sealed: null, summary: null, events: [], logFailure: 'unverified' });
   expect(await inspectConfiguredWorkerTranscript(f.project, identity, f.options)).not.toHaveProperty('logFailure');
+  // N0 R5: the row is keyed by scope and Attempt id; another generation, run, task or layout of that id keeps the no-record view (no new refusal).
+  for (const changed of [{ generation: 2 }, { runId: 'other' }, { taskId: 'other' }, { layoutRevision: 'other' }]) {
+    const other = await inspectConfiguredWorkerTranscript(f.project, { ...unverified, ...changed }, f.options);
+    expect(other).toMatchObject({ sealed: null, summary: null, events: [] }); expect(other).not.toHaveProperty('logFailure');
+  }
   const transcriptText = async (attemptId: string, locale: string) => { out.length = 0;
     expect(await cliMain(['task', 'transcript', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', attemptId, '--generation', '1', '--layout-revision', 'layout', '--lang', locale],
       { root: f.project, env: f.options.env, stdout: { write: value => { out.push(String(value)); } }, inspectWorkerTranscript: inspectConfiguredWorkerTranscript })).toBe(0);
     return out.join(''); };
   expect(await transcriptText('a-unverified', 'en')).toContain("This Attempt's worker log could not be verified.");
   expect(await transcriptText('a-unverified', 'tr')).toContain('Bu denemenin işçi günlüğü doğrulanamadı.');
-  expect(await transcriptText('a-partial', 'en')).toContain('The live worker.events file is incomplete (a write failed or the file could not be opened); this sealed transcript may not hold every event the worker reported.');
-  expect(await transcriptText('a-partial', 'tr')).toContain('Canlı `worker.events` dosyası eksik (bir yazma başarısız oldu ya da dosya açılamadı); bu mühürlü kayıt işçinin bildirdiği her olayı içermeyebilir.');
+  // N0 R5 (I3): true whether a write failed, the file never opened or only its close failed.
+  expect(await transcriptText('a-partial', 'en')).toContain('The live worker.events file could not be confirmed complete; this sealed transcript may not hold every event the worker reported.');
+  expect(await transcriptText('a-partial', 'tr')).toContain('Canlı `worker.events` dosyasının eksiksiz olduğu doğrulanamadı; bu mühürlü kayıt işçinin bildirdiği her olayı içermeyebilir.');
   await f.policy(['execute']);
   await expect(inspectConfiguredWorkerTranscript(f.project, identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });

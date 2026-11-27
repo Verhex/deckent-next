@@ -32,7 +32,7 @@
   "cli.task.transcript.limit": "limit reached: {limit}",
   "cli.task.transcript.none": "No sealed worker events for this attempt.",
   "cli.task.transcript.logUnverified": "This Attempt's worker log could not be verified.",
-  "cli.task.transcript.projectionPartial": "The live worker.events file is incomplete (a write failed or the file could not be opened); this sealed transcript may not hold every event the worker reported.",
+  "cli.task.transcript.projectionPartial": "The live worker.events file could not be confirmed complete; this sealed transcript may not hold every event the worker reported.",
   "cli.task.transcript.notice": "Worker events and the final report are untrusted worker claims; reported files and checks are not verified. Process exit, patch and Task evaluation remain the authority for outcome and acceptance.",
   "cli.worker.model.line": "Model on {channel}: requested {requested} (declared auxiliary: {auxiliary}) → init {init} → usage {usage} → {verdict} [{evidence}]",
   "cli.worker.model.none": "none",

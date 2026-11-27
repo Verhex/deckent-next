@@ -36,6 +36,9 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     const plain = sink(true); saved.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, plain, base)).toEqual({ status: 'sealed', eventCount: 1 });
     expect(plain.close).toHaveBeenCalledWith(); saved.length = 0; stored.length = 0;
+    // N0 R5: the close owner writes the failure row only for an offered observation; an un-offered close whose artifact write fails writes none.
+    expect(await closeAndSealAttemptWorkerEvents(identity, full, store, sink(true), base)).toEqual({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: 'ENOSPC' });
+    expect(saved).toEqual([]);
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, offered: true })).toEqual(failed); expect(stored).toEqual([]);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read() { return Buffer.from('other'); } }, store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     expect(await closeAndSealAttemptWorkerEvents(identity, { put: () => new Promise<never>(() => {}) }, store, sink(true), { ...base, offered: true, held: () => observation, deadlineMs: 1 })).toEqual(failed);
@@ -64,6 +67,9 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     // A refused failure row (the Attempt already holds a row: a sealed log is never downgraded) leaves the typed failure as the result, never a throw.
     const refusing = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('row'), { code: 'WORKER_OBSERVATION_INVALID' }); } };
     expect(await closeAndSealAttemptWorkerEvents(identity, files, refusing, sink(true), { ...base, offered: true })).toEqual(failed);
+    // N0 R5: a failure row that could not be written (not an existing first row) is named in the returned failure's `cause`; nothing is durable then.
+    const unwritable = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('io'), { code: 'ERR_SQLITE_ERROR' }); } };
+    expect(await closeAndSealAttemptWorkerEvents(identity, files, unwritable, sink(true), { ...base, offered: true })).toEqual({ ...failed, cause: 'ERR_SQLITE_ERROR' });
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, null, { ...base, source })).toEqual({ status: 'sealed', eventCount: 1 });
     expect(saved).toEqual([expect.objectContaining({ projection: 'partial' })]);
   });

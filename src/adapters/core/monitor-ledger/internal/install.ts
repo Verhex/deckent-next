@@ -68,11 +68,18 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
       } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${files.identity.scopeId}/${files.identity.attemptId}:${code(error)}`); }
     }
     // The ledger reader projects each attempt from the binding at the same index.
-    const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map((value, index) => {
-      const identity = run.snapshot.bindings[index]?.identity;
-      const found = identity && extra.get(MonitorApplication.attemptKey(identity));
-      return found ? Object.freeze({ ...value, ...found }) : value;
-    })) }));
+    const runs = reading.runs.map(run => {
+      // N0 R5 (owner D4): a shown past Attempt keeps only its not-verified transcript (no other content), after the same read-output decision.
+      const previousTranscripts = (run.snapshot.previousBindings ?? []).flatMap(({ identity }) => {
+        const transcript = extra.get(MonitorApplication.attemptKey(identity))?.content?.transcript;
+        return transcript?.state === 'unverified' ? [Object.freeze({ identity, transcript })] : [];
+      });
+      return Object.freeze({ ...run, ...(previousTranscripts.length ? { previousTranscripts: Object.freeze(previousTranscripts) } : {}), attempts: Object.freeze(run.attempts.map((value, index) => {
+        const identity = run.snapshot.bindings[index]?.identity;
+        const found = identity && extra.get(MonitorApplication.attemptKey(identity));
+        return found ? Object.freeze({ ...value, ...found }) : value;
+      })) });
+    });
     return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
   } };
 }

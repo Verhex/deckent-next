@@ -5,7 +5,8 @@ import { reportClaimLines } from './brief.js';
 import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
   schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
-  summary: WorkerEventSummary | null; events: readonly WorkerEvent[]; model?: WorkerModelView | null }>>;
+  summary: WorkerEventSummary | null; events: readonly WorkerEvent[]; model?: WorkerModelView | null;
+  /** Owner D4: the close owner recorded that this Attempt's log could not be verified (no sealed log). */ logFailure?: 'unverified' }>>;
 export const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
   const labels: Record<WorkerPhase, string> = {
@@ -37,7 +38,7 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
   // WORKER-CURRENCY-2 report view: the pinned model row first, with the evidence limit stated.
   const model = data.model ? [renderWorkerModelLine(data.model, locale), t('cli.worker.model.notice', {}, locale)] : [];
   // Event excerpts, targets, models and the report are worker-written (untrusted): the whole view leaves through the terminal sanitizer.
-  if (!data.sealed || !data.summary) return terminalSafeText([...model, 'logFailure' in data ? t('cli.task.transcript.logUnverified', {}, locale) : t('cli.task.transcript.none', {}, locale),
+  if (!data.sealed || !data.summary) return terminalSafeText([...model, data.logFailure === 'unverified' ? t('cli.task.transcript.logUnverified', {}, locale) : t('cli.task.transcript.none', {}, locale),
     ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), ...reportLines(data.finalReport, locale)] : [])].join('\n'));
   const s = data.summary, subscription = Boolean(data.model);
   const reported = data.finalReport?.status === 'reported' ? data.finalReport.report.changedFiles : [];

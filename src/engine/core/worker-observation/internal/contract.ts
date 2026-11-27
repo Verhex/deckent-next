@@ -75,7 +75,7 @@ const stamp = () => persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER
 /** Sealed worker-reported events of one attempt: the redacted event log artifact; the summary is always recomputed from it. */
 const sealedWorkerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
   eventCount: stamp(), sealedAt: stamp(),
-  /** 'partial' when the live worker.events projection is incomplete (a write failed or the sink never opened). */
+  /** 'partial' when the live worker.events projection could not be confirmed complete (a write or the file close failed, or the sink never opened). */
   projection: z.enum(['complete', 'partial']).optional() }).readonly();
 /** N0 (owner D4): the close owner's record that this Attempt's log could not be verified. Not a sealed log (no events receipt): every sealed-log
  * reader treats it as absent; the store keeps the first row of either shape, so it never replaces a sealed log nor is replaced by one. */

@@ -399,13 +399,15 @@ it('H1 binds title/usage/result to the full attempt identity; another generation
     const value = { ...worker('a', 'fresh'), identity: { ...identity('a'), ...changed } };
     const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); }, ...allPools,
       indexLedger: async function () { return indexOf(await this.readLedger({ id: '', path: '' }, { scopeIds: [], poolIds: [] })); },
-      readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [evidence(run, [exited('a', { content, evaluationObserved: true })]).run] }),
+      // N0 R5 (owner D4): a shown past Attempt (here generation 2 of `a`) carries its not-verified transcript only under its own full identity.
+      readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [{ ...evidence(run, [exited('a', { content, evaluationObserved: true })]).run,
+        previousTranscripts: [{ identity: { ...identity('a'), generation: 2 }, transcript: { state: 'unverified' as const, excerpt: [], truncated: false } }] }] }),
       observeScope: async () => ({ access: 'admitted', workers: [value], workerStatus: 'available', truncated: false }) });
     const install = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!;
     const human = install.workers[0]!.human!;
     const observation = install.runs[0]!.tasks[0]!.lastAttempt;
     if (Object.keys(changed).length) {
-      expect(human).toMatchObject({ title: null, titleEvidence: 'missing', evaluation: null, transcript: { state: 'missing' }, patch: { fileCount: null } });
+      expect(human).toMatchObject({ title: null, titleEvidence: 'missing', evaluation: null, transcript: { state: 'generation' in changed ? 'unverified' : 'missing' }, patch: { fileCount: null } });
       expect(observation).toMatchObject({ workerPhase: null, heartbeatAgeMs: null });
     } else {
       expect(human).toMatchObject({ title: 'Düzeltme işi', titleEvidence: 'title', evaluation: 'rejected', transcript: { state: 'sealed' }, patch: { fileCount: 1 } });
