@@ -1005,8 +1005,10 @@ in the policy file, as in every other audit record; do not put private text in r
   listed under “Installation moved”; they need beta.2.1 again. Shared beta.2.1 backups cannot be restored on beta.2; an older
   shared backup is also refused if the current registration is v3. An uninstall begun on beta.2.1 with its last step pending
   keeps its hold. A crash between the registration and identity writes can leave the installation unusable on beta.2 until
-  beta.2.1 returns; a half-reconciled attached folder refuses with `PROJECT_ATTACHMENT_DENIED`. Replaying `init --policy --apply`
-  in a reconciled attached folder reports CHANGED on beta.2. Going further back to beta.1.2 makes every invocation recorded
+  beta.2.1 returns; a half-reconciled attached folder refuses with `PROJECT_ATTACHMENT_DENIED`. Re-running
+  `deckent init policy --scope <id> --apply` in an attached folder is refused with `INSTALLATION_PUBLICATION_CONFLICT` (exit 78)
+  on beta.2 and on beta.2.1 alike; the attached folder's route is `deckent terminal attach`, which is itself refused on a target
+  whose disk number was repaired. Going further back to beta.1.2 makes every invocation recorded
   with plan-usage v2 fail on read with `MODEL_INVOCATION_CORRUPT`, whole audit pages with the new subjects fail with
   `AUDIT_INTEGRITY`, and worker transcripts containing `cli.observation` fail as a whole. Never prune the new audit records.
 
