@@ -153,12 +153,12 @@ describe('alpha.56 recovery cards: the blind review and a recovery policy change
     const cases = ['case-one', 'case-two'].map(caseId => ({ caseId, gate: { result: 'settled', settled: 0, intents: 0 }, runId: 'r', taskId: 't' }));
     const changePolicy = vi.fn(async () => ({ status: 'current', view }));
     const reviewAnswer = vi.fn(async () => ({ status: 'recorded', model: { action: 'escalate-human' }, agreed: true }));
-    const reviewPending = vi.fn(async () => cases);
+    const reviewPending = vi.fn(async () => cases), inspectPolicy = vi.fn(async () => view);
     const output: string[] = [], errors: string[] = [];
     const context = { root, env: { HOME: root, TERM: person.env.TERM }, stdin: TTY,
       stdout: { ...TTY, write: (value: string) => { output.push(value); } }, stderr: { write: (value: string) => { errors.push(value); } },
       configChoiceSources: () => ({ list: async () => [{ value: 's' }, { value: 'other' }] }),
-      recovery: { inspectPolicy: async () => view, changePolicy, reviewPending, reviewAnswer } } as never;
+      recovery: { inspectPolicy, changePolicy, reviewPending, reviewAnswer } } as never;
     const policy = ['policy', 'recovery', '--scope', 's', '--lang', 'en'], review = ['recovery', 'review', '--scope', 's', '--lang', 'en'];
     const ask = vi.spyOn(cards, 'askCliCard');
     try {
@@ -183,13 +183,20 @@ describe('alpha.56 recovery cards: the blind review and a recovery policy change
       expect.soft(await main(review, context), 'first case cancelled').toBe(1);
       // Without a scope the review first asks for one; a cancelled pick has read no case and answered none.
       await writeFile(join(root, '.deckent/config.json'), '{}');
-      for (const [lang, sentence] of [['en', 'Review cancelled. No case was answered.'], ['tr', 'İnceleme iptal edildi. Hiçbir vaka yanıtlanmadı.']] as const) {
+      for (const [lang, sentence, unshown] of [['en', 'Review cancelled. No case was answered.', 'Cancelled. No scope was chosen, so nothing was shown.'],
+        ['tr', 'İnceleme iptal edildi. Hiçbir vaka yanıtlanmadı.', 'Vazgeçildi. Kapsam seçilmediği için hiçbir şey gösterilmedi.']] as const) {
         ask.mockClear(); reviewPending.mockClear(); reviewAnswer.mockClear(); errors.length = 0;
         ask.mockResolvedValueOnce(null);
         expect.soft(await main(['recovery', 'review', '--lang', lang], context), `scope pick cancelled (${lang})`).toBe(1);
         expect(ask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ options: [expect.objectContaining({ id: 's' }), expect.objectContaining({ id: 'other' })] }), expect.anything());
         expect(reviewPending).not.toHaveBeenCalled(); expect(reviewAnswer).not.toHaveBeenCalled();
         expect(errors.join('').trim()).toBe(sentence);
+        // The policy table was never shown: the requested result did not happen.
+        ask.mockClear(); inspectPolicy.mockClear(); errors.length = 0;
+        ask.mockResolvedValueOnce(null);
+        expect.soft(await main(['policy', 'recovery', '--lang', lang], context), `policy recovery scope pick cancelled (${lang})`).toBe(1);
+        expect(ask).toHaveBeenCalledOnce(); expect(inspectPolicy).not.toHaveBeenCalled();
+        expect(errors.join('').trim()).toBe(unshown);
       }
     } finally { ask.mockRestore(); }
   });

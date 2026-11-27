@@ -91,6 +91,7 @@
   "cli.approval.truncated": "Only the first {pages} pages were read; older approvals were not scanned.",
   "cli.approval.pick.title": "{count} approval(s) waiting — choose one to answer",
   "cli.approval.pick.leave": "Leave",
+  "cli.approval.scope.cancelled": "Cancelled. No scope was chosen, so nothing was shown.",
   "cli.approval.card.title": "Approval needed · {what}",
   "cli.approval.card.reasonGiven": "Your reason is recorded: {reason}",
   "cli.approval.card.reasonDefault": "Reason recorded: \"Approved on the terminal\" (give your own with --reason).",

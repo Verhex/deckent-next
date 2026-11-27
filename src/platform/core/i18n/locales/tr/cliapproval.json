@@ -91,6 +91,7 @@
   "cli.approval.truncated": "Yalnız ilk {pages} sayfa okundu; daha eski onaylar taranmadı.",
   "cli.approval.pick.title": "{count} onay bekliyor — yanıtlamak için birini seçin",
   "cli.approval.pick.leave": "Çık",
+  "cli.approval.scope.cancelled": "Vazgeçildi. Kapsam seçilmediği için hiçbir şey gösterilmedi.",
   "cli.approval.card.title": "Onay gerekiyor · {what}",
   "cli.approval.card.reasonGiven": "Gerekçeniz kayda geçer: {reason}",
   "cli.approval.card.reasonDefault": "Kayda geçecek gerekçe: \"Terminalde onaylandı\" (kendi gerekçeniz için --reason).",

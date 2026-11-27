@@ -4,7 +4,7 @@ import type { RecoveryPolicyCommand, RecoveryPolicyRow, RecoveryPolicyView, Reco
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle, renderCliTable, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
-import { cardIo, sinksOf } from './io.js';
+import { cardIo, scopeCancelled, sinksOf } from './io.js';
 import { readScope } from './policy-summary.js';
 import { toggleScope, toggleTitle } from './policy-toggle.js';
 
@@ -77,7 +77,7 @@ export async function policyRecoveryCommand(argv: readonly string[], context: Ap
     emit(view, { json: values.json, ...sinksOf(context), render: data => [scopeNotice(scope, locale), policyTable(data, context, locale)].join('\n') }); return;
   }
   const { ask } = cardIo(context, locale, (await loadConfig(root, options)).approvals.sessionTtlMs);
-  const scope = await toggleScope(context, locale, values.scope, 'deckent policy recovery', ask); if (!scope) return;
+  const scope = await toggleScope(context, locale, values.scope, 'deckent policy recovery', ask); if (!scope) return scopeCancelled(context, locale);
   const view = await host.inspectPolicy(root, { schemaVersion: 1, scopeId: scope.scopeId }, options);
   print([scopeNotice(scope, locale), policyTable(view, context, locale), t('recovery.rollout.note.evidence', {}, locale)].join('\n'));
   const choices = view.rows.filter(row => row.managed !== 'conflict' && (row.available || row.managed === 'granted'));

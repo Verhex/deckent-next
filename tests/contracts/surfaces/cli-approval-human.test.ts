@@ -300,8 +300,13 @@ it('approval decide and decisions started from list require a matching recorded 
     expect((await invoke('list', '--scope', 'live')).code).toBe(0);
     const later = approval('pending-2');
     for (const command of ['list', 'decide']) {
+      // Leave on the first pick: the list was shown (0); a decision was asked for and none was made (1).
       card.mockResolvedValueOnce('-leave');
-      expect.soft((await invoke(command, '--scope', 'live')).code, `${command}: leave without selecting`).toBe(0);
+      expect.soft((await invoke(command, '--scope', 'live')).code, `${command}: leave without selecting`).toBe(command === 'decide' ? 1 : 0);
+      // Leaving after a recorded decision keeps what the session did.
+      listApprovals.mockResolvedValueOnce([record, later]).mockResolvedValueOnce([later]);
+      card.mockResolvedValueOnce(record.request.approvalId).mockResolvedValueOnce('no').mockResolvedValueOnce('-leave');
+      expect.soft((await invoke(command, '--scope', 'live')).code, `${command}: leave after a recorded Deny`).toBe(0);
       for (const answer of ['no', null]) {
         out.length = 0;
         decideApproval.mockClear();
@@ -314,6 +319,15 @@ it('approval decide and decisions started from list require a matching recorded 
         expect(out.join('')).toContain('Karar: reddedildi');
         expect(out.join('')).toContain(answer === null ? 'Yanıt verilmedi; hiçbir karar kaydedilmedi.' : 'Hizmet bu kararı doğrulamadı.');
       }
+    }
+    // Without a default scope the list first asks for one; a cancelled pick shows no list.
+    const bare = await project({});
+    for (const [lang, sentence] of [['en', 'Cancelled. No scope was chosen, so nothing was shown.'], ['tr', 'Vazgeçildi. Kapsam seçilmediği için hiçbir şey gösterilmedi.']] as const) {
+      listApprovals.mockClear(); card.mockClear(); card.mockResolvedValueOnce(null);
+      const cancelled = await run(['approval', 'list', '--lang', lang], handlers, bare, { TERM: 'xterm' }, tty);
+      expect.soft(cancelled.code, `list scope pick cancelled (${lang})`).toBe(1);
+      expect(card).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ options: [expect.objectContaining({ id: 'live' })] }), expect.anything());
+      expect(listApprovals).not.toHaveBeenCalled(); expect(cancelled.err.trim()).toBe(sentence);
     }
   } finally { card.mockRestore(); clock.mockRestore(); }
 });
@@ -414,6 +428,15 @@ it('TTY toggles: declined or cancelled → no governed change; yes → the exist
   expect((await toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id))) ?? 0).toBe(0);
   mcpCapabilities.changeMcpCapabilities.mockResolvedValueOnce(preview).mockResolvedValueOnce({ ...preview, status: 'conflict' });
   await expect(toggleMcp(mcpContext, 'tr', 'live', 1000, answers(group.id, 'apply'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  // Without a default scope each menu first asks for one; a cancelled pick shows no table and changes nothing.
+  const bare = await project({}), err: string[] = [], seen = { cards: cards.length, changes: changes.length, mcp: mcpCalls.length };
+  const picking = (port: object) => ({ root: bare, env: { HOME: join(bare, 'h'), NO_COLOR: '1' }, stdout: { write() {} }, stderr: { write: (value: string) => { err.push(value); } },
+    configChoiceSources: () => ({ list: async () => [{ value: 'live' }, { value: 'other' }] }), ...port }) as never;
+  expect.soft(await toggleDelegations(picking({ delegations }), 'en', undefined, 1000, answers(null))).toBe(1);
+  expect.soft(await toggleMcp(picking({ mcpCapabilities }), 'tr', undefined, 1000, answers(null))).toBe(1);
+  expect(cards.slice(seen.cards).map(card => card.options.map(option => option.id))).toEqual([['live', 'other'], ['live', 'other']]);
+  expect([changes.length, mcpCalls.length]).toEqual([seen.changes, seen.mcp]);
+  expect(err.map(line => line.trim())).toEqual(['Cancelled. No scope was chosen, so nothing was shown.', 'Vazgeçildi. Kapsam seçilmediği için hiçbir şey gösterilmedi.']);
 });
 
 it('MCP-NO-DECIDE kept: the MCP surface has no approval or decision decide tool', async () => {

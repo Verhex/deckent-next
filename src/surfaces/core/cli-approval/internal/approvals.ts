@@ -8,7 +8,7 @@ import { cliMode, cliTableStyle, resolveCommandScope, scopeLister, scopeNotice, 
 import type { ApprovalCommandContext } from './context.js';
 import { APPROVAL_LIST, approvalLines, approvalPickLabel, approvalTable, approvalWhat, isPending, onHardFloor, readableApprovals } from './approval-view.js';
 import { assertInputFields, inputSchemaText, type InputSchema } from './input-check.js';
-import { cardIo, sinksOf } from './io.js';
+import { cardIo, scopeCancelled, sinksOf } from './io.js';
 import registry from './approval.json' with { type: 'json' };
 
 type Action = 'list' | 'inspect' | 'decide' | 'renew';
@@ -105,7 +105,8 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
   const scope = await resolveCommandScope({ command: `${registry.command} ${args.action}`, locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: args.action === 'decide', interactive, listScopes: scopeLister(context, root, options), pick: io.ask });
   const noSelection = args.action === 'decide' ? EXIT_CODES.error : undefined;
-  if (!scope) return noSelection;
+  // `decide` keeps its silent 1; a cancelled list pick says that no list was shown.
+  if (!scope) return noSelection ?? scopeCancelled(context, locale);
   let view = await scan(list, scope.scopeId, approvals.pageSize);
   if (args.json) { emit(view.raw, { ...sinks, json: true }); return; }
   const print = (text: string) => emit(text, sinks);
@@ -123,7 +124,8 @@ async function personApprovals(args: Parsed, context: ApprovalCommandContext, lo
       options: [...waiting.slice(0, APPROVAL_LIST.rowsShown).map(record => ({ id: record.request.approvalId, label: approvalPickLabel(record, locale) })),
         { id: LEAVE, label: t('cli.approval.pick.leave', {}, locale), key: 'q' }] });
     const record = waiting.find(item => item.request.approvalId === picked);
-    if (!record) return round === 0 && picked !== LEAVE ? noSelection : exit;
+    // Leave or Esc: on the first pick `decide` made no decision (1) and `list` already showed its list; later, the session's result stands.
+    if (!record) return round === 0 ? noSelection : exit;
     const answer = await approvalCardOutcome(record, args.reason, scope.scopeId, context, io.ask, locale);
     print(answer.text);
     if (!answer.recorded) exit = EXIT_CODES.error;
