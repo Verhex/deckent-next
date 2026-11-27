@@ -9,6 +9,7 @@ import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
+import { main as cliMain } from '#composition/core/cli/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
@@ -55,12 +56,12 @@ async function fixture() {
     } finally { database.close(); }
   });
   const errors: string[] = [];
-  const cli = (args: string[], tty: boolean, locale: 'en' | 'tr') => main(args, {
+  const cli = (args: string[], tty: boolean, locale: 'en' | 'tr', entry: object = {}) => main(args, {
     root, env: options.env, locale, stdin: { isTTY: tty },
     stdout: { isTTY: tty, write: () => true }, stderr: { write: (line: string) => { errors.push(line); return true; } },
     applyRunLifecycle, inspectSurfaceRunIds: async () => [runId],
     inspectRun: inspectConfiguredRun,
-    inspectRunControl: (project: string, query: RunQuery, config: ConfigLoadOptions) => inspectConfiguredRun(project, query, config, true),
+    inspectRunControl: (project: string, query: RunQuery, config: ConfigLoadOptions) => inspectConfiguredRun(project, query, config, true), ...entry,
   } as Parameters<typeof main>[1]);
   return { root, options, configure, state, cli, errors };
 }
@@ -87,16 +88,40 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     return decision;
   });
   // The first read is refused for a reason a repair may resolve and the project then points to another healthy installation with the same
-  // scope, Run and revision: the retry stops with the binding change before any write in either installation (owner 2026-11-27 repair path).
-  const relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => {
+  // scope, Run and revision. The SDK keeps its read-only refusal; the real CLI entry (owner 2026-11-27 repair path) stops with the binding
+  // change before any write in either installation.
+  const relocatedOnce = () => vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => {
     await f.configure('attached');
     throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
   });
-  await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code });
+  let relocated = relocatedOnce();
+  await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
   expect(relocated).toHaveBeenCalled();
   relocated.mockRestore();
   expect(f.state()).toEqual(before);
   await f.configure('selected');
+  vi.spyOn(process, 'cwd').mockReturnValue(f.root);
+  for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+  let output = '';
+  const writes = [process.stdout, process.stderr].map(stream => vi.spyOn(stream, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof stream.write));
+  relocated = relocatedOnce();
+  try { expect(await cliMain([...argv, '--command-id', command.commandId, '--expected-revision', '1', '--reason', command.holdReason, '--lang', 'en'])).toBe(1); }
+  finally { writes.forEach(write => write.mockRestore()); }
+  expect(relocated).toHaveBeenCalled();
+  relocated.mockRestore();
+  expect(output).toContain(english);
+  expect(f.state()).toEqual(before);
+  await f.configure('selected');
+  // The entry's repaired binding reaches the control: one the control does not find stops the typed hold and the card before any write.
+  const repairedElsewhere = { loadInstallationIdentity: async () => ({}), preflightRunControl: async () => 'repaired:elsewhere' };
+  const asked = vi.spyOn(cards, 'askCliCard').mockResolvedValue('no');
+  for (const [args, tty] of [[[...argv, '--command-id', command.commandId, '--expected-revision', '1', '--reason', command.holdReason], false], [argv, true]] as const) {
+    await expect(f.cli([...args], tty, 'en', repairedElsewhere)).resolves.toBe(1);
+    expect(f.errors.splice(0).join('')).toContain(english);
+    expect(f.state()).toEqual(before);
+  }
+  expect(asked).not.toHaveBeenCalled();
+  asked.mockRestore();
   const sdk = switchAfterDecision();
   await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code });
   sdk.mockRestore();

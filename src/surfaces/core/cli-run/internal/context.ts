@@ -14,4 +14,6 @@ export interface RunCommandContext extends CliBaseContext, Pick<TerminalLaunchCo
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   reserveRunTasks?: RunReservationHandler;
+  /** Set by the CLI entry when it repaired this call's binding for a local hold or resume: the control must still find it (owner 2026-11-27). */
+  repairedRunControlBinding?: string;
 }

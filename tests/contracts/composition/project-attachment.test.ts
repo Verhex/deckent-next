@@ -4,6 +4,7 @@ import * as platform from '#platform/index.js';
 import { FilePolicySource } from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
+import { applyConfiguredRunLifecycle, inspectConfiguredRun } from '#composition/core/runs/index.js';
 import * as adapterIndex from '#adapters/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -1118,6 +1119,7 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
   expect(await head.bytes()).toEqual(retained);
   // The real CLI (owner 2026-11-27): a local `run hold` on a proven move repairs first and goes on to look its Run up (none exists here);
   // a move that cannot be proven still stops at the entry with exit 78 and nothing is written or looked up. Typed and `--id` card forms.
+  // The answer forms of `run resume` and the picker without `--id` keep the entry's refusal byte for byte, as an untouched `run cancel` shows it.
   const openReader = adapterIndex.openSqliteInventoryReader, lookups: unknown[][] = [];
   vi.spyOn(adapterIndex, 'openSqliteInventoryReader').mockImplementation(async (...args) => {
     const reader = await openReader(...args), loadRun = reader.loadRun.bind(reader);
@@ -1138,6 +1140,31 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
     expect(lookups).toEqual([]);
     expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
     head.devices.target = 20n; output = '';
+    // The SDK never repairs (the owner decision names the CLI command): its hold and the card's control read keep the read-only refusal.
+    const query = { schemaVersion: 1 as const, scopeId: 'target', runId: 'no-such-run' };
+    await expect(applyConfiguredRunLifecycle(head.f.b, { ...query, commandId: 'hold-proven-move', action: 'hold', holdReason: 'moved', expectedRevision: 0 }, head.f.options))
+      .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    await expect(inspectConfiguredRun(head.f.b, query, head.f.options, true)).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    expect(lookups).toEqual([]);
+    expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+    const refused = async (argv: string[]) => {
+      const seen = [...lookups]; output = '';
+      expect(await cliMain([...argv, '--lang', 'en'])).toBe(78);
+      expect(lookups).toEqual(seen);
+      expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+      return output;
+    };
+    const change = ['--scope', 'target', '--id', 'no-such-run', '--command-id', 'answer-after-move', '--expected-revision', '0'];
+    const untouched = await refused(['run', 'cancel', ...change]);
+    expect(untouched).toContain('PROJECT_ATTACHMENT_DENIED');
+    for (const argv of [['run', 'resume', ...change, '--task', 't', '--answer', 'yes'], ['run', 'resume', ...change, '--quota', 'wait']])
+      expect(await refused(argv)).toBe(untouched);
+    // Incomplete or malformed forms, a form without `--scope` and the card form off a terminal are no repairing control either.
+    const run = ['--id', 'no-such-run', '--command-id', 'answer-after-move'];
+    for (const argv of [['run', 'hold', '--scope', 'target', ...run, '--reason', 'moved'], ['run', 'hold', '--scope', 'target', ...run, '--expected-revision', '01', '--reason', 'moved'],
+      ['run', 'hold', ...change], ['run', 'resume', ...change, '--reason', 'moved'], ['run', 'hold', ...run, '--expected-revision', '0', '--reason', 'moved'],
+      ['run', 'hold', '--scope', 'target', '--id', 'no-such-run']]) expect(await refused(argv)).toBe(untouched);
+    output = '';
     expect(await cliMain(typed)).not.toBe(78);
     expect(output).not.toContain('PROJECT_ATTACHMENT');
     expect(lookups).toEqual([['target', 'no-such-run']]);
@@ -1148,8 +1175,15 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
     const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
     const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
       vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
-    try { expect(await cliMain(['run', 'hold', '--scope', 'target', '--id', 'no-such-run', '--lang', 'en'])).not.toBe(78); }
-    finally { stdio.forEach(spy => spy.mockRestore()); }
+    try {
+      const screened = await refused(['run', 'cancel', '--scope', 'target', '--id', 'no-such-run']);
+      for (const argv of [['run', 'hold', '--scope', 'target'], ['run', 'resume', '--scope', 'target'], ['run', 'resume', '--scope', 'target', '--id', 'no-such-run', '--task', 't', '--answer', 'yes']])
+        expect(await refused(argv)).toBe(screened);
+      const card = ['--scope', 'target', '--id', 'no-such-run', '--json'];
+      expect(await refused(['run', 'hold', ...card])).toBe(await refused(['run', 'cancel', ...card]));
+      output = '';
+      expect(await cliMain(['run', 'hold', '--scope', 'target', '--id', 'no-such-run', '--lang', 'en'])).not.toBe(78);
+    } finally { stdio.forEach(spy => spy.mockRestore()); }
     expect(output).not.toContain('PROJECT_ATTACHMENT');
     expect(output).toContain('no-such-run');
     expect(await head.bytes()).toEqual(retained);

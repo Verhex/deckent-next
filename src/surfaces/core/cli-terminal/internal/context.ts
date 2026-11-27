@@ -84,6 +84,9 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions, onSourceRepair?: (kind: SourceRepairKind) => void) =>
     Promise<{ readonly installationId: string; readonly projectId: string }>;
   preflightTerminalIdentity?: (root: string, options: ConfigLoadOptions) => Promise<void>;
+  /** The CLI entry's read for a parsed local `run hold|resume` naming scope and Run: a provable binding move is repaired first (owner 2026-11-27).
+   * Resolves the repaired binding the control must still find, or undefined when nothing was repaired; any refusal is the entry's own. */
+  preflightRunControl?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<string | undefined>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   describeRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<ServiceDescription>;
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;

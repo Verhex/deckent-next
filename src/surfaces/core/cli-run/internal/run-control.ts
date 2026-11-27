@@ -43,7 +43,8 @@ function readTaskQuestion(run: RunView, taskId: string | undefined, source: Atte
 /**
  * A Run control for a person on a terminal (CLI review §run, owner 10-08 "değerler yalnız seçimle"): the scope (a change never takes a silent
  * default: picked, the configured one preselected), the Run (picked among the Runs whose state offers the control), the revision read just before
- * the card, a card naming scope, Run and consequence, and a command id from the system. `n`, Esc or silence write nothing. A Run that changed
+ * the card, a card naming scope, Run and consequence, and a command id from the system. `n`, Esc or silence write no control (a binding repair
+ * the CLI entry made for this call before the card stays, owner 2026-11-27). A Run that changed
  * meanwhile is read again and asked again if the action remains available and a task answer still matches its original question (bounded).
  * The AI path keeps its typed flags (`--scope --id --command-id --expected-revision`).
  */
@@ -81,6 +82,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   for (let round = 0; ; round++) {
     const { run, answerSource, controlBinding } = await inspect(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
+    if (bound && context.repairedRunControlBinding !== undefined && controlBinding !== context.repairedRunControlBinding) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     const question = readTaskQuestion(run, answerTaskId, answerSource);
     if (!eligible(run, question)) {
       const id = shownId(run.runId);
