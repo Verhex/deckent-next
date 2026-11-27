@@ -79,10 +79,13 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   const inspect = (bound ? context.inspectRunControl : undefined) ?? context.inspectRun;
   if (!inspect || (action === 'cancel' ? !context.deliverRunCancellation : !context.applyRunLifecycle)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const reason = input.reason?.trim() || t('terminal.runControl.reasonDefault', {}, locale);
+  // A repaired binding goes into the control read, which refuses another one before any Run is read (owner 2026-11-27).
+  const repaired = bound ? context.repairedRunControlBinding : undefined, control = bound ? context.inspectRunControl : undefined;
   for (let round = 0; ; round++) {
-    const { run, answerSource, controlBinding } = await inspect(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options, answerTaskId);
+    const query = runQuerySchema.parse({ schemaVersion: 1, scopeId, runId });
+    const { run, answerSource, controlBinding } = control && repaired !== undefined ? await control(io.root, query, io.options, answerTaskId, repaired)
+      : await inspect(io.root, query, io.options, answerTaskId);
     // A repaired binding is compared before the read is interpreted: a Run absent where the project now points is the binding change.
-    const repaired = bound ? context.repairedRunControlBinding : undefined;
     if (repaired !== undefined && (run || controlBinding !== undefined) && controlBinding !== repaired) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
     const question = readTaskQuestion(run, answerTaskId, answerSource);
