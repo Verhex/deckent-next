@@ -7,6 +7,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, readProviderConnectSeed, parseProviderConnectRegistry } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation as admit, applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import * as activationOwners from '#composition/core/model-activation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { connectConfiguredModel as connect } from '#composition/core/model-connect/index.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
@@ -125,6 +126,21 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-sibling-leased' }, f.options, { registry: localRegistry }))
       .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
     expect.soft(await readFile(f.path, 'utf8')).toBe(siblingText);
+    // Each logical read is fresh, as at the base: the sibling's attachment broken between `registered` and `catalogHas` is seen by the second.
+    const plain = JSON.parse(siblingText) as Config, leasedSibling = plain.provider_invocation_profiles.profiles.find(row => row['id'] === siblingId)!;
+    Object.assign(leasedSibling, { schemaVersion: own['schemaVersion'] }); delete leasedSibling['useLeaseId'];
+    await writeFile(f.path, JSON.stringify(plain), { mode: 0o600 }); clearConfigCache();
+    const listing = activationOwners.inspectConfiguredModelCatalog;
+    let lists = 0;
+    const between = vi.spyOn(activationOwners, 'inspectConfiguredModelCatalog').mockImplementation(async (...args) => {
+      const result = await listing(...args);
+      if (++lists === 1) { await writeFile(f.path, siblingText, { mode: 0o600 }); clearConfigCache(); }
+      return result;
+    });
+    try {
+      await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'connect-sibling-between' }, f.options, { registry: localRegistry }))
+        .rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
+    } finally { between.mockRestore(); }
     await writeFile(f.path, configText, { mode: 0o600 }); clearConfigCache();
     expect(f.rows("SELECT * FROM audit_events")).toEqual(beforeReplay);
       const db = new DatabaseSync(f.ledger);

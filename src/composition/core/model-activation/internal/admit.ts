@@ -95,7 +95,7 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
     if (workerOnly) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
     return { writes: [], conflict: false };
   }
-  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes: (() => Promise<unknown>)[] = [];
+  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes: (() => Promise<boolean>)[] = [];
   let conflict = false;
   const prefix = workerOnly ? commandId : `model-state-${createHash('sha256').update(commandId).digest('hex')}`;
   if (action === 'activate') {
@@ -118,7 +118,13 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
     // command completed it), the child is done and is not written again. Otherwise the conflict is noted; every child is still planned,
     // so a later child's refusal keeps its place.
     if (action === 'activate' && planned.replay) { if (!await reached(context, child)) conflict = true; continue; }
-    writes.push(() => planned.write(channel, [model.modelId]));
+    // The writer can be the first to see the receipt: the same rule then decides (done without a write, or the conflict), and only a real
+    // write counts as written.
+    writes.push(async () => {
+      const result = await planned.write(channel, [model.modelId]);
+      if (result.replayed && action === 'activate' && !await reached(context, child)) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+      return !result.replayed;
+    });
   }
   return { writes, conflict };
 }
@@ -146,7 +152,8 @@ export async function activateConfiguredWorkerModel(root: string, scopeId: strin
     await authority.witness('models.activate');
     if (conflict) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
     // A caller's own check (a connect's wide check) runs right before each durable write.
-    for (const write of writes) { await beforeWrite?.(); await write(); }
-    return true;
+    let written = false;
+    for (const write of writes) { await beforeWrite?.(); if (await write()) written = true; }
+    return written;
   } catch (error) { throw queryFailure(error); }
 }
