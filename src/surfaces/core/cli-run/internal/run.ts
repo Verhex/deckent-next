@@ -173,9 +173,15 @@ export function runControlRepairScope(argv: readonly string[], context: RunComma
   try { flags = runFlags(argv, action, true, () => new Error()); } catch { return undefined; }
   const { values, json } = flags, scopeId = values.get('--scope'), commandId = values.get('--command-id'), revision = values.get('--expected-revision'), reason = values.get('--reason');
   if (!scopeId || !values.has('--id') || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
-  if (commandId === undefined && revision === undefined) return cliMode(context, json).mode === 'interactive' ? scopeId : undefined;
-  const typed = commandId !== undefined && revision !== undefined && /^(0|[1-9][0-9]*)$/.test(revision) && Number.isSafeInteger(Number(revision));
-  return typed && (action === 'hold' ? Boolean(reason?.trim()) : reason === undefined) ? scopeId : undefined;
+  const card = commandId === undefined && revision === undefined;
+  if (card ? cliMode(context, json).mode !== 'interactive' : commandId === undefined || revision === undefined || !/^(0|[1-9][0-9]*)$/.test(revision)
+    || !Number.isSafeInteger(Number(revision)) || (action === 'hold' ? !reason?.trim() : reason !== undefined)) return undefined;
+  // Every value that needs no Run passes the control schema first; the card's command id and revision are the system's (placeholders here).
+  const holdReason = action === 'hold' ? { holdReason: card ? reason?.trim() || 'held' : reason } : {};
+  try {
+    return runLifecycleCommandSchema.safeParse({ schemaVersion: 1, commandId: commandId ?? `cli-run-${action}-entry`, scopeId, runId: values.get('--id'), action, ...holdReason,
+      expectedRevision: card ? 0 : Number(revision) }).success ? scopeId : undefined;
+  } catch { return undefined; }
 }
 
 /** `run inspect` (CLI review §run): read scope rule; a short id resolves; on a person's terminal without --id, the Run is picked. */

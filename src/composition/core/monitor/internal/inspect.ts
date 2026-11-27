@@ -1,6 +1,6 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
-import { SystemTrustedClock, inspectProductDirectory, ManagedFileError, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, inspectProductDirectory, ManagedFileError, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS, type ConfigLoadOptions } from '#platform/index.js';
 import { FileBrainQuotaWaitStore, indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, stampMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
 import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, MonitorSourceMemo, monitorScopeDiagnosticsAllowed, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type MonitorRecall } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
@@ -14,8 +14,9 @@ import { inspectConfiguredInvocableModels } from '#composition/core/model-invoca
 import { inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
 const denied = (code: string) => isAuthorizationRefusal(code, { include: PERSON_AUTHORIZATION_REFUSALS }); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (denied(queryFailure(error).code)) return false; throw error; });
-async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
+async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions, pinned?: Readonly<{ binding: string; changed(): void }>) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
+      if (pinned && c.runControlBinding() !== pinned.binding) { pinned.changed(); return null; }
       const output = await granted(() => auth.authorizeScopeReadOutput(scopeId, c.principal)), approval = await granted(async () => { authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); });
       if (!output && !approval) return null; if (c.identity.installation.status === 'unavailable' && c.identity.installation.reason === 'not-created') return { access: 'not-initialized', scopeId, stopped: true } satisfies SurfaceNotInitialized;
       const ledger = await c.path(), binding = JSON.stringify([c.config.company.id, ledger, c.principal.issuer, c.principal.subject]);
@@ -112,4 +113,8 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     } }).inspect(targets, selection);
 }
 /** Snapshot reads use the stream's fresh collection admission. */ export async function inspectSurfaceAccess(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) ? { binding: read.binding, kinds: read.kinds } : null; }
-export async function inspectSurfaceRunIds(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) && read.kinds.includes('run') ? listSurfaceRunIds(read) : []; }
+export async function inspectSurfaceRunIds(root: string, scopeId: string, options: ConfigLoadOptions, binding?: string) {
+  let changed = false;
+  const read = await authorizeSurfaceRead(root, scopeId, options, binding === undefined ? undefined : { binding, changed: () => { changed = true; } });
+  if (changed) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
+  return read && !('access' in read) && read.kinds.includes('run') ? listSurfaceRunIds(read) : []; }

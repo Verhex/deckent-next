@@ -119,7 +119,8 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
   /** Approval, run and worker publications already written by the runtime service. */
   inspectSurfaceAccess?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<SurfaceSnapshotAccess | null>;
-  inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
+  /** With `binding` (a CLI entry repair), the ids are read only under that Run-control binding; another refuses RUN_CONTROL_BINDING_CHANGED. */
+  inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions, binding?: string) => Promise<readonly string[]>;
   followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
 }
 /** Human rendering of a typed cancellation delivery (the CLI's `run cancel` text, shared by the terminal `/cancel` card). */

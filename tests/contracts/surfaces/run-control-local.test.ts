@@ -10,6 +10,7 @@ import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } f
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import { main as cliMain } from '#composition/core/cli/index.js';
+import * as monitor from '#composition/core/monitor/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
@@ -17,6 +18,7 @@ import { openConfiguredAttemptStore } from '../support/configured-open.js';
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   clearConfigCache();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -136,4 +138,24 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     expect(f.errors.splice(0).join('')).toContain(turkish);
     expect(f.state()).toEqual(before);
   }
+  // A short id after a real entry repair resolves only under the repaired binding: a list read while the project points elsewhere stops the
+  // call, even when the project points back before the control. Runs, receipts and audit rows stay as they were in both databases (the
+  // repair's own scope pin is the accepted cost, so it runs last).
+  await f.configure('selected');
+  const kept = () => f.state().map(tables => tables.slice(0, 3));
+  const rows = kept(), listIds = monitor.inspectSurfaceRunIds;
+  relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
+  const listed = vi.spyOn(monitor, 'inspectSurfaceRunIds').mockImplementationOnce(async (...args: Parameters<typeof listIds>) => {
+    await f.configure('attached');
+    try { return await listIds(...args); } finally { await f.configure('selected'); }
+  });
+  output = '';
+  const captured = [process.stdout, process.stderr].map(stream => vi.spyOn(stream, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof stream.write));
+  try { expect(await cliMain(['run', 'hold', '--scope', scopeId, '--id', 'run-fix', '--command-id', 'hold-prefix', '--expected-revision', '1', '--reason', 'wait', '--lang', 'en'])).toBe(1); }
+  finally { captured.forEach(write => write.mockRestore()); }
+  expect(relocated).toHaveBeenCalled();
+  expect(listed).toHaveBeenCalledOnce();
+  relocated.mockRestore(); listed.mockRestore();
+  expect(output).toContain(english);
+  expect(kept()).toEqual(rows);
 });

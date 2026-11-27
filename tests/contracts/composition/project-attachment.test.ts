@@ -1164,6 +1164,10 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
     for (const argv of [['run', 'hold', '--scope', 'target', ...run, '--reason', 'moved'], ['run', 'hold', '--scope', 'target', ...run, '--expected-revision', '01', '--reason', 'moved'],
       ['run', 'hold', ...change], ['run', 'resume', ...change, '--reason', 'moved'], ['run', 'hold', ...run, '--expected-revision', '0', '--reason', 'moved'],
       ['run', 'hold', '--scope', 'target', '--id', 'no-such-run']]) expect(await refused(argv)).toBe(untouched);
+    // A value the control schema refuses (a reserved command id, an over-long reason) never starts a repair either.
+    const values = ['--scope', 'target', '--id', 'no-such-run', '--expected-revision', '0'];
+    for (const argv of [['run', 'hold', ...values, '--command-id', 'dispatch-fence-moved', '--reason', 'moved'], ['run', 'hold', ...values, '--command-id', 'answer-after-move', '--reason', 'x'.repeat(100_000)]])
+      expect(await refused(argv)).toBe(untouched);
     output = '';
     expect(await cliMain(typed)).not.toBe(78);
     expect(output).not.toContain('PROJECT_ATTACHMENT');

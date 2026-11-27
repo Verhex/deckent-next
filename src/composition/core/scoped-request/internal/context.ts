@@ -159,8 +159,8 @@ export async function preflightConfiguredRunControl(root: string, scopeId: strin
   const config = await loadComposedConfig(root, { ...options, heal: false }), location = controlLocation(config);
   try { await loadConfiguredInstallationIdentity(root, options, { config, inspectSource: inspectConfiguredInstallationSource }); return undefined; }
   catch (error) {
-    if (localPrincipalChannel() || !['PROJECT_ATTACHMENT_CHANGED', 'PROJECT_ATTACHMENT_DENIED', 'INSTALLATION_IDENTITY_RELOCATED', 'PROJECT_ATTACHMENT_UNAVAILABLE']
-      .some(code => isCodedError(error, code))) throw error;
+    // PROJECT_ATTACHMENT_UNAVAILABLE is left out: it also stands for a transient source read failure, which no repair proves.
+    if (localPrincipalChannel() || !['PROJECT_ATTACHMENT_CHANGED', 'PROJECT_ATTACHMENT_DENIED', 'INSTALLATION_IDENTITY_RELOCATED'].some(code => isCodedError(error, code))) throw error;
     try {
       return (await admitTerminalContext(root, scopeId, options, undefined, seen => {
         if (seen !== location) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
