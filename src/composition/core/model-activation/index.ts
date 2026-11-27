@@ -2,4 +2,4 @@ export { admitConfiguredChatActivation as carryConfiguredModelActivation, admitC
 export { inspectConfiguredModelActivation } from './internal/inspect.js';
 export { applyConfiguredModelCatalog, inspectConfiguredModelCatalog } from './internal/catalog.js';
 export { assignConfiguredModelRole, inspectConfiguredModelRoles } from './internal/model-roles.js';
-export { assertConfiguredActivationWitness, configuredAgentMarked } from './internal/activation-authority.js';
+export { assertConfiguredActivationWitness } from './internal/activation-authority.js';

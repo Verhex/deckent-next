@@ -5,18 +5,15 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-/** Whether the configured agent markers (and CI) mark this process or the invocation environment. */
-export function configuredAgentMarked(context: Context, options: ConfigLoadOptions) {
+export async function assertConfiguredActivationWitness(operation: string, context: Context, options: ConfigLoadOptions) {
   const markers = [...context.config.cli.agentEnvironment, 'CI'];
   const marked = (env: NodeJS.ProcessEnv) => markers.some(name => {
     const value = env[name];
     return value !== undefined && value !== '' && !/^(?:0|false)$/iu.test(value.trim());
   });
-  return marked(process.env) || marked(options.env ?? process.env);
-}
-export async function assertConfiguredActivationWitness(operation: string, context: Context, options: ConfigLoadOptions) {
   await assertAuthorityWitness(operation, localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), {
-    attest: async () => context.principal.assurance === 'os-user' && !configuredAgentMarked(context, options) && await attestLocalInteractiveTerminal(),
+    attest: async () => context.principal.assurance === 'os-user' && !marked(process.env)
+      && !marked(options.env ?? process.env) && await attestLocalInteractiveTerminal(),
   });
 }
 

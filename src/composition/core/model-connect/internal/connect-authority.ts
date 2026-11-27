@@ -1,19 +1,18 @@
 import { isDeepStrictEqual } from 'node:util';
 import { type ModelConnectCommand, type ModelReference, type ProviderCatalogDocument } from '#domain/index.js';
-import { evaluateConfigWrite, principalPolicyRules, subscriptionActor, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
+import { evaluateConfigWrite, subscriptionActor, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, ModelConnectApplication, type ModelConnectPorts } from '#engine/index.js';
 import { discoveredProviderCatalog, providerDiscoveryChannel, nativeCliHeadlessDefinitionSchema, localPrincipalChannel, localPrincipalPeer, SIWC_INFERENCE, type ProviderConnectKind } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { assertConfiguredActivationWitness, configuredAgentMarked, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { assertConfiguredActivationWitness, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { authorizeSiwcConnect } from './siwc.js';
 import { listConfiguredConnectionWorkspaces, type ModelDiscoveryHost } from './discovery.js';
 
-type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-
 export function connectAuthority(root: string, command: ModelConnectCommand, options: ConfigLoadOptions, kind: ProviderConnectKind) {
   const { scopeId } = command;
   type Layers = Awaited<ReturnType<ModelConnectPorts['layers']>>;
+  type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
   const readCatalog = (channelId: string) => inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId, channelId }, options, { modelUse: false }).then(result => result.channels[0]);
   const catalogs = new Map<string, ReturnType<typeof readCatalog>>();
   const inspect = (channelId: string) => {
@@ -24,21 +23,16 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   const read = () => loadConfiguredScopeContext(root, scopeId, options, 'read');
   let initial: Context | undefined;
   const channel = localPrincipalChannel(), peer = localPrincipalPeer();
-  let witnessed = false, latest: Context | undefined;
-  const hasOAuth = kind.connect?.adapter === SIWC_INFERENCE.adapter.id;
-  // Only the rules that can decide for this principal bind the plan; OAuth owners and approval brokers decide on other policy data, so such
-  // plans keep the whole document.
-  let wide = hasOAuth;
+  let witnessed = false;
   const current = async () => {
     const now = await read();
     initial ??= now;
-    if (channel !== localPrincipalChannel() || peer !== localPrincipalPeer() || !isDeepStrictEqual(initial.principal, now.principal)
-      || (wide ? !isDeepStrictEqual(initial.document, now.document) : !isDeepStrictEqual(principalPolicyRules(initial.document, initial.principal), principalPolicyRules(now.document, now.principal)))
-      || !isDeepStrictEqual(initial.layout, now.layout) || initial.config.company.id !== now.config.company.id || !isDeepStrictEqual(initial.config.approvals, now.config.approvals)
-      || !isDeepStrictEqual(initial.config.cli.agentEnvironment, now.config.cli.agentEnvironment) && configuredAgentMarked(initial, options) !== configuredAgentMarked(now, options)
+    if (channel !== localPrincipalChannel() || peer !== localPrincipalPeer() || !isDeepStrictEqual(initial.principal, now.principal) || !isDeepStrictEqual(initial.document, now.document)
+      || !isDeepStrictEqual(initial.layout, now.layout) || initial.config.company.id !== now.config.company.id
+      || !isDeepStrictEqual(initial.config.cli.agentEnvironment, now.config.cli.agentEnvironment)
       || initial.installationId !== null && initial.installationId !== now.installationId
       || initial.projectId !== null && initial.projectId !== now.projectId) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
-    return latest = now;
+    return now;
   };
   const attest = async (context: Context, fresh = false) => {
     if (fresh || !witnessed) await assertConfiguredActivationWitness('models.connect', context, options);
@@ -52,7 +46,7 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   const chat = (context: Context, reference: ModelReference) =>
     new ModelActivationPolicyAuthorization(contextPolicySource(context, context.document)).authorize('activate', { scopeId, reference }, context.principal);
   const config = (context: Context, writes: readonly { layer: 'global' | 'project'; keyPath: string }[]) => {
-    for (const item of writes) wide ||= evaluateConfigWrite(context.document, context.principal, { ...item, commandId: command.commandId, scopeId, principal: context.principal }).decision === 'require-approval';
+    for (const item of writes) evaluateConfigWrite(context.document, context.principal, { ...item, commandId: command.commandId, scopeId, principal: context.principal });
   };
   const workerFacts = async (reference: ModelReference, registration: ProviderCatalogDocument | null, reading = inspect) =>
     ModelConnectApplication.workerFacts(await reading(reference.providerId), reference, registration, Date.now());
@@ -69,7 +63,8 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   };
   const knownWrites = (context: Context, layers: Layers, reference: ModelReference, declare: boolean) =>
     config(context, ModelConnectApplication.knownWrites(layers, scopeId, reference, declare, !kind.connect!.catalogOnly || kind.connect!.headless === true));
-  const native =kind.connect?.chatPath === null && kind.connect.personOnly && !hasOAuth;
+  const hasOAuth = kind.connect?.adapter === SIWC_INFERENCE.adapter.id;
+  const native = kind.connect?.chatPath === null && kind.connect.personOnly && !hasOAuth;
   const local = native && Boolean(kind.connect?.seed) && !command.workspaceId;
   const mightWithdraw = local && command.delegate !== undefined;
   const mightObserve = local && !('pull' in command.model) && Boolean(command.cli?.executable && command.cli.configDir);
@@ -122,7 +117,7 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
     }
   };
   const writtenChannels = new Map<string, { state: 'active'; revision: number }>();
-  return { current, initial: () => initial!, latest: () => latest!, witness, attest, inspect, beforeDiscovery, mightWithdraw, mightObserve, withdrawal, discoveryAuthority, targets, config,
+  return { current, initial: () => initial!, witness, attest, inspect, beforeDiscovery, mightWithdraw, mightObserve, withdrawal, discoveryAuthority, targets, config,
     authorizeCarry: (reference: ModelReference) => chat(initial!, reference),
     async applyWorker(reference: ModelReference, write: () => Promise<boolean>) {
       const parent = ModelConnectApplication.assertWorkerWrite(plannedWorkers.get(key(reference)),

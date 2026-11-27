@@ -17,13 +17,6 @@ import { inspectConfiguredProviderSpendAccount } from '#composition/core/provide
 import { loadComposedConfig } from '#composition/core/root/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
-/** Connect checkpoints compare only the layer facts the plan is computed from: declarations, profiles, the secret store selection, delivery
- * frames and, for a worker kind, its image pins. */
-const planFacts = (layer: Record<string, unknown>, worker: boolean) => [layer['provider_catalog'], layer['provider_invocation_profiles'], layer['secrets'],
-  ...([['service', 'responseMaxBytes'], ['mcp', 'responseMaxBytes'], ...worker ? [['admission', 'registry']] as const : []] as const).map(([section, key]) => {
-    const value = layer[section]; return typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined; })];
-const samePlanFacts = (before: Readonly<{ global: Record<string, unknown>; project: Record<string, unknown> }>, after: typeof before, worker: boolean) =>
-  isDeepStrictEqual(planFacts(before.global, worker), planFacts(after.global, worker)) && isDeepStrictEqual(planFacts(before.project, worker), planFacts(after.project, worker));
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   let siwc: ReturnType<typeof configuredSiwcConnect> | null = null;
@@ -50,7 +43,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     if (command && kind?.connect?.adapter === SIWC_INFERENCE.adapter.id) siwc = configuredSiwcConnect(projectRoot, command, options, host.siwcPresentation);
     const siwcModels = async () => (await siwc!.models()).map(row => row.slug);
     let pulled: readonly string[] | null = null;
-    const checkLayers = async () => { if (observed && !samePlanFacts(observed, await snapshotConfiguredConfig(projectRoot, options), kind?.connect?.catalogOnly === true)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD'); };
+    const checkLayers = async () => sameLayers(await snapshotConfiguredConfig(projectRoot, options));
     const app = new ModelConnectApplication({
       kind: id => kind?.id === id ? { ...kind, keyRequired: kind.key?.required ?? false } : null,
       defaults: registry.profileDefaults,
@@ -161,7 +154,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
         configuredModelInvocationDeliverySurfaces(observed!.effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
       async audit(event) { await withScopeAudit(await scope('write'), audit => { audit.record(event); }); },
-      async policyRevision() { return authority!.latest().document.revision; },
+      async policyRevision() { return authority!.initial().document.revision; },
       async keyStored(name) { if (!host.listSecretNames) return null; try { return (await host.listSecretNames(projectRoot, options)).names.includes(name); } catch { return null; } },
       service: () => configServiceState(projectRoot, options, host.describeService),
     });
