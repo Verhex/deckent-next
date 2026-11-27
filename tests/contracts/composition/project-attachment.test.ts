@@ -1186,10 +1186,10 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
       expect(await refused(['run', 'hold', '--scope', 'target'])).toBe(await refused(['run', 'cancel', '--scope', 'target', '--id', 'no-such-run']));
       head.devices.target = 20n; const listed = vi.spyOn(monitorIndex, 'inspectSurfaceRunIds');
       for (const action of ['hold', 'resume']) {
-        await writeFile(head.refPath, intermediate); output = '';
+        await writeFile(head.refPath, intermediate); output = ''; listed.mockClear();
         expect(await cliMain(['run', action, '--scope', 'target', '--lang', 'en'])).toBe(1);
         expect(output).toContain(platform.t('cli.run.control.none', { scope: 'target', action }, 'en'));
-        expect(listed.mock.calls.at(-1)?.[3]).toEqual(expect.any(String)); await repairedHere();
+        expect(listed.mock.calls.map(call => typeof call[3])).toEqual(['string']); await repairedHere();
       }
       listed.mockRestore(); await writeFile(head.refPath, intermediate);
       const card = ['--scope', 'target', '--id', 'no-such-run', '--json'];

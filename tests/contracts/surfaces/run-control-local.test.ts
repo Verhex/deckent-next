@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { PassThrough, Writable } from 'node:stream';
 import { join } from 'node:path';
@@ -7,12 +7,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
-import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
+import { InstallationIdentityError, RunDecisionApprovalBroker, RunInspectionApplication, type RunQuery } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import { main as cliMain } from '#composition/core/cli/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import * as monitor from '#composition/core/monitor/index.js';
+import * as scopedRequest from '#composition/core/scoped-request/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { openConfiguredAttemptStore } from '../support/configured-open.js';
@@ -96,7 +97,7 @@ it.skipIf(process.platform === 'win32')('refuses a CLI picker card when the proj
   for (const key of [...(await loadComposedConfig(f.root, f.options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
   const rows = f.state().map(tables => tables.slice(0, 3));
   const relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
-  const listed = vi.spyOn(monitor, 'inspectSurfaceRunIds');
+  const listIds = monitor.inspectSurfaceRunIds, listed = vi.spyOn(monitor, 'inspectSurfaceRunIds');
   ask.mockReset();
   ask.mockImplementationOnce(async () => 'run-fixture').mockImplementationOnce(async () => {
     await f.configure('attached');
@@ -104,15 +105,43 @@ it.skipIf(process.platform === 'win32')('refuses a CLI picker card when the proj
   });
   let output = '';
   const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
-  const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
-    vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
-  try { expect(await cliMain([...argv.slice(0, 4), '--lang', 'en'])).toBe(1); }
-  finally { stdio.forEach(spy => spy.mockRestore()); }
+  const atTerminal = async () => {
+    output = '';
+    const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
+      vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
+    try { return await cliMain([...argv.slice(0, 4), '--lang', 'en']); } finally { stdio.forEach(spy => spy.mockRestore()); }
+  };
+  expect(await atTerminal()).toBe(1);
   expect(relocated).toHaveBeenCalled();
   expect(listed.mock.calls[0]?.[3]).toEqual(expect.any(String));
   expect(ask).toHaveBeenCalledTimes(2);
   expect(ask.mock.calls[1]![0].body!.join('\n')).toContain('State running · revision 1');
   expect(output).toContain(english);
+  expect(f.state().map(tables => tables.slice(0, 3))).toEqual(rows);
+  const relocatedOnce = () => relocated.mockImplementationOnce(async () => { throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED'); });
+  // Each listed Run is read only under the repaired binding: a project that points elsewhere after the id list stops before any Run is read there.
+  await f.configure('selected');
+  const inspected = vi.spyOn(RunInspectionApplication.prototype, 'inspectWithModels');
+  relocatedOnce(); ask.mockReset(); listed.mockClear();
+  listed.mockImplementationOnce(async (...args: Parameters<typeof listIds>) => { try { return await listIds(...args); } finally { await f.configure('attached'); } });
+  expect(await atTerminal()).toBe(1);
+  expect(output).toContain(english); expect(inspected).not.toHaveBeenCalled(); expect(ask).not.toHaveBeenCalled();
+  inspected.mockRestore();
+  // A repaired picker without the bound reader stops with the binding change instead of listing through the ordinary reader.
+  await f.configure('selected'); f.errors.splice(0);
+  await expect(f.cli(argv.slice(0, 4), true, 'en', { loadInstallationIdentity: async () => ({}), preflightRunControl: async () => 'repaired:here', inspectRunControl: undefined })).resolves.toBe(1);
+  expect(f.errors.splice(0).join('')).toContain(english); expect(ask).not.toHaveBeenCalled();
+  // After the repair the picker reads the configuration without healing it: a configuration that broke meanwhile is left as it is.
+  const configPath = join(f.root, '.deckent/config.json'), names = await readdir(join(f.root, '.deckent')), broken = '{ "layout": ';
+  const preflight = scopedRequest.preflightConfiguredRunControl;
+  vi.spyOn(scopedRequest, 'preflightConfiguredRunControl').mockImplementationOnce(async (...args: Parameters<typeof preflight>) => {
+    const binding = await preflight(...args);
+    await writeFile(configPath, broken);
+    return binding;
+  });
+  relocatedOnce();
+  expect(await atTerminal()).not.toBe(0);
+  expect(await readFile(configPath, 'utf8')).toBe(broken); expect(await readdir(join(f.root, '.deckent'))).toEqual(names); expect(ask).not.toHaveBeenCalled();
   expect(f.state().map(tables => tables.slice(0, 3))).toEqual(rows);
 });
 
