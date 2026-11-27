@@ -158,6 +158,8 @@ it('keeps an AI requester, witnessed person decider, real write, durable replay 
   // (no plan port here: no propose_work; this policy refuses run_shell in every cell, so it is not named).
   expect(h.state.prompt).toContain('- Project files and commands change only through the deckent tools offered here: edit_file, write_file for a direct file change.'
     + ' A built-in tool of the CLI stops the turn.'); expect(h.state.prompt).toContain('[Deckent runtime instructions v13]');
+  expect(h.state.prompt).toContain('- When none of them fits, do not call another tool to act: say which action is not available in this session, and point the person'
+    + ' to /do <request> to ask for a plan; the person decides on any card it opens.');
   // This fixture is the Claude CLI family; the Codex CLI family meets the same registry condition, so its turns take the same line.
   expect(nativeCliAgent('codex-jsonl')?.agent.transport.kind).toBe('codex-mcp');
   const decided = await h.decide(event, 'allow');

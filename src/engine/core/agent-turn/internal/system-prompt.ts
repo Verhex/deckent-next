@@ -79,14 +79,16 @@ function changeRoute(tools: readonly AgentToolSpec[], session: AgentSessionSnaps
   const named = (pick: (tool: AgentToolSpec) => boolean) => tools.filter(tool => pick(tool) && usable(tool)).map(tool => tool.name).join(', ');
   const routes = [[named(tool => tool.toolClass === 'edit' && !SCRATCH_EDIT_TOOLS.has(tool.name)), 'for a direct file change'],
     [named(tool => tool.name === AI_PROPOSAL_REGISTRY.tools.work), 'for work a worker should do'], [named(tool => tool.toolClass === 'shell'), 'for commands']].filter(([names]) => names);
+  const plan = 'point the person to /do <request> to ask for a plan; the person decides on any card it opens';
   return ['', 'Changes in this session:', '- You run inside a CLI whose own built-in tools are off or refused here. Do not infer what the deckent tools may do from'
-    + ' the CLI\'s own sandbox (it may call itself read-only), and do not tell the person the session is read-only.',
+    + ' the CLI\'s own sandbox (it may call itself read-only).',
   ...(routes.length ? [`- Project files and commands change only through the deckent tools offered here: ${routes.map(([names, use]) => `${names} ${use}`).join('; ')}.`
     + ' A built-in tool of the CLI stops the turn.',
-    '- When the person asks to change project files or run a command, make the fitting call instead of answering that you cannot. Policy and the permission mode'
-      + ' decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report what the tool result confirms.']
-    : ['- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks for such a change, say that you cannot'
-      + ' make it here and point them to /do <request>, which plans and runs it as a job.'])];
+    '- When one of these tools fits the request, make the call instead of answering that you cannot or that the session is read-only. Policy and the permission'
+      + ' mode decide each call: it may run at once, open a card the person decides, or be refused. Make the call; do not predict its outcome, and report what the tool result confirms.',
+    `- When none of them fits, do not call another tool to act: say which action is not available in this session, and ${plan}.`]
+    : [`- No deckent tool that changes project files or runs commands is available to you in this turn: when the person asks for such a change, say that it is not`
+      + ` available in this session and ${plan}.`])];
 }
 
 /**
