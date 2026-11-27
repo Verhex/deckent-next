@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applyRunLifecycle } from '../../../src/index.js';
-import { readLocalOsIdentity } from '#adapters/index.js';
+import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
-import { RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
+import { InstallationIdentityError, RunDecisionApprovalBroker, type RunQuery } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
 import * as cards from '#surfaces/core/cli-human/index.js';
@@ -86,6 +86,17 @@ it.skipIf(process.platform === 'win32')('refuses SDK, typed CLI and JSON hold wh
     await f.configure('attached');
     return decision;
   });
+  // The first read is refused for a reason a repair may resolve and the project then points to another healthy installation with the same
+  // scope, Run and revision: the retry stops with the binding change before any write in either installation (owner 2026-11-27 repair path).
+  const relocated = vi.spyOn(FileInstallationIdentityStore.prototype, 'read').mockImplementationOnce(async () => {
+    await f.configure('attached');
+    throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
+  });
+  await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code });
+  expect(relocated).toHaveBeenCalled();
+  relocated.mockRestore();
+  expect(f.state()).toEqual(before);
+  await f.configure('selected');
   const sdk = switchAfterDecision();
   await expect(applyRunLifecycle(f.root, command, f.options)).rejects.toMatchObject({ code });
   sdk.mockRestore();

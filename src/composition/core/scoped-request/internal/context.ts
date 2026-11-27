@@ -152,15 +152,22 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
   }, choice);
 }
 /** A local Run control (CLI, terminal, SDK) reads first. A refusal a binding repair may resolve is retried once the way an interactive terminal
- * opens: the same preflight, then write admission, so a proven repair runs first (owner 2026-11-27). Otherwise the read's own refusal stands. */
+ * opens: the same preflight, then write admission, so a proven repair runs first (owner 2026-11-27). The retry must see the location the refused
+ * read saw, else the existing binding-changed stop comes before any write; any other failure of the retry keeps the read's own refusal. */
 export async function loadConfiguredControlContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, checkLocation?: CheckRunControlLocation) {
-  try { return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'read', undefined, undefined, checkLocation); }
+  let seen: string | undefined;
+  const observe: CheckRunControlLocation = location => { seen ??= location; checkLocation?.(location); };
+  try { return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'read', undefined, undefined, observe); }
   catch (error) {
     if (!['PROJECT_ATTACHMENT_CHANGED', 'PROJECT_ATTACHMENT_DENIED', 'INSTALLATION_IDENTITY_RELOCATED', 'PROJECT_ATTACHMENT_UNAVAILABLE'].some(code => isCodedError(error, code))) throw error;
+    const same: CheckRunControlLocation = location => {
+      if (seen !== undefined && location !== seen) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
+      checkLocation?.(location);
+    };
     try {
       await preflightConfiguredTerminalIdentity(projectRoot, options, scopeId);
-      return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'write', undefined, undefined, checkLocation);
-    } catch { throw error; }
+      return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'write', undefined, undefined, same);
+    } catch (retry) { throw isCodedError(retry, 'RUN_CONTROL_BINDING_CHANGED') ? retry : error; }
   }
 }
 /** Only an interactive terminal writer defers a potentially repairable registered attachment observation. */

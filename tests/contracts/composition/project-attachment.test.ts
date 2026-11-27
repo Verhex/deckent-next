@@ -4,7 +4,7 @@ import * as platform from '#platform/index.js';
 import { FilePolicySource } from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
-import { applyConfiguredRunLifecycle } from '#composition/core/runs/index.js';
+import * as adapterIndex from '#adapters/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import * as localPrincipal from '#adapters/core/local-principal/index.js';
@@ -1116,17 +1116,44 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
   await writeFile(head.refPath, JSON.stringify(head.localAt('10'), null, 2) + '\n');
   await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
   expect(await head.bytes()).toEqual(retained);
-  // A local hold asks write admission first (owner 2026-11-27): the same proven repair runs, then the hold goes on to its Run (none exists
-  // here). A move that cannot be proven is refused exactly as before and nothing is written.
-  const hold = (commandId: string) => applyConfiguredRunLifecycle(head.f.b, { schemaVersion: 1, commandId, scopeId: 'target', runId: 'no-such-run',
-    action: 'hold', holdReason: 'moved', expectedRevision: 0 }, head.f.options).then(() => 'held', (error: { code?: string }) => error.code);
-  await writeFile(head.refPath, intermediate);
-  head.devices.target = 40n;
-  expect(await hold('hold-unproven-move')).toBe('PROJECT_ATTACHMENT_DENIED');
-  expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
-  head.devices.target = 20n;
-  expect(await hold('hold-proven-move')).not.toMatch(/^PROJECT_ATTACHMENT/u);
-  expect(await head.bytes()).toEqual(retained);
+  // The real CLI (owner 2026-11-27): a local `run hold` on a proven move repairs first and goes on to look its Run up (none exists here);
+  // a move that cannot be proven still stops at the entry with exit 78 and nothing is written or looked up. Typed and `--id` card forms.
+  const openReader = adapterIndex.openSqliteInventoryReader, lookups: unknown[][] = [];
+  vi.spyOn(adapterIndex, 'openSqliteInventoryReader').mockImplementation(async (...args) => {
+    const reader = await openReader(...args), loadRun = reader.loadRun.bind(reader);
+    reader.loadRun = async (...query) => { lookups.push(query); return loadRun(...query); };
+    return reader;
+  });
+  vi.spyOn(process, 'cwd').mockReturnValue(head.f.b);
+  for (const [key, value] of Object.entries(head.f.options.env)) vi.stubEnv(key, value);
+  let output = '';
+  const capture = (stream: NodeJS.WriteStream) => vi.spyOn(stream, 'write').mockImplementation(((text: string) => { output += text; return true; }) as typeof stream.write);
+  const writes = [capture(process.stdout), capture(process.stderr)];
+  const typed = ['run', 'hold', '--scope', 'target', '--id', 'no-such-run', '--command-id', 'hold-after-move', '--expected-revision', '0', '--reason', 'moved', '--lang', 'en'];
+  try {
+    await writeFile(head.refPath, intermediate);
+    head.devices.target = 40n;
+    expect(await cliMain(typed)).toBe(78);
+    expect(output).toContain('PROJECT_ATTACHMENT_DENIED');
+    expect(lookups).toEqual([]);
+    expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+    head.devices.target = 20n; output = '';
+    expect(await cliMain(typed)).not.toBe(78);
+    expect(output).not.toContain('PROJECT_ATTACHMENT');
+    expect(lookups).toEqual([['target', 'no-such-run']]);
+    expect(await head.bytes()).toEqual(retained);
+    await writeFile(head.refPath, intermediate); output = '';
+    // The `--id` card form, as a person at a terminal (no agent or CI marker).
+    for (const key of [...(await loadComposedConfig(head.f.b, head.f.options)).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+    const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true });
+    const stdio = [vi.spyOn(process, 'stdin', 'get').mockReturnValue(Object.assign(new PassThrough(), { isTTY: true }) as unknown as NodeJS.ReadStream),
+      vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream), vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream)];
+    try { expect(await cliMain(['run', 'hold', '--scope', 'target', '--id', 'no-such-run', '--lang', 'en'])).not.toBe(78); }
+    finally { stdio.forEach(spy => spy.mockRestore()); }
+    expect(output).not.toContain('PROJECT_ATTACHMENT');
+    expect(output).toContain('no-such-run');
+    expect(await head.bytes()).toEqual(retained);
+  } finally { writes.forEach(write => write.mockRestore()); }
 }
 
 /** A2: a target policy withdrawn after the source publication fails before local publication (an unrepaired source). */

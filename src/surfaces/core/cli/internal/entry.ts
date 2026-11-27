@@ -116,7 +116,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       && cliInstallationContract(argv, CLI_COMMANDS) === undefined) {
       locale = resolveLocale(language, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
-      await preflight(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });
+      const root = context.root ?? process.cwd(), preflightOptions = { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') };
+      // A local `run hold|resume` repairs a proven binding move itself (owner 2026-11-27): a refusal the terminal's preflight would defer
+      // reaches the control; any other refusal stops here as before.
+      const runControl = !terminalWriter && argv[0] === 'run' && (argv[1] === 'hold' || argv[1] === 'resume') ? context.preflightTerminalIdentity : undefined;
+      await preflight(root, preflightOptions).catch(async (error: unknown) => {
+        if (!runControl) throw error;
+        await runControl(root, preflightOptions).catch(() => { throw error; });
+      });
     }
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
