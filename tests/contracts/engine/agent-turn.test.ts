@@ -681,7 +681,8 @@ it('tells the model its per-answer output limit and how to write large content i
   expect(rule(render([['write_file', 'edit']]))).toMatch(/at most a limited number of output tokens;/);
   expect(rule(render([['read_file', 'read']], 8192))).toBeUndefined();
   // CHAT-ROUTE (W23/W23B 2026-11-26): on a CLI whose own tools are off (`bridgedCli`), the prompt says how changes happen, naming exactly the
-  // offered change tools that policy does not refuse; with none it points to /do. Without the declaration the text is unchanged.
+  // offered change tools that policy does not refuse; when none fits or none is usable it says which action is not available (no /do pointer: no
+  // typed surface data reaches the prompt builder). Without the declaration the text is unchanged.
   const changeTools: [string, AgentToolSpec['toolClass']][] = [['read_file', 'read'], ['edit_file', 'edit'], ['write_file', 'edit'], ['run_shell', 'shell'], ['scratch_write', 'edit'], ['propose_work', 'read']];
   const routed = (names: [string, AgentToolSpec['toolClass']][], refused: string[] = []) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, model, language: 'tr', bridgedCli: true,
     tools: names.map(([name, toolClass]) => spec(name, toolClass)), session: { schemaVersion: 2, deckent: 'v', scopeId: 's', sessionId: null, mode: null, thinking: 'on',

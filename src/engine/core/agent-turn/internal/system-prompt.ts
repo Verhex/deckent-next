@@ -72,7 +72,8 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
 /**
  * CHAT-ROUTE (W23/W23B 2026-11-26: on a native agent CLI a cold change request was answered "this session is read-only" although edit_file,
  * write_file and propose_work were offered): how changes happen when the CLI's own tools are off. Names the offered change tools that the
- * turn's policy snapshot does not refuse in every cell (project edit tools, the work proposal, the shell); with none, the person's /do. Text only.
+ * turn's policy snapshot does not refuse in every cell (project edit tools, the work proposal, the shell); when none fits or none is usable, the model
+ * says which action is not available (no /do pointer: no typed surface data reaches this builder). Text only.
  */
 function changeRoute(tools: readonly AgentToolSpec[], session: AgentSessionSnapshot | null | undefined): string[] {
   const usable = (tool: AgentToolSpec) => !session?.tools.find(entry => entry.name === tool.name)?.effects.every(entry => entry.effect === 'refused');
