@@ -163,8 +163,8 @@ function runFlags(argv: readonly string[], action: string | undefined, control: 
 }
 /**
  * The scope of a local `run hold|resume` the CLI entry may repair a proven binding move for first (owner 2026-11-27), read with this handler's own
- * parse: scope and Run named, and either every typed flag valid or a person's card. A resume answer (`--task --answer`, `--quota`) is no control;
- * it, the picker without `--id` and every incomplete form keep the entry's refusal.
+ * parse: the scope named, and either every typed flag valid with the Run named or a person's card or picker (owner decision: the picker repairs
+ * first, then lists). A resume answer (`--task --answer`, `--quota`) is no control; it and every incomplete form keep the entry's refusal.
  */
 export function runControlRepairScope(argv: readonly string[], context: RunCommandContext): string | undefined {
   const action = argv[1];
@@ -173,8 +173,10 @@ export function runControlRepairScope(argv: readonly string[], context: RunComma
   try { flags = runFlags(argv, action, true, () => new Error()); } catch { return undefined; }
   const { values, json } = flags, scopeId = values.get('--scope'), commandId = values.get('--command-id'), revision = values.get('--expected-revision'), reason = values.get('--reason');
   const selection = values.get('--id');
-  if (!scopeId || selection === undefined || !runSelection(selection) || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
+  if (!scopeId || (selection !== undefined && !runSelection(selection)) || values.has('--task') || values.has('--answer') || values.has('--quota')) return undefined;
   const card = commandId === undefined && revision === undefined;
+  // Without `--id` only a person's picker qualifies (owner decision): it lists the repaired scope, then takes the card.
+  if (selection === undefined && !card) return undefined;
   if (card ? cliMode(context, json).mode !== 'interactive' : commandId === undefined || revision === undefined || !/^(0|[1-9][0-9]*)$/.test(revision)
     || !Number.isSafeInteger(Number(revision)) || (action === 'hold' ? !reason?.trim() : reason !== undefined)) return undefined;
   // Every value that needs no Run passes the control schema first (the Run id is judged after it resolves; the card's command id and revision

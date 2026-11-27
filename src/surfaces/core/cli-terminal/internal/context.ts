@@ -110,7 +110,8 @@ export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommand
   clearScratch?: TerminalScratchClearHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
   inspectRun?: RunQueryHandler;
-  inspectRunControl?: RunQueryHandler;
+  /** The control read; with `binding` (a repaired picker's listing) another Run-control binding refuses before any Run is read. */
+  inspectRunControl?: (root: string, query: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, binding?: string) => ReturnType<RunQueryHandler>;
   deliverRunCancellation?: RunCancellationDeliveryHandler;
   applyRunLifecycle?: RunLifecycleHandler;
   inspectWorkerTranscript?: WorkerTranscriptHandler;

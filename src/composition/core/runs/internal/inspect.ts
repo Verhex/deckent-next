@@ -1,5 +1,5 @@
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, GIT_QUEUE_DISPLAY, SqliteTargetQueue, inventoryReadsPerCall, openSqliteLedgerReadOnly } from '#adapters/index.js';
 import { verifiedPrincipal, DispatchPolicyAuthorization, RunInspectionApplication, observeRunQueue, queueObservationReadLimit, runQuerySchema, RunPolicyAuthorization, type DispatchIdentityAuthorization, type RunQuery } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -17,9 +17,10 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
   return (await readConfiguredRun(projectRoot, input, options, undefined, forControl)).result;
 }
 /** The host's control read (CLI card, terminal window): its Run-control binding also when no Run is found, so a caller holding a repaired
- * binding compares it before it reads "not found" (owner 2026-11-27). The SDK's `inspectRun` keeps the read above. */
-export async function inspectConfiguredRunControl(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
-  return (await readConfiguredRun(projectRoot, input, options, undefined, 'absent-too')).result;
+ * binding compares it before it reads "not found" (owner 2026-11-27). With `expected` (a repaired picker's listing), another binding refuses
+ * before any Run is read. The SDK's `inspectRun` keeps the read above. */
+export async function inspectConfiguredRunControl(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}, expected?: string) {
+  return (await readConfiguredRun(projectRoot, input, options, undefined, 'absent-too', expected)).result;
 }
 
 /** The local answer cards read the question and its source at the same Run revision. Null defers first-open selection to the Runs card. */
@@ -28,10 +29,12 @@ export async function inspectConfiguredRunAnswer(projectRoot: string, input: Run
   return Object.freeze({ ...result, ...(answerSource ? { answerSource } : {}), ...(selectAnswerQuestion ? { selectAnswerQuestion } : {}) });
 }
 
-async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl: boolean | 'absent-too' = false) {
+async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl: boolean | 'absent-too' = false,
+  expected?: string) {
   try {
     const query = runQuerySchema.parse(input);
     const { config, layout, document, principal, path, runControlBinding } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
+    if (expected !== undefined && runControlBinding() !== expected) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const authorization = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,

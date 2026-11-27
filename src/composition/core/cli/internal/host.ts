@@ -291,7 +291,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // Task answers read and write in-process against the same configured ledger.
     inspectRun: (root, input, options, answerTaskId) => answerTaskId === undefined
       ? runtime.inspectRun(input) : inspectConfiguredRunAnswer(root, input, options, answerTaskId),
-    inspectRunControl: (root, input, options) => inspectConfiguredRunControl(root, input, options),
+    inspectRunControl: (root, input, options, _answerTaskId, binding) => inspectConfiguredRunControl(root, input, options, binding),
     deliverRunCancellation: (_root, input) => runtime.deliverRunCancellation(input),
     reserveRunTasks: (_root, input) => runtime.reserveRunTasks(input),
     proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),
