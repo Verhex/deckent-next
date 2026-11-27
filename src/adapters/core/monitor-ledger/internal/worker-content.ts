@@ -1,5 +1,4 @@
 import { sameAttemptIdentity, readWorkerFinalReport, summarizeWorkerEvents, workerEventSchema, type WorkerEvent } from '#domain/index.js';
-import { nativePaidUsageText } from '#capabilities/index.js';
 import { t, resolveLocale, redactSensitive, terminalSafeText, type Locale } from '#platform/index.js';
 import { parseRetainedOutputEnvelope, summarizeMonitorEvent, workspacePatchSchema, type MonitorWorkerContent } from '#engine/index.js';
 import type { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
@@ -40,7 +39,8 @@ export function summarizeMonitorWorkerEvent(event: WorkerEvent, locale: Locale) 
   const plugins = event.observation.builtinPlugins;
   return { kind: event.kind, summary: t('cli.task.transcript.observation', { facts: [
     ...(plugins ? [t('cli.task.transcript.pluginCount', { count: plugins.names.length + plugins.omitted }, locale)] : []),
-    ...(event.observation.paidExtraUsage ? [nativePaidUsageText(event.observation.paidExtraUsage, locale)] : []),
+    // N0 (ruling 3775): the worker's own sentence, not the call notice; whether deckent stopped this worker is not in the record.
+    ...(event.observation.paidExtraUsage?.kind === 'overage' ? [t('cli.task.transcript.paidLimit', {}, locale)] : []),
   ].join(' · ') }, locale) };
 }
 /** Only a retained, identity-bound artifact proves a patch/result. The caller gates every read, including hits, through read-output.

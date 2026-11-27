@@ -6,7 +6,7 @@ import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigK
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, openSealedNativeInput, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, closeAndSealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
 import { assertAttemptPackageInput, reopenAttemptPackage, scanPackageSecrets, type PackageSecretSnapshot, verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -148,7 +148,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (environment === 'prevented') return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: 'prevented' as const, terminal: null, outputRecorded: false }) });
       if (environment) return await waiting(environment);
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
-      let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
+      let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | null | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
       let worker: Extract<Awaited<ReturnType<typeof prepareNativeCliWorker>>, { state: 'ready' }> | undefined;
       let nativeEvents: ReturnType<typeof createNativeWorkerEvents> | undefined;
@@ -247,7 +247,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       try { // D-05: the sink's file handle and the connection open inside the try whose finally closes both (Node 26 ends the service for a collected unclosed FileHandle).
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
-      events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
+      events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => null) : undefined;
       const preparedBackend = await backend.open();
       if ('reason' in preparedBackend) return await waiting(preparedBackend.reason);
       const { supervisor } = preparedBackend;
@@ -266,15 +266,14 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           outcome = { ...outcome, waiting: held.execution.waiting };
         }
       }
-      if (result.kind === 'terminal' && worker) await worker.supervisor.release(request);
+      if (result.kind === 'terminal' && worker && !worker.supervisor.offeredObservation()) await worker.supervisor.release(request);
       } finally {
         await connection?.close(); await relay?.close();
-        await worker?.supervisor.close();
-        // Seal the event log once the gateway is closed; a sealing failure never changes the execution outcome and is returned typed.
-        const closedSink = await events?.close();
-        // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
-        sealing = await sealAttemptWorkerEvents(identity, artifacts, store, { events: closedSink?.events ?? [], verification: connection?.modelVerification() ?? nativeEvents?.modelVerification() ?? null,
-          unreported: connection?.statistics().eventsUnreported ?? nativeEvents?.statistics().eventsUnreported ?? 0, projectionComplete: closedSink?.projectionComplete, maxBytes: config.artifacts.maxBytes });
+        // N0: an offered observation is sealed before its worker is released or closed (ruling 3650 (c)); otherwise HEAD's order, timing and rejections stay; with one, the seal never throws.
+        const offered = worker?.supervisor.offeredObservation(); if (!offered) await worker?.supervisor.close();
+        sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
+          offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
+        if (offered) try { if (outcome?.status === 'terminal') await worker!.supervisor.release(request); } finally { await worker!.supervisor.close(); }
       }
       // Only a sealing failure is reported: the replay of a settled execution (above) keeps the same shape as a successful first call.
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, ...outcome, ...(sealing.status === 'failed' ? { eventLog: sealing } : {}) }) });

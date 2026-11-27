@@ -9,7 +9,7 @@ import { GitRunWorkspaceProvider, sealAttemptWorkerEvents } from '#adapters/inde
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, assertNativeWorkerBinding, bindNativeWorkerEffort } from '#adapters/core/native-coding/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, snapshotKnownSecrets } from '#platform/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeCliAgent } from '#adapters/core/native-cli-registry/index.js';
 import { nativeAgentFlagSetDigest } from '#adapters/core/native-cli-headless/index.js';
@@ -73,6 +73,8 @@ const session = { schemaVersion: 1 as const, turnId: 'fixture-turn', generation:
   tools: [{ name: 'read_file', version: 1, toolClass: 'read' as const, description: 'Read the Attempt workspace', inputSchema: { type: 'object' as const, properties: {} } }] };
 const closure = { turnId: session.turnId, generation: session.generation, pendingCallIds: [], termination: 'confirmed' as const, effects: 'settled' as const };
 const report = { schemaVersion: 1, summary: 'scoped answer', changedFiles: [], checks: [], openIssues: [] };
+const offered = (sequence: number, cliVersion: string, fact: string): Extract<WorkerEvent, { kind: 'cli.observation' }> => ({ schemaVersion: 1, sequence, atMs: 1, kind: 'cli.observation', observation: {
+  schemaVersion: 1, cliVersion, builtinPlugins: { names: [fact], omitted: 1 }, paidExtraUsage: { kind: 'overage', status: fact, window: fact, resetsAtMs: null } } });
 function fixture() {
   const release = vi.fn(async () => {}), run = vi.fn<NativeCliWorkerDriver['run']>(async () => ({ termination: 'confirmed', status: 'completed', text: JSON.stringify(report) }));
   const tools: ToolSessionPort = { session, propose: vi.fn(async call => ({ schemaVersion: 1, turnId: session.turnId, generation: session.generation,
@@ -85,8 +87,8 @@ function fixture() {
   const fence = vi.fn(async () => true);
   return { ports, release, run, tools, fence };
 }
-async function prepared(f = fixture(), language?: string) {
-  const result = await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence, ...(language ? { language } : {}) });
+async function prepared(f = fixture(), language?: string, extra: Partial<Parameters<typeof prepareNativeCliWorker>[0]> = {}) {
+  const result = await prepareNativeCliWorker({ profile: profile(), request, ports: f.ports, fence: f.fence, ...(language ? { language } : {}), ...extra });
   expect(result.state).toBe('ready'); if (result.state !== 'ready') throw new Error('fixture-not-ready');
   return { ...f, supervisor: result.supervisor };
 }
@@ -249,7 +251,17 @@ it('K12: cancellation aborts the same driver, closes the facade/session and keep
   const observed = await p.supervisor.cancel(request), result = await running;
   expect(sandboxObservationSchema.parse(observed)).toEqual({ handle: result.handle, result: result.result });
   expect(result).toMatchObject({ result: { kind: 'exited', exitCode: 1 }, interrupted: true, interruptCause: 'cancel' });
-  expect(f.tools.cancel).toHaveBeenCalledOnce(); await p.supervisor.release(request);
+  // N0 R2: a concurrent release (custody sweep, patch preparation) joins the one in flight; capacity and the claim settle once.
+  expect(f.tools.cancel).toHaveBeenCalledOnce(); await Promise.all([p.supervisor.release(request), p.supervisor.release(request)]); expect(f.release).toHaveBeenCalledOnce();
+  // N0: a cancel before any observation hands over nothing; a cancel after one keeps exactly that one row for the Attempt.
+  expect(p.supervisor.offeredObservation()).toBe(false);
+  const g = fixture(), rows: WorkerEvent[] = [], driver = g.ports.driver, begun = Promise.withResolvers<void>(); let offer!: (events: readonly WorkerEvent[]) => void;
+  g.ports.driver = async (input, signal) => { offer = input.onEvents!; return driver(input, signal); };
+  g.run.mockImplementation(async (_bridge, signal) => { offer([offered(1, 'cli-1', 'five_hour')]); begun.resolve(); await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    return { termination: 'confirmed', status: 'completed', text: 'late answer' }; });
+  const q = await prepared(g, undefined, { onEvents: batch => rows.push(...batch) }), cancelled = q.supervisor.execute(request); await begun.promise; await q.supervisor.cancel(request); await cancelled;
+  expect(rows).toEqual([{ ...offered(1, 'cli-1', 'five_hour'), observation: { ...offered(1, 'cli-1', 'five_hour').observation, builtinPlugins: { names: [], omitted: 2 } } }]);
+  expect(q.supervisor.offeredObservation()).toBe(true); await q.supervisor.release(request);
 });
 it('K12: uncertain process or effects cannot produce terminal success or release capacity', async () => {
   const f = fixture(); f.tools.cancel = async () => ({ ...closure, kind: 'cancelled', effects: 'unknown' });
@@ -264,6 +276,21 @@ it('K12: echoed bridge authority is redacted from retained output and a changed 
   } });
   const p = await prepared(f), output = await p.supervisor.execute(request);
   expect(output.stdout).not.toContain(token); expect(output.stdout).toContain(`‹secret:${entry.bridge.tokenEnvName}›`); await p.supervisor.release(request);
+  // N0: the supervisor projects the observation itself (turn token, configured secret; names never travel), only while the CLI runs; a throwing
+  // handover is not rethrown and stays offered without a held row (the close owner reports it).
+  const secret = 'fx-secret-9876', rows: WorkerEvent[] = [], seen = fixture(); let late!: () => void;
+  seen.ports.driver = async input => ({ tools: input.tools, close: async () => {}, async run(bridge) {
+    input.onEvents!([offered(1, bridge.turnToken, secret)]); late = () => input.onEvents!([offered(2, 'cli-2', 'five_hour')]);
+    return { termination: 'confirmed', status: 'completed', text: JSON.stringify(report) };
+  } });
+  const s = await prepared(seen, undefined, { knownSecrets: snapshotKnownSecrets([{ name: null, value: secret }]), onEvents: batch => rows.push(...batch) });
+  expect(await s.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } }); late();
+  expect(rows).toEqual([{ ...offered(1, `‹secret:${entry.bridge.tokenEnvName}›`, secret), observation: { schemaVersion: 1, cliVersion: `‹secret:${entry.bridge.tokenEnvName}›`,
+    builtinPlugins: { names: [], omitted: 2 }, paidExtraUsage: { kind: 'overage', status: '?', window: '?', resetsAtMs: null } } }]);
+  expect(JSON.stringify(rows)).not.toContain(secret); await s.supervisor.release(request);
+  const thrown = await prepared(seen, undefined, { onEvents: () => { throw new Error('handover refused'); } });
+  expect(await thrown.supervisor.execute(request)).toMatchObject({ result: { kind: 'exited', exitCode: 0 } });
+  expect(thrown.supervisor.offeredObservation()).toBe(true); await thrown.supervisor.release(request);
   const changed = fixture();
   await expect(prepareNativeCliWorker({ profile: profile(), request: { ...request, argv: ['other'] }, ports: changed.ports, fence: changed.fence })).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');
   expect(changed.ports.capacity.acquire).not.toHaveBeenCalled();

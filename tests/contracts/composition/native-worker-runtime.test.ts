@@ -7,6 +7,7 @@ import { fixtureExecution } from '../support/execution-registry.js';
 import { nativeWorkerAdmission, createConfiguredNativeCliWorkerPorts, type NativeCliWorkerRuntime } from '#composition/core/execution/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { recheckNativeWorkerUse } from '#composition/core/runs/index.js';
+import * as adapterExports from '#adapters/index.js';
 import { createNativeCodingTemplate, compileNativeCodingWorkInput, nativeCliAgent, nativeAgentFlagSetDigest,
   resolveNativeCliWorkerProfile, inspectNativeCliWorker, readLocalOsIdentity, localPrincipalChannel, type NativeCliWorkerBinding, type NativeCliWorkerPorts } from '#adapters/index.js';
 import { openSqliteLedgerReadOnly, findCapacityResource } from '#adapters/core/sqlite-ledger/index.js';
@@ -144,7 +145,11 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
       const seal = { schemaVersion: 1 as const, capability: 'NativeAgentExecution' as const, executable: bound.definition.executable, cliVersion: '9.0.0', ownerUid: userInfo().uid,
         profileDigest: bound.profileDigest, flagSetDigest: nativeAgentFlagSetDigest(entry) };
       const run = vi.fn(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] }) }));
-      const release = vi.fn(async () => undefined), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
+      // N0: the worker reports its start and one count-only observation with the provider's first overage fact; release must follow the seal.
+      const observation = { schemaVersion: 1, cliVersion: '9.0.0', builtinPlugins: { names: [], omitted: 3 }, paidExtraUsage: { kind: 'overage', status: 'allowed', window: 'five_hour', resetsAtMs: null } } as const;
+      const reported = [{ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'claude', model: 'exact-model', cliVersion: '9.0.0' },
+        { schemaVersion: 1, sequence: 2, atMs: 2, kind: 'cli.observation', observation }] as const, sealedAtRelease: boolean[] = []; let report = true;
+      const release = vi.fn(async () => { sealedAtRelease.push(!!await store.loadWorkerEventLog('s', 'attempt')); }), session = { schemaVersion: 1 as const, turnId: 'worker', generation: 1, approvalTtlMs: 1000, tools: [] };
       const ports = { readiness: async () => ({ state: 'ready' as const, execution: seal }), f08: async () => seal, recheck: async () => undefined,
         capacity: { acquire: async () => ({ state: 'acquired' as const, release }) },
         checkEnvironment: vi.fn<NonNullable<NativeCliWorkerPorts['checkEnvironment']>>(async (request, _binding, requirements) => {
@@ -154,12 +159,14 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
           expect(await readFile(join(request.workspace, 'note.txt'), 'utf8')).toBe('fixed base\n'); expect(context).toEqual({});
           return { session, propose: vi.fn(), revoke: vi.fn(), cancel: async () => ({ kind: 'cancelled' as const, turnId: session.turnId, generation: session.generation,
             termination: 'unverified' as const, effects: 'settled' as const, pendingCallIds: [] }) };
-        }), driver: vi.fn(async input => { expect(input).not.toHaveProperty('workspace'); return { tools: input.tools, run, close: async () => undefined }; }),
+        }), driver: vi.fn(async input => { expect(input).not.toHaveProperty('workspace'); return { tools: input.tools, run: (...args: Parameters<typeof run>) => { if (report) input.onEvents?.(reported); return run(...args); }, close: async () => undefined }; }),
         bridgeLimits: { idleMs: 1000, maxConnections: 2, replayMaxEntries: 2, replayMaxBytes: entry.bridge.frameMaxBytes * 2 } };
       const result = await executeConfiguredTask(project, identity, { ...options, nativeCliWorker: { ports, projectionRetired: false } });
       expect(result.execution).toMatchObject({ status: 'terminal', outputRecorded: true, terminal: { exitCode: 0 } });
       const dispatch = await store.loadBoundDispatch(identity); expect(dispatch?.profile.adapterId).toBe('native-cli-worker'); expect(dispatch?.containerId).toBeUndefined();
-      expect(await store.loadWorkerEventLog('s', 'attempt')).toMatchObject({ eventCount: 1 });
+      expect(await store.loadWorkerEventLog('s', 'attempt')).toMatchObject({ eventCount: 3 }); expect(result.execution).not.toHaveProperty('eventLog'); expect(sealedAtRelease).toEqual([true]);
+      const { inspectConfiguredWorkerTranscript } = await import('../../../src/index.js'), sealed = await inspectConfiguredWorkerTranscript(project, identity, options);
+      expect(sealed.events.filter(event => event.kind === 'cli.observation')).toEqual([{ ...reported[1], sequence: 3, atMs: 2 }]);
       const restored = recordedNativeCliWorkerSupervisor(dispatch!.profile);
       expect(await restored.recoverOutput(dispatch!.request)).toMatchObject({ completeness: 'partial', stdout: expect.stringContaining('fixed note read') });
       await executeConfiguredTask(project, identity, { ...options, nativeCliWorker: { ports, projectionRetired: true } });
@@ -195,14 +202,39 @@ it('K17: reserved native task reaches retained dispatch output without Docker pr
         expect(run).toHaveBeenCalledOnce(); expect(ports.openTools).toHaveBeenCalledOnce();
         if (cause !== 'run-cancel') await store.cancelRun({ commandId: `cancel-${cause}`, actor, scopeId: 's', runId: cause, expectedRevision: (await store.loadRun('s', cause))!.revision });
       }
+      // N0: two separate close faults, each through task.ts on its own Attempt: (unheld) an observation offered before the provider's start, healthy sink;
+      // (sink) a held observation whose live sink close rejects. Both: terminal exit 0, the failure value (`cause: null`), no ledger row, one spawn, capacity
+      // released once and the supervisor closed once. Without the offered flag the first would seal and the second would reject the task.
+      const prepare = adapterExports.prepareNativeCliWorker;
+      for (const fault of ['unheld', 'sink'] as const) {
+        const faulted = { ...identity, runId: fault, attemptId: fault }, settled = vi.fn(async () => undefined), closes = vi.fn();
+        await store.createRun({ commandId: `create-${fault}`, actor, identity: { scopeId: 's', runId: fault, layoutRevision: identity.layoutRevision }, graph,
+          execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
+          policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: `reserve-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: 0, now: 0, identities: [faulted] });
+        const once = vi.fn(async () => ({ termination: 'confirmed' as const, status: 'completed' as const, text: JSON.stringify({ schemaVersion: 1, summary: 'fixed note read', changedFiles: [], checks: [], openIssues: [] }) }));
+        vi.spyOn(adapterExports, 'prepareNativeCliWorker').mockImplementationOnce(async (...args: Parameters<typeof prepare>) => {
+          const ready = await prepare(...args); if (ready.state !== 'ready') return ready;
+          const close = ready.supervisor.close.bind(ready.supervisor); ready.supervisor.close = async () => { closes(); return close(); }; return ready; });
+        if (fault === 'sink') vi.spyOn(adapterExports, 'openWorkerEventSink').mockResolvedValueOnce({ accept() {}, close: async () => { throw new Error('sink-close-failed'); } } as never);
+        const lost = await executeConfiguredTask(project, faulted, { ...options, nativeCliWorker: { projectionRetired: true, ports: { ...ports, capacity: { acquire: async () => ({ state: 'acquired' as const, release: settled }) },
+          driver: vi.fn(async input => ({ tools: input.tools, run: () => { for (const row of fault === 'unheld' ? [reported[1], reported[0]] : reported) input.onEvents?.([row]); return once(); },
+            close: async () => undefined })) } } });
+        expect(lost.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, eventLog: { status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null } });
+        expect(await store.loadWorkerEventLog('s', fault)).toBeNull(); expect(settled).toHaveBeenCalledOnce(); expect(once).toHaveBeenCalledOnce(); expect(closes).toHaveBeenCalledOnce();
+        await store.cancelRun({ commandId: `cancel-${fault}`, actor, scopeId: 's', runId: fault, expectedRevision: (await store.loadRun('s', fault))!.revision });
+        await store.settleCancelledAttempt(faulted);
+      }
       const heldIdentity = { ...identity, runId: 'held', attemptId: 'held-attempt' };
       await store.createRun({ commandId: 'create-held', actor, identity: { scopeId: 's', runId: 'held', layoutRevision: identity.layoutRevision }, graph,
         execution: { ...fixtureExecution(graph), tasks: [{ taskId: 't', profile: compiled }] }, now: 0,
         policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } });
       await store.reserveRunTasks({ commandId: 'reserve-held', actor, scopeId: 's', runId: 'held', expectedRevision: 0, now: 0, identities: [heldIdentity] });
-      run.mockResolvedValue({ termination: 'confirmed', status: 'failed', text: '', refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' });
+      run.mockResolvedValue({ termination: 'confirmed', status: 'failed', text: '', refusal: 'NATIVE_AGENT_PLUGIN_UNEXPECTED' }); report = false;
       const held = await executeConfiguredTask(project, heldIdentity, { ...options, nativeCliWorker: { ports, projectionRetired: true } });
       expect(held.execution).toMatchObject({ status: 'unresolved', outputRecorded: false, waiting: { reason: 'NATIVE_AGENT_PLUGIN_UNEXPECTED', legacy: false } });
+      // R2 M4: a worker that reported nothing still seals the host verdict alone (the no-emitted-events, verdict-only log).
+      expect(await store.loadWorkerEventLog('s', 'held-attempt')).toMatchObject({ eventCount: 1 });
       expect((await store.loadRun('s', 'held'))?.state.kind).toBe('parked');
       const request = ['task', 'execute', '--scope', 's', '--run', heldIdentity.runId, '--task', heldIdentity.taskId,
         '--attempt', heldIdentity.attemptId, '--generation', String(heldIdentity.generation), '--layout-revision', heldIdentity.layoutRevision, '--lang', 'en'];

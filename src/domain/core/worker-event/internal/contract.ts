@@ -7,6 +7,9 @@ import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } 
 /** Worker Event Contract. One current version; provider normalizers map native streams onto it. Events are reported by the
  * worker container (untrusted evidence): they never grant authority, acceptance or terminal truth. */
 export const WORKER_EVENT_SCHEMA_VERSION = 1;
+/** The widest serialized `cli.observation` row with count-only plugins, newline included (6-byte escapes, full-width counters, the longest fact
+ * kind): a format bound of worker event schema v1 and observation schema v1, proven by the seal test's widest-row case. */
+export const WORKER_OBSERVATION_ROW_MAX_BYTES = 727;
 const count = z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const text = (max: number) => persistedString(z.string().max(max));
 const MAX_MODELS = 16;

@@ -60,8 +60,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
   expect(text).toContain('önbellek okuma 65832');
   expect(text).toMatch(/düzenliyor\s+hello\.txt/); expect(text).toMatch(/okuyor\s+hello\.txt/); expect(text).toContain('çalıştırıyor');
   expect(text).toContain('Sonuç ve kabul için otorite süreç çıkışı');
-  expect(text).toContain('3 ad; okumak için içerik izni gerekir');
-  expect(text).toContain('Sağlayıcı hesabınızın ücretli ek kullanımı devrede');
+  expect(text).toContain('Bildirilen yerleşik eklenti sayısı: 3');
+  expect(text).toContain('Sağlayıcı ücretli ek kullanım sınırı bildirdi.'); expect(text).not.toContain('devrede');
   expect(text).not.toContain('fixture-private-plugin'); expect(text).not.toContain('fixture-cli-version');
   out.length = 0;
   expect(await cliMain(['task', 'transcript', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', 'a-1', '--generation', '1', '--layout-revision', 'layout', '--json'],

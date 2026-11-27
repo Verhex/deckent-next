@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { DeckentError, headlessDiagnosticIdentifier, type KnownSecretSnapshot, type JsonRecordFile } from '#platform/index.js';
 import { CODEX_TOOL_ITEM_RESERVATION, nativeWorkerGuardRefusal, toolSessionSchema, type ToolSessionPort } from '#capabilities/index.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition, type WorkerEvent } from '#domain/index.js';
-import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError,
+import { sameSandboxRequest, sandboxRequestSchema, sandboxResultSchema, supervisorProfileSchema, sandboxInterruptCause, SupervisorError, protectedWorkerObservation,
   type ExecutionSupervisor, type SandboxRequest, type SandboxResult, type SupervisorProfile, type SupervisorProfileSource } from '#engine/index.js';
 import { createNativeToolBridge } from '#adapters/core/native-tool-bridge/index.js';
 import { nativeAgentCorrelationKind } from '#adapters/core/native-cli-headless/index.js';
@@ -52,6 +52,11 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   private readonly handle;
   private started = false;
   private released = false;
+  /** N0: events are taken only while the CLI runs (spawn to the top of `finally`); `offered` once the driver produced its one observation. */
+  private acceptingEvents = false; private offered = false;
+  /** N0 R2: one in-flight release; a concurrent custody sweep or patch preparation joins it, a rejection lets the next call retry as before. */
+  private releasing: Promise<'absent'> | undefined;
+  offeredObservation(): boolean { return this.offered; }
   private result: SandboxResult | undefined;
   private running: Promise<SandboxResult> | undefined;
   private driver: NativeCliWorkerDriver | undefined;
@@ -109,11 +114,17 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         deadlineMs: this.resolved.options.deadlineMs, outputBytes: this.resolved.options.outputBytes, execution: ready.execution,
         ...(binding.reasoningEffort ? { effort: binding.reasoningEffort } : {}),
         ...(this.input.onEvents ? { onEvents: batch => {
+          if (!this.acceptingEvents) return;
           if (!this.bridge) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
           // KG8 P13: the bridge's one projection (configured secrets and the turn token), keys included.
           const project = this.bridge.project, redact = (value: unknown): unknown => typeof value === 'string' ? project(value) : Array.isArray(value) ? value.map(redact)
             : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, child]) => [project(key), redact(child)])) : value;
-          this.input.onEvents!(redact(batch) as readonly WorkerEvent[]);
+          const ordinary = batch.filter(event => event.kind !== 'cli.observation');
+          if (ordinary.length === batch.length) { this.input.onEvents!(redact(batch) as readonly WorkerEvent[]); return; }
+          if (ordinary.length) this.input.onEvents!(redact(ordinary) as readonly WorkerEvent[]);
+          // N0: the first observation travels alone, projected by the host; a refused handover is reported by the close owner, never rethrown here.
+          const row = protectedWorkerObservation(batch.find(event => event.kind === 'cli.observation'), project); this.offered = true;
+          try { if (row) this.input.onEvents!([row]); } catch { /* unconfirmed handover: WORKER_EVENTS_SEAL_FAILED at close */ }
         } } : {}),
         ...(this.resolved.maxTurns === undefined ? {} : { maxTurns: this.resolved.maxTurns }) }, combined);
       if (!isDeepStrictEqual(this.driver.tools.session, session)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
@@ -121,7 +132,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
         correlationKind: nativeAgentCorrelationKind(this.resolved.entry), signal: combined,
         ...(this.input.knownSecrets ? { knownSecrets: this.input.knownSecrets } : {}) });
       // The last fence and lease check is immediately before the sole CLI spawn; the runtime receives no workspace path.
-      await guard(); this.started = true;
+      await guard(); this.started = true; this.acceptingEvents = true;
       const result = await this.driver.run(this.bridge, combined);
       primaryFailure = result.refusal ?? result.failureCode;
       if (result.cleanupError) {
@@ -153,6 +164,7 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
       outcome = this.unknown(settledFailure ?? (combined.aborted ? 'NATIVE_WORKER_STOP_UNCONFIRMED' : 'NATIVE_CLI_WORKER_UNAVAILABLE'));
     }
     finally {
+      this.acceptingEvents = false;
       combined.removeEventListener('abort', stop);
       // Failed/unverified tool settlement cannot become a successful process result.
       const [closed, cancelled, disposed] = await Promise.allSettled([this.bridge?.close(), tools?.cancel(), this.driver?.close()]);
@@ -190,6 +202,9 @@ class NativeCliWorkerSupervisor implements ExecutionSupervisor, SupervisorProfil
   /** Called only after DispatchApplication has retained output and terminal evidence. Unknown CLI/effects keep capacity for reconciliation. */
   async release(request: SandboxRequest): Promise<'absent'> {
     this.check(request); if (this.released) return 'absent';
+    return this.releasing ??= this.settleRelease().finally(() => { this.releasing = undefined; });
+  }
+  private async settleRelease(): Promise<'absent'> {
     if (this.started && this.result?.result.kind !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
     if (this.verification) {
       if (this.result?.result.kind === 'exited' && this.verdict) await this.verification.finish(this.verdict);

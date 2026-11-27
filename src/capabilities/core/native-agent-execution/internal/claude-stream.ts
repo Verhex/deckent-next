@@ -19,7 +19,10 @@ type Failure = Readonly<{ kind: 'refused'; reason: NativeAgentReadinessReason; f
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentResult = Failure | Readonly<{ kind: 'cancelled' | 'failed'; subtype: 'error_during_execution' | 'incomplete' | 'provider-error'; rejection?: Rejection }>
   | Readonly<{ kind: 'completed'; text: string; usage: Readonly<Record<string, number>>; stopReason: string | null }>;
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ClaudeAgentDriver = ToolSessionPort & Readonly<{ signal: AbortSignal; line(raw: string, signal?: AbortSignal): 'stop' | void | Promise<'stop' | void>;
-  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[]; paidExtraUsage(): ClaudeRateLimit | null }>;
+  finish(exit: StreamExit): ClaudeAgentResult; notices(): readonly string[]; builtinPlugins(): readonly string[]; paidExtraUsage(): ClaudeRateLimit | null;
+  /** N0: what the guard itself saw: every validated built-in plugin entry, the first overage report as classified (before a stop rewrites it)
+   * and whether it accepted the terminal result line. */
+  observedFacts(): Readonly<{ builtinPluginCount: number; paidExtraUsage: ClaudeRateLimit | null; terminal: boolean }> }>;
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const objectJson = (value: string) => { try { return record(JSON.parse(value)); } catch { return null; } };
 /** R5b: shape facts for a refusal's record. Identifier-shaped names and codes only (never arguments, text or CLI output), at most 64 characters. */
@@ -64,7 +67,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     if (!wire?.active && notices.size < 8) notices.add(name.slice(0, 64)); return undefined;
   };
   let init = false, ended = false, terminal = false, bytes = 0, failure: Failure | null = null, result: Record<string, unknown> | null = null, final: ClaudeAgentResult | undefined;
-  let paidUsage: ClaudeRateLimit | null = null;
+  let paidUsage: ClaudeRateLimit | null = null, firstOverage: ClaudeRateLimit | null = null, builtinPluginCount = 0;
   let usage: Readonly<Record<string, number>> | null = null;
   const fail = (field: string, reason: NativeAgentReadinessReason = 'NATIVE_AGENT_TOOL_SURFACE_UNEXPECTED', detail?: string, limit?: ClaudeRateLimit): 'stop' => {
     failure ??= { kind: 'refused', reason, field, ...(detail === undefined ? {} : { detail }), ...(limit ? { limit } : {}) }; controller.abort(); return 'stop';
@@ -105,7 +108,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       if (value.model !== model) return failModel('init-binding', [value.model]);
       if (value.claude_code_version !== cliVersion || value.cwd !== runDir
         || value.plugin_errors !== undefined && (!Array.isArray(value.plugin_errors) || value.plugin_errors.length !== 0)) return fail('init-binding');
-      builtinPlugins = nativeBuiltinPlugins(value.plugins, pluginPolicy)!;
+      builtinPlugins = nativeBuiltinPlugins(value.plugins, pluginPolicy)!; builtinPluginCount = (value.plugins as readonly unknown[]).length;
       sessionId = value.session_id;
       if (typeof sessionId === 'string' && sessionId) wire?.session(sessionId);
       init = true; return;
@@ -200,6 +203,8 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
       const guards = entry.headless.guards;
       const limit = classifyClaudeRateLimit(record(value.rate_limit_info) ?? {}, options.quotaPolicy, 'creditsErrors' in guards ? guards.creditsErrors : [], options.paidExtraUsage);
       if (limit.kind === 'overage') {
+        // N0: the fact is kept only from a line of the session accepted at init (non-empty id); the stop below is unchanged either way.
+        if (typeof sessionId === 'string' && sessionId && value.session_id === sessionId) firstOverage ??= limit;
         const stop = () => fail('rate-limit', undefined, `${limit.status} ${limit.window} ${limit.resetsAtMs ?? '?'}`, { ...limit, kind: 'quota' });
         const deliver = options.onPaidUsage;
         const shown = wire?.active ? { ...limit, window: '?' } : limit;
@@ -274,6 +279,7 @@ export function createClaudeAgentDriver(options: Readonly<{ entry: Entry; port: 
     return current.promise;
   };
   return Object.freeze({ session, signal: controller.signal, line, propose, notices: () => wire?.active ? [] : [...notices], builtinPlugins: () => builtinPlugins, paidExtraUsage: () => paidUsage,
+    observedFacts: () => Object.freeze({ builtinPluginCount, paidExtraUsage: firstOverage, terminal: terminal && !failure }),
     async cancel() { ended = true; controller.abort(); return port.cancel(); },
     async revoke() { ended = true; controller.abort(); return port.revoke(); },
     finish(exit: StreamExit): ClaudeAgentResult {

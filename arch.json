@@ -3353,7 +3353,6 @@
         "src/domain/core/recovery",
         "src/platform/core/validate",
         "src/engine/core/workspace-patch-contract",
-        "src/capabilities/core/native-agent-execution",
         "src/platform/core/i18n"
       ],
       "plan": "MONITOR"
@@ -3407,8 +3406,7 @@
         "src/domain/core/work-cost",
         "src/surfaces/core/recovery-text",
         "src/surfaces/core/terminal-host",
-        "src/surfaces/core/terminal-kit-ink",
-        "src/capabilities/core/native-agent-execution"
+        "src/surfaces/core/terminal-kit-ink"
       ],
       "plan": "MONITOR",
       "ink": false
@@ -6327,7 +6325,15 @@
         "values": [
           32768
         ],
-        "reason": "Format-derived bound of worker event schema v1 (WORKER_EVENT_SCHEMA_VERSION 1): the largest host model.verification verdict (admitted text(256), observed/unexpected 2x(MAX_MODELS+1) text(128), 6-byte JSON escapes) plus byte-cap/event-cap markers fits 32768 bytes (worker-event-log-seal.test.ts schema-maximal case). Changes only with that schema version; not an operator policy (2026-10-03, batch-27 integration)."
+        "reason": "Format-derived bound of worker event schema v1 (WORKER_EVENT_SCHEMA_VERSION 1): the largest host model.verification verdict (admitted text(256), observed/unexpected 2x(MAX_MODELS+1) text(128), 6-byte JSON escapes) plus byte-cap/event-cap markers and the one protected cli.observation row (WORKER_OBSERVATION_ROW_MAX_BYTES; full-width suffix 28,911 bytes with the cited case's v1 verdict, 28,963 with the widest verdict variant measured by the N0 prototype) fits 32768 bytes (worker-event-log-seal.test.ts schema-maximal case). Changes only with that schema version; not an operator policy (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/domain/core/worker-event/internal/contract.ts",
+        "symbol": "WORKER_OBSERVATION_ROW_MAX_BYTES",
+        "values": [
+          727
+        ],
+        "reason": "Format-derived bound of worker event schema v1 and observation schema v1: the widest serialized cli.observation row with count-only plugins (64-unit version at 6-byte escapes, full-width counters, the longest fact kind credits-required), newline included, proven by the widest-row case of worker-event-log-seal.test.ts ('counts encoded bytes...'). Changes only with those schema versions; not an operator policy (N0-LOCAL, beta.2.1)."
       },
       {
         "file": "src/platform/core/config/internal/validate/version.ts",
