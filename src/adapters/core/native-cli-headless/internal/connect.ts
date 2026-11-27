@@ -100,7 +100,7 @@ async function readPreflight(definition: NativeCliHeadlessDefinition) {
 }
 const preflightRecordDiagnostic = () => headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'preflight-record-unreadable' });
 
-async function currentPreflightRefusal(record: PreflightRecord, family: string, definition: NativeCliHeadlessDefinition, strict = false): Promise<DeckentError | null> {
+async function currentPreflightRefusal(record: PreflightRecord, family: string, definition: NativeCliHeadlessDefinition): Promise<DeckentError | null> {
   const entry = nativeCliHeadless(family);
   if (!entry) return headlessDiagnostic('HEADLESS_REQUEST_INVALID', { reason: 'program-definition' });
   const uid = process.getuid?.();
@@ -110,14 +110,14 @@ async function currentPreflightRefusal(record: PreflightRecord, family: string, 
   try { program = await resolveHeadlessExecutable(entry, definition.executable, definition.ownerUid); }
   catch (error) { return error instanceof DeckentError ? error : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-unverified' }); }
   const matched = record.revision === headlessExecutableRevision(entry, program)
-    || !strict && !program.packageRoot && record.executable === program.executable && record.revision === entry.headless.revision
+    || !program.packageRoot && record.executable === program.executable && record.revision === entry.headless.revision
       && record.size === program.size && typeof record.mtimeMs === 'number' && Math.trunc(record.mtimeMs) === program.mtimeMs;
   return matched ? null : headlessDiagnostic('HEADLESS_PREFLIGHT_FAILED', { check: 'recorded-program-mismatch' });
 }
-/** R8: verified version for this executable and registry revision, read without a spawn; `strict` (the service's own write) accepts only the identity-bound record form. */
-export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDefinition, family: string, strict = false): Promise<string | null> {
+/** R8: verified version for this executable and registry revision, read without a spawn. */
+export async function readHeadlessSealedVersion(definition: NativeCliHeadlessDefinition, family: string): Promise<string | null> {
   const { record } = await readPreflight(definition), version = verifiedCliVersion(record?.version);
-  return record?.state === 'open' && version !== null && !await currentPreflightRefusal(record, family, definition, strict)
+  return record?.state === 'open' && version !== null && !await currentPreflightRefusal(record, family, definition)
     && compareToolchainVersions(version, definition.minCliVersion) >= 0 ? version : null;
 }
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:

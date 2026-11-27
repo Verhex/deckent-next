@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { failedContextsToPrune, refreshInProgress, refreshIntervalMs, refreshStatus, refreshTriggerAllowed, reviseRegistryForConnections, reviseRegistryForProposal, toolchainUpdateApplies,
+import { failedContextsToPrune, refreshInProgress, refreshIntervalMs, refreshStatus, refreshTriggerAllowed, reviseRegistryForProposal, toolchainUpdateApplies,
   toolchainRefreshStateSchema, unverifiedReason, type ToolchainCurrencyReport } from '#engine/index.js';
 
 const sha = (c: string) => 'sha256:' + c.repeat(64);
@@ -73,16 +73,6 @@ describe('registry revision of a built image', () => {
     const once = reviseRegistryForProposal(registry([native('n', 1, sha('a'), 'old')], [['kn', 'n', 1]]), proposal(['n', 1]))!;
     expect(reviseRegistryForProposal(once.registry, proposal(['n', 1]))).toBeNull();
     expect(reviseRegistryForProposal(once.registry, proposal(['n', 2]))).toBeNull(); // already at the proposed image and pin
-    // R8: only the connection-proved CLI version of a kind-pointed connected template moves (image kept, new version, kinds repointed); a Docker
-    // template, a superseded version or an equal value never does, and the revision takes the person's bind form.
-    const connected = registry([bound('b', 1, sha('a'), '0.150.0'), bound('b', 2, sha('a'), '0.150.0'), template('t', 1, sha('a'), '0.150.0')], [['kb', 'b', 2], ['kt', 't', 1]]);
-    const recorded = reviseRegistryForConnections(connected, [{ profile: { id: 'b', version: 2 }, cliVersion: '0.152.0' }, { profile: { id: 'b', version: 1 }, cliVersion: '0.160.0' },
-      { profile: { id: 't', version: 1 }, cliVersion: '0.160.0' }])!;
-    expect(recorded.applied).toEqual([{ profile: 'b', from: 2, to: 3 }]);
-    expect(recorded.registry.profiles.find(profile => profile.id === 'b' && profile.version === 3)).toEqual({ ...bound('b', 3, sha('a'), '0.152.0') });
-    expect(recorded.registry.kinds.map(kind => `${kind.kind}:${kind.profile.version}`)).toEqual(['kb:3', 'kt:1']); expect(recorded.registry.revision).toMatch(/^coding-template-[a-f0-9]{64}$/u);
-    expect(reviseRegistryForConnections(recorded.registry, [{ profile: { id: 'b', version: 3 }, cliVersion: '0.152.0' }])).toBeNull();
-    expect(reviseRegistryForConnections(connected, [])).toBeNull();
   });
   it('ignores proposals for unknown or unpointed profiles and refuses an invalid registry', () => {
     expect(reviseRegistryForProposal(registry([native('n', 1, sha('a'), 'old')], [['kn', 'n', 1]]), proposal(['missing', 1]))).toBeNull();

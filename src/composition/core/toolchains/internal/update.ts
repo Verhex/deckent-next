@@ -5,8 +5,8 @@ import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { buildWorkerImageInHome, readBuiltWorkerLineage, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, admittedToolchains, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { buildWorkerImageInHome, fetchNpmLatestVersion, readBuiltWorkerLineage, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { imagePins, inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -37,12 +37,17 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const policy = config.toolchains.update;
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
-  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
+  // Owner 114, no consent rule change: the consent and the receipt exemption are judged on HEAD's basis (every pin, `admittedToolchains`), and only what
+  // is built and re-pinned narrows to the image pins inside it. One bounded registry read per package serves both reports.
+  const reads = new Map<string, ReturnType<NpmLatestVersionFetcher>>(), fetch = dependencies.fetcher ?? fetchNpmLatestVersion;
+  const fetcher: NpmLatestVersionFetcher = request => reads.get(request.package) ?? (reads.set(request.package, fetch(request)), reads.get(request.package)!);
+  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, fetcher), basis = (await inspectConfiguredToolchainCurrency(projectRoot, options, fetcher, admittedToolchains))
+    .providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort();
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
   const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const lineage = selectWorkerLineage(sources, await readBuiltWorkerLineage(home));
-  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: imagePins(config), heldVersion });
+  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: imagePins(config), heldVersion, only: basis });
   const proposed = planFor(null);
   if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
@@ -52,7 +57,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
     const planPath = await writeArtifact(join(home, 'plans'), limits.planTemplate.replace('{version}', proposed.next!.imageVersion).replace('{at}', plannedAt.replace(/[:.]/g, '-')), proposed);
     return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath, build: null, proposal: null, proposalPath: null });
   }
-  const binding = workerConsentBinding({ recipe: sources.recipe, providers: proposed.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
+  const binding = workerConsentBinding({ recipe: sources.recipe, providers: basis, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
   return configuredWorkerBuilder(projectRoot, options, { packageRoot: root, home, binding, refreshExisting: dependencies.refreshExisting === true, plannedAt, ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, async (reservation, buildSignal, retain) => {
     const signal = { signal: buildSignal };
     const plan = planFor(`r${Number(/^r([0-9]+)/u.exec(reservation.version)![1]) - 1}-00000000`);

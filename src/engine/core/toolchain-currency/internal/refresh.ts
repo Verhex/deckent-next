@@ -1,5 +1,4 @@
 import { persistedString, persistedDateTime, persistedInteger, identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ProfileRevisionProposal } from './update.js';
 import type { ToolchainCurrencyReport } from './contract.js';
@@ -114,35 +113,18 @@ function repinParameters(parameters: Record<string, JsonValue>, to: { cliVersion
  * proposed image, or no proposed profile is present), so a repeated refresh is idempotent.
  */
 export function reviseRegistryForProposal(registryInput: unknown, proposal: ProfileRevisionProposal): RegistryRevision | null {
-  return reviseProfiles(registryInput, proposal.profiles.map(entry => ({ profile: entry.profile,
-    repin: (parameters: Record<string, JsonValue>) => repinParameters(parameters, { cliVersion: entry.changes.cliVersion.to, imageId: entry.changes.imageId.to }) })),
-  registry => `${baseRevision(registry.revision)}@${proposal.imageVersion}`);
-}
-/**
- * R8 (owner 114): a kind-pointed template bound to a connection (`worker`) whose connection last proved another CLI version gets a NEW profile
- * version carrying that `invocation.cliVersion` alone (image id and every other field kept); its kinds move to it as for an image. The caller
- * passes only verified observations, so an unobserved connection keeps its record. The revision takes the person's bind form.
- */
-export function reviseRegistryForConnections(registryInput: unknown, observed: readonly Readonly<{ profile: Readonly<{ id: string; version: number }>; cliVersion: string }>[]): RegistryRevision | null {
-  return reviseProfiles(registryInput, observed.map(entry => ({ profile: entry.profile, repin: (parameters: Record<string, JsonValue>) => {
-    const view = parameters as { docker?: JsonValue; invocation?: JsonValue; worker?: JsonValue }, invocation = asRecord(view.invocation ?? null);
-    if (view.worker === undefined || !invocation || !asRecord(view.docker ?? null)) return false;
-    invocation['cliVersion'] = entry.cliVersion; return true; } })), (_registry, next) => `coding-template-${createHash('sha256').update(JSON.stringify(next)).digest('hex')}`);
-}
-function reviseProfiles(registryInput: unknown, entries: readonly Readonly<{ profile: Readonly<{ id: string; version: number }>; repin(parameters: Record<string, JsonValue>): boolean }>[],
-  revision: (registry: ExecutionRegistry, next: object) => string): RegistryRevision | null {
   const registry = executionRegistrySchema.parse(registryInput);
   const profiles: Record<string, JsonValue>[] = structuredClone(registry.profiles) as unknown as Record<string, JsonValue>[];
   const kinds = structuredClone(registry.kinds) as unknown as { kind: string; profile: { id: string; version: number } }[];
   const applied: { profile: string; from: number; to: number }[] = [];
-  for (const entry of entries) {
+  for (const entry of proposal.profiles) {
     // Only a version a task kind still points at is revised: a superseded version kept for rollback is never revised again.
     if (!kinds.some(kind => kind.profile.id === entry.profile.id && kind.profile.version === entry.profile.version)) continue;
     const current = profiles.find(profile => profile['id'] === entry.profile.id && profile['version'] === entry.profile.version);
     if (!current) continue;
     const parameters = asRecord(current['parameters']); if (!parameters) continue;
     const next = structuredClone(current); const nextParameters = asRecord(next['parameters'])!;
-    if (!entry.repin(nextParameters)) continue;
+    if (!repinParameters(nextParameters, { cliVersion: entry.changes.cliVersion.to, imageId: entry.changes.imageId.to })) continue;
     if (JSON.stringify(nextParameters) === JSON.stringify(parameters)) continue;
     const version = Math.max(...profiles.filter(profile => profile['id'] === entry.profile.id).map(profile => profile['version'] as number)) + 1;
     next['version'] = version; profiles.push(next);
@@ -150,5 +132,5 @@ function reviseProfiles(registryInput: unknown, entries: readonly Readonly<{ pro
     applied.push({ profile: entry.profile.id, from: entry.profile.version, to: version });
   }
   if (!applied.length) return null;
-  return Object.freeze({ registry: executionRegistrySchema.parse({ ...registry, revision: revision(registry, { ...registry, profiles, kinds }), profiles, kinds }), applied: Object.freeze(applied) });
+  return Object.freeze({ registry: executionRegistrySchema.parse({ ...registry, revision: `${baseRevision(registry.revision)}@${proposal.imageVersion}`, profiles, kinds }), applied: Object.freeze(applied) });
 }

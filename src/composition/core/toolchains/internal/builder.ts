@@ -2,11 +2,10 @@ import limits from './limits.json' with { type: 'json' };
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getConfigFieldDefault, loadConfig, normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, ErrorRegistry } from '#platform/index.js';
-import { workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
+import { affectedToolchainProfiles, workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
 import { readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, dockerClientEnvironment, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { writeArtifact } from './update.js';
-import { imagePins } from './currency.js';
 const counter = (value: string) => Number(/^r([0-9]+)/u.exec(value)?.[1] ?? 0);
 /** Refresh and acquisition enter this same daemon-only owner before counter reservation or any build context. */
 export async function configuredWorkerBuilder<T>(projectRoot: string, options: ConfigLoadOptions, input: { packageRoot: string; home: string;
@@ -18,7 +17,7 @@ export async function configuredWorkerBuilder<T>(projectRoot: string, options: C
     if (input.refreshExisting && current.execution?.docker
       && JSON.stringify(current.toolchains.image.sources) === JSON.stringify(getConfigFieldDefault('toolchains').image.sources)
       && current.toolchains.currency.registryEndpoint === getConfigFieldDefault('toolchains').currency.registryEndpoint) {
-      const profiles = imagePins(current).filter(profile => binding.providers.includes(profile.provider));
+      const profiles = affectedToolchainProfiles(current).filter(profile => binding.providers.includes(profile.provider));
       const providers = new Set<string>();
       for (const profile of profiles) {
         const installed = profile.imageId ? (await readNewestWorkerReceipt(input.home, profile.imageId))?.images?.filter(image => image.imageId === profile.imageId).flatMap(image => image.providers) : null;

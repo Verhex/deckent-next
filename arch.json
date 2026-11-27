@@ -2981,8 +2981,7 @@
         "src/domain/core/worker-event",
         "src/capabilities/core/native-agent-execution",
         "src/adapters/core/native-coding",
-        "src/adapters/core/native-connection",
-        "src/adapters/core/native-cli-headless"
+        "src/adapters/core/native-connection"
       ],
       "plan": "PROVIDERS"
     },
