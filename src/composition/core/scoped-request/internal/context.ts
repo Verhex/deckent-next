@@ -151,6 +151,18 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
     }) : keep();
   }, choice);
 }
+/** A local Run control (CLI, terminal, SDK) reads first. A refusal a binding repair may resolve is retried once the way an interactive terminal
+ * opens: the same preflight, then write admission, so a proven repair runs first (owner 2026-11-27). Otherwise the read's own refusal stands. */
+export async function loadConfiguredControlContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, checkLocation?: CheckRunControlLocation) {
+  try { return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'read', undefined, undefined, checkLocation); }
+  catch (error) {
+    if (!['PROJECT_ATTACHMENT_CHANGED', 'PROJECT_ATTACHMENT_DENIED', 'INSTALLATION_IDENTITY_RELOCATED', 'PROJECT_ATTACHMENT_UNAVAILABLE'].some(code => isCodedError(error, code))) throw error;
+    try {
+      await preflightConfiguredTerminalIdentity(projectRoot, options, scopeId);
+      return await timedScopeContext(projectRoot, scopeId, options, readLocalOsIdentity, 'write', undefined, undefined, checkLocation);
+    } catch { throw error; }
+  }
+}
 /** Only an interactive terminal writer defers a potentially repairable registered attachment observation. */
 export async function preflightConfiguredTerminalIdentity(root: string, options: ConfigLoadOptions, scopeId?: string) {
   try {

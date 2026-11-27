@@ -4,6 +4,7 @@ import * as platform from '#platform/index.js';
 import { FilePolicySource } from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
+import { applyConfiguredRunLifecycle } from '#composition/core/runs/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
 import { applyConfiguredProviderSpendTemplate, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import * as localPrincipal from '#adapters/core/local-principal/index.js';
@@ -1114,6 +1115,17 @@ async function exerciseA2HeadWithoutFilesystemIdentity() {
   await writeFile(head.registryPath, JSON.stringify(record, null, 2) + '\n');
   await writeFile(head.refPath, JSON.stringify(head.localAt('10'), null, 2) + '\n');
   await expect(head.write()).resolves.toMatchObject({ projectId: head.ref.projectId });
+  expect(await head.bytes()).toEqual(retained);
+  // A local hold asks write admission first (owner 2026-11-27): the same proven repair runs, then the hold goes on to its Run (none exists
+  // here). A move that cannot be proven is refused exactly as before and nothing is written.
+  const hold = (commandId: string) => applyConfiguredRunLifecycle(head.f.b, { schemaVersion: 1, commandId, scopeId: 'target', runId: 'no-such-run',
+    action: 'hold', holdReason: 'moved', expectedRevision: 0 }, head.f.options).then(() => 'held', (error: { code?: string }) => error.code);
+  await writeFile(head.refPath, intermediate);
+  head.devices.target = 40n;
+  expect(await hold('hold-unproven-move')).toBe('PROJECT_ATTACHMENT_DENIED');
+  expect(await head.bytes()).toEqual({ ...retained, local: intermediate });
+  head.devices.target = 20n;
+  expect(await hold('hold-proven-move')).not.toMatch(/^PROJECT_ATTACHMENT/u);
   expect(await head.bytes()).toEqual(retained);
 }
 

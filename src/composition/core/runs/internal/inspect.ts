@@ -1,9 +1,9 @@
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { FileArtifactStore, GIT_QUEUE_DISPLAY, SqliteTargetQueue, inventoryReadsPerCall, openSqliteLedgerReadOnly } from '#adapters/index.js';
+import { FileArtifactStore, GIT_QUEUE_DISPLAY, SqliteTargetQueue, inventoryReadsPerCall, localPrincipalChannel, openSqliteLedgerReadOnly } from '#adapters/index.js';
 import { verifiedPrincipal, DispatchPolicyAuthorization, RunInspectionApplication, observeRunQueue, queueObservationReadLimit, runQuerySchema, RunPolicyAuthorization, type DispatchIdentityAuthorization, type RunQuery } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredControlContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { observeConfiguredRunResults } from './result-view.js';
 import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspace-patch/index.js';
 import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
@@ -26,7 +26,9 @@ export async function inspectConfiguredRunAnswer(projectRoot: string, input: Run
 async function readConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions, answerTaskId?: string | null, forControl = false) {
   try {
     const query = runQuerySchema.parse(input);
-    const { config, layout, document, principal, path, runControlBinding } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
+    // The local hold/resume card's read may repair a proven binding move first, as its control does (owner 2026-11-27).
+    const { config, layout, document, principal, path, runControlBinding } = forControl && localPrincipalChannel() !== 'mcp'
+      ? await loadConfiguredControlContext(projectRoot, query.scopeId, options) : await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const authorization = new DispatchPolicyAuthorization(contextPolicySource({ layout, config }));
     const app = new RunInspectionApplication(store, verifiedPrincipal(principal), new RunPolicyAuthorization({ async load() { return document; } }), { store,

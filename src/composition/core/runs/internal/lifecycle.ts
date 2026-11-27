@@ -1,7 +1,7 @@
 import { DeckentError, ErrorRegistry, resolveLocale, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteInventoryReader, type SqliteInventoryReader } from '#adapters/index.js';
 import { verifiedPrincipal, RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
-import { openConfiguredLedger, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { openConfiguredLedger, loadConfiguredControlContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withLayoutPolicyWriteLock } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}, binding?: string) => applyLifecycle(root, command, options, false, binding);
@@ -20,13 +20,15 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
     const verifyBinding = (expected: string | undefined, actual: string) => {
       if (expected !== actual) throw ErrorRegistry.createError('RUN_CONTROL_BINDING_CHANGED');
     };
-    const loadContext = async (expected?: string) => {
-      const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, control ? 'read' : 'write', undefined,
-        expected === undefined || channel ? undefined : location => verifyBinding(expected.split(':')[0], location));
+    const loadContext = async (expected?: string, repair = false) => {
+      const check = expected === undefined || channel ? undefined : (location: string) => verifyBinding(expected.split(':')[0], location);
+      // The first load of a local hold or resume may repair a proven binding move before the binding is read (owner 2026-11-27); MCP only reads.
+      const context = repair ? await loadConfiguredControlContext(projectRoot, command.scopeId, options, check)
+        : await loadConfiguredScopeContext(projectRoot, command.scopeId, options, control ? 'read' : 'write', undefined, check);
       if (expected !== undefined) verifyBinding(expected, context.runControlBinding());
       return context;
     };
-    const initial = await loadContext(control && !channel ? selected : undefined), { config, layout, document, principal, path } = initial;
+    const initial = await loadContext(control && !channel ? selected : undefined, control && !channel), { config, layout, document, principal, path } = initial;
     const binding = control ? initial.runControlBinding() : undefined, boundContext = () => loadContext(binding);
     const source = { async load() { return (await boundContext()).document; } }, verifier = verifiedPrincipal(principal), authorization = new RunPolicyAuthorization(source);
     let store: SqliteInventoryReader | undefined;
