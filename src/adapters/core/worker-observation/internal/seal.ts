@@ -52,12 +52,17 @@ type SealSource = Readonly<{ modelVerification(): SealInput['verification'] | un
  * With one, the sink drains before the held row is read and every fault maps to the existing failure (`cause: null`), never thrown over the task. */
 export async function closeAndSealAttemptWorkerEvents(identity: AttemptIdentity, artifacts: Artifacts, store: Pick<SqliteAttemptStore, 'saveWorkerEventLog'>,
   sink: Pick<Awaited<ReturnType<typeof openWorkerEventSink>>, 'close'> | null | undefined, input: Readonly<{ source?: SealSource | undefined;
-    held?: (() => SealInput['observation']) | undefined; offered?: boolean | undefined; maxBytes: number; deadlineMs: number }>): Promise<WorkerEventSealing> {
+    held?: (() => SealInput['observation']) | undefined; offered?: boolean | undefined; maxBytes: number; deadlineMs: number;
+    /** The claim owner's Attempt reached a terminal dispatch end: a failed seal without an offer records the failure row too. */ terminal?: boolean | undefined }>): Promise<WorkerEventSealing> {
   const seal = (closed: Awaited<ReturnType<NonNullable<typeof sink>['close']>> | undefined, offered?: Pick<SealInput, 'observation' | 'deadline'>) =>
     sealAttemptWorkerEvents(identity, artifacts, store, { events: closed?.events ?? [], verification: input.source?.modelVerification() ?? null,
       unreported: input.source?.statistics().eventsUnreported ?? 0, projectionComplete: sink === null ? false : closed?.projectionComplete, maxBytes: input.maxBytes,
       ...(offered ? { ...offered, observationRequired: true } : {}) });
-  if (!input.offered) return seal(await sink?.close());
+  if (!input.offered) {
+    // A sink or source fault still rejects as before; at a terminal end the failure row is recorded first (best effort, the fault stays the caller's).
+    const plain = await Promise.resolve().then(async () => seal(await sink?.close())).catch(async (error: unknown) => { if (input.terminal) await recordUnreachedWorkerEventSeal(identity, store); throw error; });
+    return plain.status === 'failed' && input.terminal ? recordUnverified(identity, store, plain) : plain;
+  }
   const deadline = performance.now() + input.deadlineMs;
   const drained = await Promise.resolve().then(() => sink?.close(input.deadlineMs)).then(closed => ({ closed }), () => null);
   let sealing: WorkerEventSealing;
@@ -65,11 +70,18 @@ export async function closeAndSealAttemptWorkerEvents(identity: AttemptIdentity,
     if (!drained) throw new Error('unverified');
     sealing = await seal(drained.closed, { observation: input.held?.(), deadline });
   } catch { sealing = Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null }); }
-  // The close owner records that this Attempt's log could not be verified; only a successful insert makes that durable. The store keeps
-  // the first row of either shape (a sealed log is never replaced): its refusal (WORKER_OBSERVATION_INVALID, a first row exists) is expected and
-  // silent. Any other write failure is named in the returned failure's `cause`, the existing diagnostic path (a code-less one keeps the cause
-  // already at hand); nothing new is stored or refused.
-  if (sealing.status !== 'failed') return sealing;
+  return sealing.status === 'failed' ? recordUnverified(identity, store, sealing) : sealing;
+}
+/** The close owner records that this Attempt's log could not be verified; only a successful insert makes that durable. The store keeps the first
+ * row of either shape (a sealed log, or an earlier empty one, is never replaced): its refusal (WORKER_OBSERVATION_INVALID, a first row exists) is
+ * expected and silent. Any other write failure is named in the returned failure's `cause`, the existing diagnostic path (a code-less one keeps the
+ * cause already at hand); nothing new is stored or refused. */
+async function recordUnverified(identity: AttemptIdentity, store: Pick<SqliteAttemptStore, 'saveWorkerEventLog'>, sealing: Extract<WorkerEventSealing, { status: 'failed' }>) {
   try { await store.saveWorkerEventLog({ schemaVersion: 1, identity, sealedAt: Date.now(), outcome: 'unverified' }); return sealing; }
   catch (error) { return causeOf(error) === 'WORKER_OBSERVATION_INVALID' ? sealing : Object.freeze({ ...sealing, cause: causeOf(error) ?? sealing.cause }); }
+}
+/** A claim owner's terminal end whose clean-up failed before the seal still records the failure row: best effort, never thrown (the caller keeps its
+ * first error), never over an existing row. */
+export async function recordUnreachedWorkerEventSeal(identity: AttemptIdentity, store: Pick<SqliteAttemptStore, 'saveWorkerEventLog'>): Promise<void> {
+  await recordUnverified(identity, store, Object.freeze({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: null })).catch(() => undefined);
 }

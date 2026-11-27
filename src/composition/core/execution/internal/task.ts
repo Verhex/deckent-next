@@ -6,7 +6,7 @@ import { prepareProductDirectory, productResourcePath, ErrorRegistry, getConfigK
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
   resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, openSealedNativeInput, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, closeAndSealAttemptWorkerEvents, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
+  gitQueueCandidateSource, captureWorkingTreeBase, workerTreeDenied, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, openWorkerEventSink, selectWorkTarget, closeAndSealAttemptWorkerEvents, recordUnreachedWorkerEventSeal, nativeCodingEnvironmentProbes, nativeProjectionDispatch, nativeDockerSubscriptionRefusal, type WorkerEventSealing } from '#adapters/index.js';
 import { assertAttemptPackageInput, reopenAttemptPackage, scanPackageSecrets, type PackageSecretSnapshot, verifiedPrincipal, authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, TaskStartApplication,
   RunStoreError, DispatchError, DispatchPreparationGuard, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareOpenedTaskStart as prepareTaskStart, withheldBaseStart, withheldBaseEvent, workingTreeSource, WORKER_TREE_SHOWN_PATHS, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { contextPolicySource } from '#composition/core/policy/index.js';
@@ -279,9 +279,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           sinkReached = true;
           if (!app?.acquiredClaim()) await events?.close();
           else sealing = await closeAndSealAttemptWorkerEvents(identity, artifacts, store, events, { source: connection ?? nativeEvents, held: nativeEvents?.protectedObservation,
-            offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs });
+            offered, maxBytes: config.artifacts.maxBytes, deadlineMs: profile.options.controlTimeoutMs, terminal: outcome?.status === 'terminal' });
           if (offered) try { if (outcome?.status === 'terminal') await worker!.supervisor.release(request); } finally { await worker!.supervisor.close(); }
-        } finally { if (!sinkReached) await events?.close().catch(() => undefined); }
+        } finally {
+          // A claim owner's terminal end whose clean-up failed before the seal still records that its log could not be verified (best effort).
+          if (!sinkReached) { await events?.close().catch(() => undefined); if (events !== undefined && app?.acquiredClaim() && outcome?.status === 'terminal') await recordUnreachedWorkerEventSeal(identity, store); }
+        }
       }
       // Only a sealing failure is reported: the replay of a settled execution (above) keeps the same shape as a successful first call.
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, ...outcome, ...(sealing.status === 'failed' ? { eventLog: sealing } : {}) }) });

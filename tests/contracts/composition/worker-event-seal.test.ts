@@ -31,14 +31,17 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     const sink = (projectionComplete: boolean) => ({ close: vi.fn<(remainingMs?: number) => Promise<{ events: (typeof event)[]; projectionComplete: boolean }>>(async () => ({ events: [event], projectionComplete })) });
     const files = { async put(_scope: string, bytes: Uint8Array) { stored.push(bytes); return receipt; }, async read() { return stored.at(-1)!; } };
     const later = () => vi.spyOn(performance, 'now').mockReturnValue(Number.MAX_VALUE), base = { maxBytes: 65536, deadlineMs: 60_000 };
-    // Every failure on the offered path also stores the close owner's failure row (no events receipt); the no-offer path stores none.
+    // Every failure on the offered path also stores the close owner's failure row (no events receipt); the no-offer path stores one only at a terminal end.
     const failureRow = { schemaVersion: 1, identity, sealedAt: expect.any(Number), outcome: 'unverified' };
     const plain = sink(true); saved.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, plain, base)).toEqual({ status: 'sealed', eventCount: 1 });
     expect(plain.close).toHaveBeenCalledWith(); saved.length = 0; stored.length = 0;
-    // The close owner writes the failure row only for an offered observation; an un-offered close whose artifact write fails writes none.
+    // Before a terminal end the close owner writes the failure row only for an offered observation: an un-offered failed write writes none.
     expect(await closeAndSealAttemptWorkerEvents(identity, full, store, sink(true), base)).toEqual({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: 'ENOSPC' });
     expect(saved).toEqual([]);
+    // The same un-offered failure at a terminal dispatch end of the claim owner records the failure row (owner decision: the person is told).
+    expect(await closeAndSealAttemptWorkerEvents(identity, full, store, sink(true), { ...base, terminal: true })).toEqual({ status: 'failed', code: 'WORKER_EVENTS_SEAL_FAILED', cause: 'ENOSPC' });
+    expect(saved).toEqual([failureRow]); saved.length = 0;
     expect(await closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, offered: true })).toEqual(failed); expect(stored).toEqual([]);
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, async read() { return Buffer.from('other'); } }, store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     expect(await closeAndSealAttemptWorkerEvents(identity, { put: () => new Promise<never>(() => {}) }, store, sink(true), { ...base, offered: true, held: () => observation, deadlineMs: 1 })).toEqual(failed);
@@ -64,6 +67,10 @@ describe('worker event log sealing after execution (EXEC-RELEASE C3)', () => {
     expect(await closeAndSealAttemptWorkerEvents(identity, { ...files, read(): never { throw Object.assign(new Error('corrupt'), { code: 'ARTIFACT_CORRUPT' }); } },
       store, sink(true), { ...base, offered: true, held: () => observation })).toEqual(failed);
     expect(saved).toEqual([failureRow, failureRow, failureRow, failureRow]); saved.length = 0;
+    // At a terminal end the same no-offer faults still reject (the caller's error) after the failure row was recorded.
+    await expect(closeAndSealAttemptWorkerEvents(identity, files, store, rejecting, { ...base, terminal: true })).rejects.toThrow('close');
+    await expect(closeAndSealAttemptWorkerEvents(identity, files, store, sink(true), { ...base, source: throwing, terminal: true })).rejects.toThrow('statistics');
+    expect(saved).toEqual([failureRow, failureRow]); saved.length = 0;
     // A refused failure row (the Attempt already holds a row: a sealed log is never downgraded) leaves the typed failure as the result, never a throw.
     const refusing = { async saveWorkerEventLog(): Promise<never> { throw Object.assign(new Error('row'), { code: 'WORKER_OBSERVATION_INVALID' }); } };
     expect(await closeAndSealAttemptWorkerEvents(identity, files, refusing, sink(true), { ...base, offered: true })).toEqual(failed);
