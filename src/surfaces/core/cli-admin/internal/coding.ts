@@ -192,7 +192,8 @@ async function changeDependencies(root: string, config: DeckentConfig, values: M
     case 'historical': emit(t('coding.dependencies.allowance.historical', result, locale), sinks); break;
     case 'withdrawn': emit(t('coding.dependencies.allowance.withdrawn', result, locale), sinks); break;
     case 'absent': emit(t('coding.dependencies.allowance.absent', {}, locale), sinks); break;
-    case 'declined': emit(t('clisetup.coding.card.cancelled', {}, locale), sinks); break;
+    // Owner decision 155: a declined card is not a success; nothing the command did before it changes configuration.
+    case 'declined': emit(t('clisetup.coding.card.cancelled', {}, locale), sinks); return 1;
   }
 }
 

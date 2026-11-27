@@ -109,7 +109,9 @@ export async function recoveryCommand(argv: readonly string[], context: Approval
   }
   person(context, values.json);
   const { ask } = cardIo(context, locale, (await loadConfig(root, options)).approvals.sessionTtlMs);
-  const scope = await toggleScope(context, locale, values.scope, 'deckent recovery review', ask); if (!scope) return;
+  const scope = await toggleScope(context, locale, values.scope, 'deckent recovery review', ask);
+  // Owner decision 155: a cancelled scope pick is not a success; no case has been read or answered yet.
+  if (!scope) { emit(t('recovery.review.cancelled', {}, locale), { level: 'warning', ...sinksOf(context) }); return EXIT_CODES.error; }
   const items = await host.reviewPending(root, { schemaVersion: 1, scopeId: scope.scopeId }, options);
   print([scopeNotice(scope, locale), items.length ? t('recovery.review.pending', { count: items.length }, locale) : t('recovery.review.none', {}, locale)].join('\n'));
   const answers = { continue: ['lost', 'continue-new-attempt'], escalate: ['lost', 'escalate-human'], 'not-lost': ['not-lost', null] } as const;

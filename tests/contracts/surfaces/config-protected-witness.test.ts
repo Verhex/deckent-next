@@ -154,9 +154,10 @@ describe('alpha.56 recovery cards: the blind review and a recovery policy change
     const changePolicy = vi.fn(async () => ({ status: 'current', view }));
     const reviewAnswer = vi.fn(async () => ({ status: 'recorded', model: { action: 'escalate-human' }, agreed: true }));
     const reviewPending = vi.fn(async () => cases);
-    const output: string[] = [];
+    const output: string[] = [], errors: string[] = [];
     const context = { root, env: { HOME: root, TERM: person.env.TERM }, stdin: TTY,
-      stdout: { ...TTY, write: (value: string) => { output.push(value); } },
+      stdout: { ...TTY, write: (value: string) => { output.push(value); } }, stderr: { write: (value: string) => { errors.push(value); } },
+      configChoiceSources: () => ({ list: async () => [{ value: 's' }, { value: 'other' }] }),
       recovery: { inspectPolicy: async () => view, changePolicy, reviewPending, reviewAnswer } } as never;
     const policy = ['policy', 'recovery', '--scope', 's', '--lang', 'en'], review = ['recovery', 'review', '--scope', 's', '--lang', 'en'];
     const ask = vi.spyOn(cards, 'askCliCard');
@@ -180,6 +181,16 @@ describe('alpha.56 recovery cards: the blind review and a recovery policy change
       expect(reviewAnswer).toHaveBeenCalledExactlyOnceWith(root, expect.objectContaining({ caseId: 'case-two' }), expect.anything());
       ask.mockResolvedValueOnce(null);
       expect.soft(await main(review, context), 'first case cancelled').toBe(1);
+      // Without a scope the review first asks for one; a cancelled pick has read no case and answered none.
+      await writeFile(join(root, '.deckent/config.json'), '{}');
+      for (const [lang, sentence] of [['en', 'Review cancelled. No case was answered.'], ['tr', 'İnceleme iptal edildi. Hiçbir vaka yanıtlanmadı.']] as const) {
+        ask.mockClear(); reviewPending.mockClear(); reviewAnswer.mockClear(); errors.length = 0;
+        ask.mockResolvedValueOnce(null);
+        expect.soft(await main(['recovery', 'review', '--lang', lang], context), `scope pick cancelled (${lang})`).toBe(1);
+        expect(ask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ options: [expect.objectContaining({ id: 's' }), expect.objectContaining({ id: 'other' })] }), expect.anything());
+        expect(reviewPending).not.toHaveBeenCalled(); expect(reviewAnswer).not.toHaveBeenCalled();
+        expect(errors.join('').trim()).toBe(sentence);
+      }
     } finally { ask.mockRestore(); }
   });
 });

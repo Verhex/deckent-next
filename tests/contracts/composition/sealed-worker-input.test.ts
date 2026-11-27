@@ -928,8 +928,16 @@ it.skipIf(process.platform !== 'linux')('releases secret custody while the perso
     await committedPackageVersions(f.root);
     await registerPackageValue(f, 'unrelated-fixture-value');
     const confirm = vi.fn(async () => { await switchPackageStore(f); return false; });
-    await expect(changeConfiguredPackageAllowance(f.root, { action: 'grant', scopeId, kind, locale: 'en' }, f.options, confirm))
-      .resolves.toEqual({ status: 'declined' });
+    const output: string[] = [];
+    let declined: unknown;
+    // The person's No reaches the command: the allowance is not granted and a script sees 1 (owner decision 155).
+    expect(await codingCommand(['coding', 'template', '--allow-dependencies', '--kind', kind, '--scope', scopeId, '--lang', 'en'], {
+      root: f.root, env: f.options.env, stdin: Object.assign(new PassThrough(), { isTTY: true }), stdout: { isTTY: true, write(value: string) { output.push(value); } },
+      configureCodingTemplate: async () => { throw Error('fixture reached template setup'); },
+      changeCodingAllowance: async (root, request, options) => (declined = await changeConfiguredPackageAllowance(root, request, options, confirm)),
+    })).toBe(1);
+    expect(declined).toEqual({ status: 'declined' });
+    expect(output.join('').trim()).toBe('Cancelled; configuration was not changed.');
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(await packageApprovals(f)).toEqual([]);
   } finally { f.store.close(); }
