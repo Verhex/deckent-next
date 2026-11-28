@@ -153,9 +153,9 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     expect(refusedEn.code).toBe(1); expect(refusedEn.stderr).toContain('Model claude-haiku-4-5-20251001 was retired on 2026-10-15; it cannot be activated');
     expect(refusedTr.stderr).toContain('claude-haiku-4-5-20251001 modeli 2026-10-15 tarihinde emekliye ayrıldı');
     // A model turned on before its retirement is still turned off: activate it while current, record its retirement, then deactivate.
-    const register = async (commandId: string, retiredOn: string | null) => { const catalog = await seedCatalog(); catalog.revision = commandId;
+    const register = async (commandId: string, retiredOn: string | null, state = retiredOn ? 'retired' : 'active') => { const catalog = await seedCatalog(); catalog.revision = commandId;
       Object.assign(catalog.providers[0].models.find((model: { nativeId: string }) => model.nativeId === 'claude-haiku-4-5-20251001').lifecycle,
-        retiredOn ? { state: 'retired', retiredOn, retireNotBefore: retiredOn } : { state: 'active', retiredOn: null, retireNotBefore: '2099-01-01' });
+        retiredOn ? { state, retiredOn, retireNotBefore: retiredOn } : { state, retiredOn: null, retireNotBefore: '2099-01-01' });
       await applyModelCatalog(admin.project, { schemaVersion: 1, commandId, scopeId: 's', action: 'register', catalog }, admin.options); };
     await register('current', null);
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);
@@ -193,6 +193,28 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     // Usage errors never reach the application.
     for (const argv of [['activate', '--scope', 's', '--channel', SEED_CHANNEL, '--command-id', 'x'], ['register', '--scope', 's', '--command-id', 'x'],
       ['register', '--scope', 's', '--command-id', 'x', '--seed', 'a', '--file', 'b'], ['list']]) expect((await admin.cli(...argv)).code).toBe(2);
+    // K5 across scopes: an active row held only by another scope, sorting before ('a') or after ('z') every other scope, still needs the person.
+    const row = (sql: string, ...values: string[]) => { const db = new DatabaseSync(admin.path); try { db.prepare(sql).run(...values); } finally { db.close(); } };
+    for (const scopeId of ['a', 'z']) {
+      row(`INSERT INTO model_catalog_activations VALUES(?,?,?,1,'active',?)`, scopeId, SEED_CHANNEL, 'claude-haiku-4-5-20251001',
+        JSON.stringify({ schemaVersion: 1, scopeId, channelId: SEED_CHANNEL, modelId: 'claude-haiku-4-5-20251001', revision: 1, state: 'active' }));
+      const held = admin.tables();
+      await expect.soft(register(`revive-${scopeId}`, null)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      expect.soft(admin.tables()).toEqual(held);
+      if (scopeId === 'a') row('DELETE FROM model_catalog_activations WHERE scope_id=?', 'a');
+    }
+    // The UTC day turns between the permission decision and the write lock: the writer reads the lifecycle day after the lock, so dropping a
+    // retirement that has arrived by then is an un-retire nobody witnessed.
+    const late = Date.now() + 86_400_000;
+    await asPerson(() => register('dated', new Date(late).toISOString().slice(0, 10), 'active'));
+    const dated = admin.tables(), clock = vi.spyOn(Date, 'now'), openStore = witnessAdapters.openSqliteModelCatalogStore;
+    const lock = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation((...args) => { clock.mockReturnValue(late); return openStore(...args); });
+    try { await expect.soft(register('undated', null)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' }); } finally { lock.mockRestore(); clock.mockRestore(); }
+    expect.soft(admin.tables()).toEqual(dated);
+    // With no active row anywhere, an un-retire stays allowed without the person.
+    row('DELETE FROM model_catalog_activations WHERE scope_id=?', 'z');
+    await register('retired-last', '2026-10-15');
+    await expect(register('revive-nowhere', null)).resolves.toBeUndefined();
   });
   it('deactivates without an audit seal and preserves the parent-first partial result', async () => {
     const f = await declaredFixture();

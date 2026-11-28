@@ -16,6 +16,8 @@ export interface ModelCatalogAdmission {
   readonly admittedAtMs: number;
   /** In memory only: models this register turns current again while an activation row is on, admitted under the person's witness. */
   readonly unretired?: readonly string[];
+  /** In memory only: the clock the writer reads the register's lifecycle day from once it holds the write lock. */
+  readonly now?: () => number;
 }
 /** The key of one catalog model in `unretired`. */
 export const catalogModelKey = (channelId: string, modelId: string) => JSON.stringify([channelId, modelId]);
@@ -33,7 +35,7 @@ export interface ModelCatalogReader {
   models(channelId: string): Promise<readonly ModelCatalogModelRecord[]>;
   activation(scopeId: string, channelId: string, modelId: string | null): Promise<ModelCatalogActivationRecord | null>;
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelCatalogReceipt | null>;
-  /** Bounded: whether an activation row of this model is active in any scope (the first match ends the read). */
+  /** Whether an activation row of this model is active in any scope; the cost grows with the scopes holding rows, not with their rows. */
   activeAnywhere?(channelId: string, modelId: string): Promise<boolean>;
   close(): void;
 }
@@ -129,7 +131,7 @@ export class ModelCatalogApplication {
     await witnessCatalogUnretires(unretired, this.witness);
     const store = await this.openStore();
     try {
-      const result = await store.apply(unretired.length ? { ...admission, unretired } : admission);
+      const result = await store.apply({ ...admission, now: this.now, ...(unretired.length ? { unretired } : {}) });
       const receipt = parseModelCatalogReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelCatalogRequest(receipt, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
       return Object.freeze({ replayed: result.replayed, receipt });

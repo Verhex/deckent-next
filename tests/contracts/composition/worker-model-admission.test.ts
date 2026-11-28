@@ -160,15 +160,17 @@ describe.skipIf(process.platform === 'win32')('new worker Run admission against 
     await expect(createRun(f.project, run('codex-deprecated', 'codex-other'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_CURRENT' });
     await expect(createRun(f.project, run('codex-retired', 'codex-helper-model'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_RETIRED' });
     await expect(createRun(f.project, run('codex-helper-retired', 'codex'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_RETIRED' });
-    // A retirement day that has passed retires an entry even while its recorded state still says active.
-    const past = structuredClone(catalog); (past.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[])
+    // A retirement day that has passed retires an entry even while its recorded state still says active. Built on the lifecycle update, so the
+    // models it retired stay retired (turning an active one current again would need the person, K5).
+    const past = structuredClone(edited); (past.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[])
       .find(entry => entry.nativeId === 'claude-sonnet-5-5')!.lifecycle.retiredOn = '2026-01-01';
     await f.catalog({ action: 'register', catalog: { ...past, revision: 'announced-retirement-passed' } });
     await expect(createRun(f.project, run('sonnet-past-day', 'sonnet'), f.options)).rejects.toMatchObject({ code: CLOSED });
-    const codexPast = structuredClone(codex); (codexPast.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[])
+    const codexPast = structuredClone(codexEdited); (codexPast.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[])
       .find(entry => entry.nativeId === CODEX)!.lifecycle.retiredOn = '2026-01-01';
     await f.catalog({ action: 'register', catalog: { ...codexPast, revision: 'codex-announced-retirement-passed' } });
-    await expect(createRun(f.project, run('codex-past-day', 'codex'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_RETIRED' });
+    // Its helper is still retired: the refusal must name the main model, whose passed day retires it.
+    await expect(createRun(f.project, run('codex-past-day', 'codex'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_RETIRED', message: expect.stringContaining(`model ${CODEX} on channel`) });
     const unnamed = structuredClone(catalog); (unnamed.providers[0].models as { nativeId: string; lifecycle: Record<string, unknown> }[])
       .find(entry => entry.nativeId === 'claude-sonnet-5-5')!.lifecycle.state = 'retired';
     await expect(f.catalog({ action: 'register', catalog: { ...unnamed, revision: 'retired-without-day' } })).rejects.toMatchObject({ code: 'MODEL_CATALOG_INVALID' });

@@ -49,9 +49,13 @@ class CatalogRows {
     return decode(row, parseModelCatalogActivationRecord, value => value.scopeId === scopeId && value.channelId === channelId
       && value.modelId === modelId && value.revision === row!['revision'] && value.state === row!['state']);
   }
-  /** Any scope's active row of this model; no index on (channel, model): at worst one pass over the activation rows, LIMIT 1. */
+  /** Any scope's active row of this model. The only index is the primary key (scope, channel, model), so the scopes holding rows are walked
+   * over it and each is probed by key: about 2 index seeks per such scope, whatever the number of rows each scope holds. */
   activeInAnyScope(channelId: string, modelId: string): boolean {
-    return this.db.prepare(`SELECT 1 FROM model_catalog_activations WHERE channel_id=? AND model_id=? AND state='active' LIMIT 1`).get(channelId, modelId) !== undefined;
+    return this.db.prepare(`WITH RECURSIVE scope(id) AS (SELECT MIN(scope_id) FROM model_catalog_activations UNION ALL
+      SELECT (SELECT MIN(scope_id) FROM model_catalog_activations WHERE scope_id>scope.id) FROM scope WHERE scope.id IS NOT NULL)
+      SELECT 1 FROM scope JOIN model_catalog_activations a ON a.scope_id=scope.id AND a.channel_id=? AND a.model_id=? WHERE a.state='active' LIMIT 1`)
+      .get(channelId, modelId) !== undefined;
   }
 }
 
@@ -92,11 +96,15 @@ export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalog
         const changes: ModelCatalogChange[] = [];
         if (command.action === 'register') {
           // Planned (and its merged channel invariants checked) inside this IMMEDIATE transaction, against the rows it will replace.
-          const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => this.modelRows(channelId) });
-          // An un-retire with an active row that the engine did not admit under the witness means the state changed since its read.
+          const stored = new Map<string, ReadonlyMap<string, ModelCatalogModelRecord>>();
+          const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => {
+            const rows = this.modelRows(channelId); stored.set(channelId, new Map(rows.map(row => [row.modelId, row]))); return rows; } });
+          // An un-retire with an active row that the engine did not admit under the witness means the state changed since its read. The
+          // lifecycle day is read once, here under the lock: the UTC day may have turned since admission.
+          const nowMs = admission.now?.() ?? admission.admittedAtMs;
           for (const record of plan.models) {
-            const prior = this.modelRows(record.channelId).find(row => row.modelId === record.modelId);
-            if (prior && isRetiredCatalogModel(prior, admission.admittedAtMs) && !isRetiredCatalogModel(record, admission.admittedAtMs)
+            const prior = stored.get(record.channelId)?.get(record.modelId);
+            if (prior && isRetiredCatalogModel(prior, nowMs) && !isRetiredCatalogModel(record, nowMs)
               && this.activeInAnyScope(record.channelId, record.modelId) && !admission.unretired?.includes(catalogModelKey(record.channelId, record.modelId)))
               throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
           }
