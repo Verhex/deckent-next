@@ -9,6 +9,8 @@ import { attachmentFailure, sameAttachmentPerson, sameProjectAttachmentAuthority
 import { bindingKey } from './source-repair.js';
 /** The device numbers the target repair reads and writes; the first-publication witness shares it, so the two cannot drift. */
 const decimalDevice = /^\d{1,20}$/u;
+/** The exact text a repair writes as a NEW device: String() of the bigint stat device (adapters store.ts:32), i.e. canonical decimal below 2^64. */
+const writtenDevice = (device: string) => /^(0|[1-9]\d*)$/u.test(device) && BigInt(device) < 2n ** 64n;
 
 export function planTargetRepair(registration: ReadableInstallationRegistration, local: ReadableProjectAttachment,
   identity: Pick<RegisteredInstallationBinding, 'binding' | 'capture' | 'outcome' | 'identity'>, source: ReadableInstallationSource,
@@ -56,11 +58,12 @@ export function planTargetRepair(registration: ReadableInstallationRegistration,
 }
 /** Owner K1 (A3): the on-disk digests at which the verified current reference still witnesses the first publication's. The original bytes of
  * that reference stay accepted as they are; the repair writer's exact output only for a reference planTargetRepair can produce from it: same
- * authority, root and inode, from a v1 record with a decimal device and writing a decimal device (a v2 record it only rewrites unchanged). */
+ * authority, root and inode, from a v1 record with a decimal device, a changed reference only with a device text the repair writes (writtenDevice);
+ * a v2 record it only rewrites unchanged. The bytes are the evidence: a different text of the same number is not normalised. */
 export function firstPublicationReferenceDigests(first: ReadableProjectAttachment, current: ReadableProjectAttachment, digests: { readonly original: string; readonly written: string }): readonly string[] {
   if (!sameProjectAttachmentAuthority(first, current) || first.location.canonicalRoot !== current.location.canonicalRoot
     || first.location.inode !== current.location.inode) return [];
-  const same = isDeepStrictEqual(first, current), writable = first.schemaVersion === 2 ? same : decimalDevice.test(first.location.device) && decimalDevice.test(current.location.device);
+  const same = isDeepStrictEqual(first, current), writable = first.schemaVersion === 2 ? same : decimalDevice.test(first.location.device) && (same || writtenDevice(current.location.device));
   return [...(same ? [digests.original] : []), ...(writable ? [digests.written] : [])];
 }
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export interface AttachmentRelocationPorts {
