@@ -178,7 +178,8 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     company: { companyId: config.company.id }, node, auditIntegrity, startability, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness, locale);
-  const checks = [...doctorChecks(data, { ...facts, showLocalHeadlessPaths: cliMode(context, args.json).mode === 'interactive' }, locale)];
+  const toolchainImagePins = toolchains && context.inspectToolchainImagePins ? await context.inspectToolchainImagePins(root, options).catch(() => null) : null;
+  const checks = [...doctorChecks(data, { ...facts, toolchainImagePins, showLocalHeadlessPaths: cliMode(context, args.json).mode === 'interactive' }, locale)];
   const permission = await context.gitDeliveryPermission?.(root, options).catch(() => null);
   if (permission) checks.push({ group: 'work', id: 'work.gitPermission', state: 'warning', text: ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, next: permission.command });
   if (await context.inspectLegacyProjectInstructions?.(root).catch(() => false)) checks.push({ group: 'setup', id: 'instructions.legacy', state: 'warning',

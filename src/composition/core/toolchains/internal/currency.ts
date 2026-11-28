@@ -8,6 +8,8 @@ export type NpmLatestVersionFetcher = (input: NpmLatestVersionInput) => Promise<
 export const dockerLoginClosed = (provider: string) => { try { return nativeDockerCredential(provider as Parameters<typeof nativeDockerCredential>[0]) === 'prohibited'; } catch { return false; } };
 /** Owner 114 option 0: the pins whose kind runs its image, the only ones the refresh builds and re-pins; the report itself keeps every admitted pin. */
 export const imagePins = (config: ToolchainAdmissionSource) => imageToolchainProfiles(config, dockerLoginClosed);
+/** Doctor's read of the same image pins (`--toolchains`): never heals the configuration. */
+export const inspectConfiguredToolchainImagePins = async (projectRoot: string, options: ConfigLoadOptions = {}) => imagePins(await loadConfig(projectRoot, { ...options, heal: false }));
 /** The public read (CLI, MCP, SDK as `inspectConfiguredToolchainCurrency`): HEAD's signature, loaded by its own root and options. */
 export const inspectProjectToolchainCurrency = (projectRoot: string, options: ConfigLoadOptions = {}, fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> =>
   inspectConfiguredToolchainCurrency(projectRoot, options, fetcher);

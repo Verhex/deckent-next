@@ -30,7 +30,7 @@ import { prepareConfiguredAgentUse, listConfiguredAgents, inspectConfiguredAgent
   changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion, inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
-import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, inspectConfiguredWorkerKinds, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
+import { inspectConfiguredToolchainCurrency, inspectConfiguredToolchainImagePins, inspectConfiguredWorkerImage, inspectConfiguredWorkerKinds, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { applyReviewedPolicyTemplateUpgrade, changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredExecutionPermission, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
@@ -130,7 +130,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     listRefusedRequests: (root, scopeId, limit, options) => inspectConfiguredRefusedRequests(root, scopeId, limit, options), // BeUser D-08
     changeDeliveryDismissal: changeConfiguredDeliveryDismissal, // BeUser M-33
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
-    inspectToolchainRefresh,
+    inspectToolchainRefresh, inspectToolchainImagePins: inspectConfiguredToolchainImagePins,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry), runningImageBuild: async (projectRoot, options) => ['requested', 'waiting-docker', 'acquiring'].includes((await inspectConfiguredWorkerImage(projectRoot, options).catch(() => null))?.phase ?? ''), localRunOffer: configuredLocalRunOffer, workingTreeChanges: (projectRoot, options) => workingTreeChanges(projectRoot, options.env ?? process.env),

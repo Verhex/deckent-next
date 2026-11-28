@@ -1,6 +1,6 @@
 import { persistedNumber } from '#domain/index.js';
 import { z } from 'zod';
-import { admittedToolchainSchema, toolchainCatalog, type AdmittedToolchain } from './contract.js';
+import { admittedToolchainSchema, compareToolchainVersions, extractToolchainVersion, toolchainCatalog, type AdmittedToolchain, type ToolchainCurrencyReport } from './contract.js';
 import type { AffectedProfile } from './update.js';
 
 /** What both derivations read from the installed configuration: its admission registry (an unreadable registry admits nothing). */
@@ -49,4 +49,10 @@ export function affectedToolchainProfiles(config: ToolchainAdmissionSource): Aff
  * (`loginClosed`: adapter catalog data the caller supplies) is refused at Run start; neither is rebuilt or re-pinned (the same rule as `repinParameters`). */
 export function imageToolchainProfiles(config: ToolchainAdmissionSource, loginClosed: (provider: string) => boolean): AffectedProfile[] {
   return nativePins(config).filter(pin => pin.worker === undefined && !loginClosed(pin.provider)).map(candidate);
+}
+/** Owner 114: the providers with an image pin behind the report's published version, whatever the other pins make the provider's status (an
+ * unreadable connected pin keeps it `unparsed`). The refresh builds exactly these; doctor offers the image update only for them. */
+export function imageProvidersBehind(pins: readonly Readonly<{ provider: string; cliVersion: string }>[], report: ToolchainCurrencyReport): string[] {
+  return [...new Set(pins.filter(pin => { const version = extractToolchainVersion(pin.provider, pin.cliVersion), latest = report.providers.find(entry => entry.provider === pin.provider)?.latest?.version;
+    return version !== null && latest !== undefined && compareToolchainVersions(version, latest) < 0; }).map(pin => pin.provider))].sort();
 }
