@@ -38,13 +38,13 @@ export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze
       startLine: int('1-based first line.'), endLine: int('1-based last line (inclusive).'), lineByteOffset: int('Byte offset inside long lines.'),
       maxBytesPerLine: int('Per-line byte window.'), outlineOffset: int('1-based first heading.'), pattern: str('Regular expression (search mode).'),
       literal: { type: 'boolean' }, ignoreCase: { type: 'boolean' }, context: int('Context lines around matches (max 10).'), maxMatches: int('Max matches (max 500).') } } },
-  { name: 'list_dir', version: 1, toolClass: 'read', description: 'List a workspace directory; directories end with "/".',
+  { name: 'list_dir', version: 1, toolClass: 'read', description: 'List one workspace directory (not recursive), sorted by name: directories end with "/", symbolic links with "@". At most 500 entries are shown and the result says how many exist; generated, vendored, ignored and protected entries are not shown, only counted. Use glob to find files by name across directories and grep to search their contents.',
     inputSchema: { type: 'object', properties: { path: str('Workspace-relative directory; default the workspace root.') } } },
   { name: 'grep', version: 1, toolClass: 'read', description: 'Search workspace files with a regular expression; returns path:line:text hits, or path:line-text context lines around them when requested. Long lines are elided, never missed; skipped files and unscanned directories are reported. A result with hits ends with "[deckent] grep: matches=N" (N hit lines returned; "N+" when more exist).',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Regular expression.'), path: str('Directory or file to search; default the workspace root.'),
       glob: str('Only files whose workspace-relative path matches this glob.'), ignoreCase: { type: 'boolean' },
       context: int('Context lines around each hit (max 5).'), maxHits: int('Cap on hits that open a context window (max 200); hits inside an opened window are also shown.') } } },
-  { name: 'glob', version: 1, toolClass: 'read', description: 'Find workspace files by glob ("**" any directories, "*" within a name).',
+  { name: 'glob', version: 1, toolClass: 'read', description: 'Find regular workspace files whose path under path matches a glob ("**" any directories, "*" within a name). Generated, vendored and ignored directories are skipped, symbolic links are not followed, the walk stops at a fixed depth and reports what it skipped, and at most 500 matches are returned. Returns paths only; use grep to search contents and read_file to read a match.',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Glob relative to path.'), path: str('Directory; default the workspace root.') } } },
 ] as const satisfies readonly AgentToolSpec[]);
 
