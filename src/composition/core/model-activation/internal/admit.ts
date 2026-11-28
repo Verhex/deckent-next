@@ -110,8 +110,8 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
     const done = (revision: number | null) => { if (modelId === null) completed.channel = revision; return revision !== null; };
     if (current?.state === (action === 'activate' ? 'active' : 'inactive')) {
-      // The channel is already open although the caller's plan saw it closed: only this command's own channel child (its child id and the
-      // planned revision, the same rule) hands its verified receipt's revision on; another command's opening hands nothing on.
+      // The channel is already open although the caller's check accepted it closed: only this command's own channel child (its child id
+      // and that revision, the same rule) hands its verified receipt's revision on; another command's opening hands nothing on.
       if (modelId === null && action === 'activate' && plannedChannel !== undefined) done(await reached(context, { ...child, expectedRevision: plannedChannel }));
       continue;
     }
@@ -156,8 +156,8 @@ const reached = async (context: Context, child: Exclude<ModelCatalogCommand, { a
 
 /** `written`: at least one child really written by this delivery; `channel`: the channel revision its own channel child wrote, else null. */
 type WorkerWrite = Readonly<{ written: boolean; channel: number | null }>;
-/** A named worker-only model has no chat declaration or whole-channel cascade. `plannedChannel`: the closed channel's revision in the
- * caller's own plan (the expected revision this command's channel child is built with). */
+/** A named worker-only model has no chat declaration or whole-channel cascade. `plannedChannel`: the revision of the closed channel the
+ * caller's own check accepted, 0 without an activation (the expected revision this command's channel child is built with). */
 export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {},
   beforeWrite?: () => Promise<void>, plannedChannel?: number): Promise<WorkerWrite> {
   try {
