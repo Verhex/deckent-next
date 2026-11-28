@@ -160,6 +160,22 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await register('current', null);
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);
     await register('retired', '2026-10-15');
+    // K5: a register that turns this retired model current again while its activation row is on needs the person; without, nothing is written.
+    const revived = admin.tables();
+    await expect.soft(register('revive-unwitnessed', null)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect.soft(admin.tables()).toEqual(revived);
+    await expect(asPerson(() => register('revive-witnessed', null))).resolves.toBeUndefined();
+    await register('retired-again', '2026-10-15');
+    // A re-delivery of the completed un-retire replays without the witness (its receipt is read first); nothing is written.
+    const replayed = admin.tables();
+    await expect.soft(register('revive-witnessed', null)).resolves.toBeUndefined();
+    expect.soft(admin.tables()).toEqual(replayed);
+    // The writer's own floor: when the read before it misses the active row, the writer still refuses an un-retire it was not given.
+    const openReader = witnessAdapters.openSqliteModelCatalogReader;
+    const blind = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogReader').mockImplementation(async (...args) =>
+      Object.assign(await openReader(...args), { activeAnywhere: async () => false }));
+    try { await expect.soft(register('revive-blind', null)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' }); } finally { blind.mockRestore(); }
+    expect.soft(admin.tables()).toEqual(replayed);
     expect((await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r3', '--expected-revision', '1')).code).toBe(0);
     // Reopening a channel would also make its already-active worker reachable again.
     const channelArgs = ['--scope', 's', '--channel', SEED_CHANNEL];

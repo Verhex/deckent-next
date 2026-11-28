@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
   parseModelCatalogCommand, parseModelCatalogReceipt, principalGrants, transitionModelCatalogActivation, type Policy, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type ModelActivationReceipt, type VerifiedPrincipal } from '#domain/index.js';
-import { isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
+import { ErrorRegistry, isAuthorizationRefusal, PERSON_AUTHORIZATION_REFUSALS } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sameModelActivationRequest } from './evidence.js';
 import { catalogDay } from './worker-admission.js';
@@ -14,7 +14,11 @@ export interface ModelCatalogAdmission {
   readonly actor: ModelCatalogReceipt['actor'];
   readonly authorizations: ModelCatalogReceipt['authorizations'];
   readonly admittedAtMs: number;
+  /** In memory only: models this register turns current again while an activation row is on, admitted under the person's witness. */
+  readonly unretired?: readonly string[];
 }
+/** The key of one catalog model in `unretired`. */
+export const catalogModelKey = (channelId: string, modelId: string) => JSON.stringify([channelId, modelId]);
 export interface ModelCatalogResult { readonly replayed: boolean; readonly receipt: ModelCatalogReceipt }
 /** Writer port: one transaction per command (replay check, plan, rows, receipt). */
 export interface ModelCatalogStore {
@@ -29,6 +33,8 @@ export interface ModelCatalogReader {
   models(channelId: string): Promise<readonly ModelCatalogModelRecord[]>;
   activation(scopeId: string, channelId: string, modelId: string | null): Promise<ModelCatalogActivationRecord | null>;
   loadReceipt?(scopeId: string, commandId: string): Promise<ModelCatalogReceipt | null>;
+  /** Bounded: whether an activation row of this model is active in any scope (the first match ends the read). */
+  activeAnywhere?(channelId: string, modelId: string): Promise<boolean>;
   close(): void;
 }
 export interface ModelCatalogAuthorizer {
@@ -49,7 +55,7 @@ export function sameModelCatalogRequest(receipt: ModelCatalogReceipt, command: M
 export class ModelCatalogApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorizer: ModelCatalogAuthorizer,
     private readonly openStore: () => Promise<ModelCatalogStore>, private readonly now: () => number,
-    private readonly openReader?: () => Promise<ModelCatalogReader>) {}
+    private readonly openReader?: () => Promise<ModelCatalogReader>, private readonly witness?: (operation: string) => Promise<void>) {}
   /** Read-only listing (WORKER-CURRENCY-2); needs the reader port. */
   async inspect(input: unknown, credential?: unknown): Promise<ModelCatalogInspection> {
     if (!this.openReader) throw new ModelCatalogError('MODEL_CATALOG_UNAVAILABLE');
@@ -115,14 +121,41 @@ export class ModelCatalogApplication {
   }
   async apply(input: unknown, credential?: unknown): Promise<ModelCatalogResult> {
     const admission = await this.authorize(await this.identify(input, credential)), { command, actor } = admission;
+    // A register that turns a retired model current again while an activation row for it is on in any scope needs the person (after the
+    // permission decision, as for a switch-on); a caller that cannot ask the witness is refused with it.
+    const reader = command.action === 'register' ? await this.openReader?.() : undefined;
+    let unretired: string[] = [];
+    try { if (reader && command.action === 'register') unretired = await catalogRegisterUnretires(command, reader, admission.admittedAtMs); } finally { reader?.close(); }
+    await witnessCatalogUnretires(unretired, this.witness);
     const store = await this.openStore();
     try {
-      const result = await store.apply(admission);
+      const result = await store.apply(unretired.length ? { ...admission, unretired } : admission);
       const receipt = parseModelCatalogReceipt(result.receipt);
       if (typeof result.replayed !== 'boolean' || !sameModelCatalogRequest(receipt, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
       return Object.freeze({ replayed: result.replayed, receipt });
     } finally { store.close(); }
   }
+}
+/** Read only: the models a register would turn from retired to current while an activation row of them is on in any scope. A command
+ * whose receipt exists is left to the writer's replay rules (no witness for a write that is not due); without a reader, the writer re-checks. */
+async function catalogRegisterUnretires(command: Extract<ModelCatalogCommand, { action: 'register' }>, reader: ModelCatalogReader, nowMs: number) {
+  const found: string[] = [];
+  if (await reader.loadReceipt?.(command.scopeId, command.commandId)) return found;
+  for (const provider of command.catalog.providers) {
+    const stored = new Map((await reader.models(provider.id)).map(row => [row.modelId, row]));
+    for (const model of provider.models) {
+      const prior = stored.get(model.nativeId);
+      if (prior && isRetiredCatalogModel(prior, nowMs) && !catalogModelRetired(model.lifecycle, catalogDay(nowMs))
+        && await reader.activeAnywhere?.(provider.id, model.nativeId)) found.push(catalogModelKey(provider.id, model.nativeId));
+    }
+  }
+  return found;
+}
+/** The person's witness for those models; a caller without a witness port is refused with the existing witness refusal. */
+async function witnessCatalogUnretires(found: readonly string[], witness?: (operation: string) => Promise<void>) {
+  if (!found.length) return;
+  if (!witness) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.catalog.register' } });
+  await witness('models.catalog.register');
 }
 
 /** A channel as one scope sees it (WORKER-CURRENCY-2): installation facts plus the scope's activation rows; `denied` without `inspect`. */

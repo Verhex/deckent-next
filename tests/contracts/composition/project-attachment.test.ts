@@ -2,7 +2,7 @@ import { witnessedModelActivation } from '../support/witnessed-model-activation.
 import { configuredGitDeliveryPermission } from '#composition/core/workspace-patch/index.js';
 import { execFileSync } from 'node:child_process';
 import * as platform from '#platform/index.js';
-import { FilePolicySource } from '#adapters/index.js';
+import { FilePolicySource, readProviderConnectSeed } from '#adapters/index.js';
 import { openModelInspection } from '#composition/core/model-inspection/index.js';
 import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { verifyBackupSet, openSqliteLedger } from '#adapters/index.js';
@@ -15,7 +15,7 @@ import * as cliHuman from '#surfaces/core/cli-human/index.js';
 import { main as surfaceCli } from '#surfaces/core/cli/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
-import { carryConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { carryConfiguredModelActivation, inspectConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { grantConfiguredModelUse, revokeConfiguredModelUse } from '#composition/core/model-use-grant/index.js';
 import { resolveConfiguredModelUse, configuredModelProfiles } from '#composition/core/model-use/index.js';
 import { ModelBindingApplication, type PolicyTemplateInstallationPorts } from '#engine/index.js';
@@ -432,6 +432,33 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     // Synthetic person, inside this test's own disposable install only.
     for (const key of [...sourceContext.config.cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined); // a person's terminal: no agent or CI marker
     vi.spyOn(localPrincipal, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+    // K5: the source's catalog carries the model (channel and model on), and the target's ledger holds it retired while its activation row
+    // is on. The grant has no witness port, so its carried register stops; the pending lease and the project keys written before it stay
+    // (its existing failure at that point).
+    const channelId = sourceProfile.reference.providerId;
+    const on = async (root: string, scopeId: string, modelId: string) => { for (const [index, id] of [null, modelId].entries())
+      await applyConfiguredModelCatalog(root, { schemaVersion: 1, commandId: `k5-on-${index}`, scopeId, action: 'activate', channelId, modelId: id, expectedRevision: 0 }, f.options); };
+    // The fixture's model as a ledger catalog row: a shipped seed's channel and model facts under the fixture's own identities.
+    const seed = await readProviderConnectSeed('openai-api'), template = seed.providers[0]!;
+    await applyConfiguredModelCatalog(f.a, { schemaVersion: 1, commandId: 'k5-source', scopeId: 'source', action: 'register', catalog: { ...seed, revision: 'k5-source',
+      providers: [{ ...template, id: channelId, version: sourceProfile.reference.providerVersion, models: [{ ...template.models[0]!, id: sourceProfile.reference.modelId,
+        version: sourceProfile.reference.modelVersion, nativeId: 'native-chat', channelModelId: 'native-chat' }] }] } }, f.options);
+    const view = (await inspectConfiguredModelCatalog(f.a, { schemaVersion: 1, scopeId: 'source', channelId }, f.options)).channels[0]!;
+    if (view.access !== 'allowed') throw new Error('fixture catalog missing');
+    const carried = view.models.find(row => row.model.id === sourceProfile.reference.modelId && row.model.version === sourceProfile.reference.modelVersion)!;
+    await on(f.a, 'source', carried.modelId);
+    const targetCatalog = (commandId: string, model: typeof carried.model) => applyConfiguredModelCatalog(f.b, { schemaVersion: 1, commandId, scopeId: 'target', action: 'register',
+      catalog: { schemaVersion: 'client' in view.channel ? 3 : 2, revision: commandId, providers: [{ id: channelId, version: view.providerVersion, channel: view.channel, models: [model] }] } }, f.options);
+    await targetCatalog('k5-current', carried.model);
+    await on(f.b, 'target', carried.modelId);
+    await targetCatalog('k5-retired', { ...carried.model, lifecycle: { ...carried.model.lifecycle, state: 'retired', retiredOn: '2026-01-01', retireNotBefore: '2026-01-01' } });
+    await expect.soft(grantConfiguredModelUse(f.b, 'target', f.options)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    const half = JSON.parse(await readFile(join(f.b, '.deckent/config.json'), 'utf8')) as Record<string, unknown> & { provider_invocation_profiles?: { profiles: { scopeId: string }[] } };
+    expect.soft((await target.store.registration())?.entries.map(entry => entry.modelLease?.state)).toContain('pending');
+    expect.soft([half['schema_version'], half['provider_catalog'], half['provider_invocation_profiles']?.profiles.some((row: { scopeId: string }) => row.scopeId === 'target')])
+      .toEqual([6, authored['provider_catalog'], true]);
+    // The person registers the model current at a terminal (witnessed); the same grant then continues and completes.
+    await targetCatalog('k5-current-again', carried.model);
     const granted = await grantConfiguredModelUse(f.b, 'target', f.options);
     expect(granted.state).toBe('active');
     const leasedContext = await loadConfiguredScopeContext(f.b, 'target', f.options, 'read');

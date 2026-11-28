@@ -478,6 +478,22 @@ it.skipIf(process.platform !== 'linux')('explicit model state writes both owners
   await applyConfiguredModelCatalog(f.project, { schemaVersion: 1, commandId: 'retire-sibling', scopeId: 'scope', action: 'register', catalog: authored }, f.options);
   await applyConfiguredModelCatalog(f.project, { schemaVersion: 1, commandId: 'close-channel', scopeId: 'scope', action: 'deactivate',
     channelId, modelId: null, expectedRevision: 1 }, f.options);
+  // K5: with one seed model missing from the ledger, a connect registers its whole seed (engine connect.ts:336-338), which would turn the
+  // retired sibling current while its model row is on. Without the person at that step the connect stops there, nothing written.
+  const spare = seed.providers[0]!.models.find(row => row.nativeId !== sibling && row.nativeId !== 'gpt-6-luna')!.nativeId, ledger = new DatabaseSync(f.ledger);
+  const spareRow = ledger.prepare('SELECT * FROM model_catalog_models WHERE channel_id=? AND model_id=?').get(channelId, spare)!;
+  try { ledger.prepare('DELETE FROM model_catalog_models WHERE channel_id=? AND model_id=?').run(channelId, spare); } finally { ledger.close(); }
+  const registerSeed = activationOwners.applyConfiguredModelCatalog, catalogRows = () => ['channels', 'models', 'activations'].map(table => f.rows(`SELECT * FROM model_catalog_${table}`));
+  const beforeRevive = catalogRows(), leaves = vi.spyOn(activationOwners, 'applyConfiguredModelCatalog').mockImplementation(async (...args) => {
+    vi.mocked(witnessAdapters.attestLocalInteractiveTerminal).mockResolvedValue(false); return registerSeed(...args); });
+  try {
+    await expect.soft(connectConfiguredModel(f.project, { ...command, commandId: 'seed-unwitnessed' }, f.options, { registry: localRegistry }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  } finally { leaves.mockRestore(); }
+  expect.soft(catalogRows()).toEqual(beforeRevive);
+  const restore = new DatabaseSync(f.ledger);
+  try { restore.prepare('INSERT INTO model_catalog_models(channel_id,model_id,revision,lifecycle,record) VALUES(?,?,?,?,?)')
+    .run(spareRow['channel_id']!, spareRow['model_id']!, spareRow['revision']!, spareRow['lifecycle']!, spareRow['record']!); } finally { restore.close(); }
   const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
   await writeFile(policyPath, JSON.stringify({ ...policy, revision: 'retired-sibling-denied', grants: [...policy.grants,
     { id: 'deny-retired-sibling', effect: 'deny', scopes: ['scope'], principals: me, actions: ['activate'],

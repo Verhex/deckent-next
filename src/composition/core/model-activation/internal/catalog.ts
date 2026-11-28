@@ -9,12 +9,13 @@ import type { ModelInspectionSnapshot } from '#composition/core/model-inspection
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { activationAuthority, type ActivationAuthority } from './activation-authority.js';
+import { activationAuthority, assertConfiguredActivationWitness, type ActivationAuthority } from './activation-authority.js';
 import { catalogEvidence, activationReceiptOptions } from './catalog-evidence.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 type Channel = Extract<ModelCatalogChannelView, { access: 'allowed' }>;
-function catalogApplication(context: Context, authority?: ActivationAuthority, register = false) {
+/** `register`: the register path's person witness (the switch-on witness), asked only when a retired model with an active row turns current. */
+function catalogApplication(context: Context, authority?: ActivationAuthority, register?: (operation: string) => Promise<void>) {
   const decide = new ModelCatalogPolicyAuthorization({ async load() { return context.document; } });
   const authorize: ModelCatalogAuthorizer['authorize'] = authority ? (...args) => authority.authorize(({ document }) =>
     new ModelCatalogPolicyAuthorization({ async load() { return document; } }).authorize(...args)) : decide.authorize.bind(decide);
@@ -22,7 +23,7 @@ function catalogApplication(context: Context, authority?: ActivationAuthority, r
     if (!authority && !register) throw new ModelCatalogError('MODEL_CATALOG_READ_ONLY');
     const writable = await (authority?.write() ?? context);
     return openSqliteModelCatalogStore(await writable.path(), writable.config.storage.sqlite, 'forbid');
-  }, Date.now, async () => openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context)));
+  }, Date.now, async () => openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context)), register);
 }
 export async function planCatalogWrite(context: Context, authority: ActivationAuthority, command: Exclude<ModelCatalogCommand, { action: 'register' }>, readReplay = false) {
   const app = catalogApplication(context, authority), replay = await app.preflight(command, readReplay);
@@ -68,7 +69,7 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
     if (!parsed.success) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
     const command = parsed.data, { scopeId } = command;
     const context = await loadConfiguredScopeContext(root, scopeId, options, command.action === 'register' ? 'write' : 'read');
-    if (command.action === 'register') return await catalogApplication(context, undefined, true).apply(command);
+    if (command.action === 'register') return await catalogApplication(context, undefined, operation => assertConfiguredActivationWitness(operation, context, options)).apply(command);
     const authority = activationAuthority(root, scopeId, options, context), enabling = command.action === 'activate';
     const parent = await planCatalogWrite(context, authority, command, true);
     // The parent receipt is verified when it is obtained (stored, or returned by the writer), before any child. A replay the writer returns

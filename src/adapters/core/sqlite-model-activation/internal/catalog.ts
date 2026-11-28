@@ -3,7 +3,7 @@ import { ModelCatalogError, identitySchema, parseModelCatalogActivationRecord, p
   parseModelCatalogReceipt, planModelCatalogRegistration, transitionModelCatalogActivation, exactModelIdSchema,
   type ModelCatalogActivationRecord, type ModelCatalogChannelRecord, type ModelCatalogChange, type ModelCatalogModelRecord,
   type ModelCatalogReceipt } from '#domain/index.js';
-import { refuseRetiredModelActivation, sameModelCatalogRequest, type ModelCatalogAdmission, type ModelCatalogReader, type ModelCatalogResult,
+import { catalogModelKey, isRetiredCatalogModel, refuseRetiredModelActivation, sameModelCatalogRequest, type ModelCatalogAdmission, type ModelCatalogReader, type ModelCatalogResult,
   type ModelCatalogStore } from '#engine/index.js';
 import { ledgerTransaction, sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
@@ -49,6 +49,10 @@ class CatalogRows {
     return decode(row, parseModelCatalogActivationRecord, value => value.scopeId === scopeId && value.channelId === channelId
       && value.modelId === modelId && value.revision === row!['revision'] && value.state === row!['state']);
   }
+  /** Any scope's active row of this model; no index on (channel, model): at worst one pass over the activation rows, LIMIT 1. */
+  activeInAnyScope(channelId: string, modelId: string): boolean {
+    return this.db.prepare(`SELECT 1 FROM model_catalog_activations WHERE channel_id=? AND model_id=? AND state='active' LIMIT 1`).get(channelId, modelId) !== undefined;
+  }
 }
 
 export class SqliteModelCatalogReader extends CatalogRows implements ModelCatalogReader {
@@ -62,6 +66,9 @@ export class SqliteModelCatalogReader extends CatalogRows implements ModelCatalo
   async models(channelId: string) { try { return Object.freeze(this.modelRows(id(channelId))); } catch (error) { return failure(error); } }
   async activation(scopeId: string, channelId: string, modelId: string | null) {
     try { return this.activationRow(id(scopeId), id(channelId), modelId === null ? null : modelKey(modelId)); } catch (error) { return failure(error); }
+  }
+  async activeAnywhere(channelId: string, modelId: string) {
+    try { return this.activeInAnyScope(id(channelId), modelKey(modelId)); } catch (error) { return failure(error); }
   }
   close(): void { this.db.close(); }
 }
@@ -86,6 +93,13 @@ export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalog
         if (command.action === 'register') {
           // Planned (and its merged channel invariants checked) inside this IMMEDIATE transaction, against the rows it will replace.
           const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => this.modelRows(channelId) });
+          // An un-retire with an active row that the engine did not admit under the witness means the state changed since its read.
+          for (const record of plan.models) {
+            const prior = this.modelRows(record.channelId).find(row => row.modelId === record.modelId);
+            if (prior && isRetiredCatalogModel(prior, admission.admittedAtMs) && !isRetiredCatalogModel(record, admission.admittedAtMs)
+              && this.activeInAnyScope(record.channelId, record.modelId) && !admission.unretired?.includes(catalogModelKey(record.channelId, record.modelId)))
+              throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+          }
           for (const record of plan.channels) {
             const written = this.db.prepare(`INSERT INTO model_catalog_channels(channel_id,revision,record) VALUES(?,?,?)
               ON CONFLICT(channel_id) DO UPDATE SET revision=excluded.revision,record=excluded.record WHERE revision=excluded.revision-1`)
