@@ -171,7 +171,7 @@
   "doctor.fix.toolchainUpdate.title": "Update the worker tools?",
   "doctor.fix.toolchainUpdate.effect": "Runs `deckent toolchains update --apply`: builds a new worker image with Docker (at most {duration}) from the npm registry; running work keeps its current image and the configuration is not changed.",
   "doctor.fix.toolchainUpdate.built": "New worker image {version} built; profile proposal: {proposal}",
-  "doctor.fix.toolchainUpdate.noChange": "No worker image needs a refresh.",
+  "doctor.fix.toolchainUpdate.noChange": "No worker image refresh was planned.",
   "doctor.fix.toolchainUpdate.disabled": "Tool updates are off in this installation (toolchains.update.mode).",
   "doctor.fix.toolchainUpdate.planned": "Update planned for image {version}; it was not built.",
   "cli.workers.summary": "{scope} · {active} running · {unknown} unknown · {attention} need attention · {history} in history",

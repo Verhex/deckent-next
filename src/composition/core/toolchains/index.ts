@@ -1,4 +1,4 @@
-export { inspectConfiguredToolchainCurrency } from './internal/currency.js';
+export { inspectProjectToolchainCurrency as inspectConfiguredToolchainCurrency } from './internal/currency.js';
 export { configuredWorkerKinds, inspectConfiguredWorkerKinds } from './internal/worker-kinds.js';
 export type { NpmLatestVersionFetcher } from './internal/currency.js';
 export { updateConfiguredToolchains } from './internal/update.js';

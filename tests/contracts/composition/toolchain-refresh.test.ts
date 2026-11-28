@@ -387,12 +387,17 @@ describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
     expect(registry.kinds.find(kind => kind.kind === 'codex-pinned')!.profile.version).toBe(2); // and the refresh still applied
     expect((await readToolchainRefreshState(f.root, f.options))).toMatchObject({ phase: 'current', appliedProfiles: 1 });
     // Owner 114 (ii), at write time: a profile replaced during the codex build under the same id and version (a claude Docker profile, or codex with
-    // other pins) is not the one the proposal measured, so it is left untouched; HEAD would have re-pinned it with the codex receipt's image and CLI.
-    for (const replacement of [nativeProfile('codex-pinned', 'claude', '2.1.278 (Claude Code)'), nativeProfile('codex-pinned', 'codex', 'codex-cli 0.150.0')]) {
-      const g = await fixture();
+    // other pins) is not the one the proposal measured, so it is left untouched; HEAD would have re-pinned it with the codex receipt's image and CLI
+    // (`current`, one applied). Its currency was not measured by this pass, so the refresh records `unverified` with the concurrent-change code, also
+    // when another measured profile (`codex-two`) is applied; the next refresh measures the new pins.
+    for (const [replacement, other] of [[nativeProfile('codex-pinned', 'claude', '2.1.278 (Claude Code)'), true], [nativeProfile('codex-pinned', 'codex', 'codex-cli 0.150.0'), false]] as const) {
+      const g = await fixture(), two = nativeProfile('codex-two', 'codex', 'codex-cli 0.155.1'), start = JSON.parse(await readFile(g.path, 'utf8'));
+      if (other) { start.admission.registry.profiles.push(two); start.admission.registry.kinds.push({ kind: 'codex-two', profile: { id: two.id, version: 1 } }); await writeFile(g.path, JSON.stringify(start)); clearConfigCache(); }
       const swap = async () => { const current = JSON.parse(await readFile(g.path, 'utf8'));
         current.admission.registry.profiles = current.admission.registry.profiles.map((profile: { id: string }) => profile.id === 'codex-pinned' ? replacement : profile); await writeFile(g.path, JSON.stringify(current)); clearConfigCache(); };
-      expect(await refreshConfiguredToolchains(g.root, 'startup', g.options, { ...g.deps, onBuild: swap }, g.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 0 } });
+      expect(await refreshConfiguredToolchains(g.root, 'startup', g.options, { ...g.deps, onBuild: swap }, g.observer))
+        .toMatchObject({ outcome: 'unverified', event: { appliedProfiles: other ? 1 : 0, code: 'CONFIG_CONCURRENT_REVISION_HOLD' } });
+      expect(await readToolchainRefreshState(g.root, g.options)).toMatchObject({ phase: 'unverified', reason: 'CONFIG_CONCURRENT_REVISION_HOLD', appliedProfiles: other ? 1 : 0 });
       expect(g.state.builds).toBe(1); expect((await g.registry()).profiles.filter(profile => profile.id === 'codex-pinned')).toEqual([replacement]);
     }
   });

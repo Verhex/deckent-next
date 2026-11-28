@@ -8,9 +8,12 @@ export type NpmLatestVersionFetcher = (input: NpmLatestVersionInput) => Promise<
 export const dockerLoginClosed = (provider: string) => { try { return nativeDockerCredential(provider as Parameters<typeof nativeDockerCredential>[0]) === 'prohibited'; } catch { return false; } };
 /** Owner 114 option 0: the pins whose kind runs its image, the only ones the refresh builds and re-pins; the report itself keeps every admitted pin. */
 export const imagePins = (config: ToolchainAdmissionSource) => imageToolchainProfiles(config, dockerLoginClosed);
+/** The public read (CLI, MCP, SDK as `inspectConfiguredToolchainCurrency`): HEAD's signature, loaded by its own root and options. */
+export const inspectProjectToolchainCurrency = (projectRoot: string, options: ConfigLoadOptions = {}, fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> =>
+  inspectConfiguredToolchainCurrency(projectRoot, options, fetcher);
 /** Read-only currency report. Network is used only when `toolchains.currency.mode` is `report`, one bounded request per npm package;
- * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. `loaded` (owner 114): the update passes the configuration
- * it already read, so its report and its image pins come from one read. */
+ * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. `loaded` (owner 114, composition only): the update passes
+ * the configuration it already read, so its report and its image pins come from one read; the barrel exports `inspectProjectToolchainCurrency` instead. */
 export async function inspectConfiguredToolchainCurrency(projectRoot: string, options: ConfigLoadOptions = {},
   fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion, loaded?: Awaited<ReturnType<typeof loadConfig>>): Promise<ToolchainCurrencyReport> {
   const config = loaded ?? await loadConfig(projectRoot, options);

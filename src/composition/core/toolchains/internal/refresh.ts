@@ -67,7 +67,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
     try { await observer.onToolchainRefresh?.(event); } catch { /* an observer never settles or fails a refresh */ }
     return event;
   };
-  let result: Awaited<ReturnType<typeof updateConfiguredToolchains>> | null = null; let applied = 0; let configWrite: unknown = null; let code: string | null = null;
+  let result: Awaited<ReturnType<typeof updateConfiguredToolchains>> | null = null; let applied = 0; let configWrite: unknown = null; let code: string | null = null; let dropped = false;
   try {
     // Before any build: a registry a global layer contributes to is never revised automatically (see `registryLayerHold`); no image is built for it.
     if (registryLayerHold(await snapshotConfiguredConfig(projectRoot, options, 'project')) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw new CodedError('TOOLCHAIN_REGISTRY_LAYER_HOLD');
@@ -90,8 +90,10 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         if (hold) throw new CodedError(hold);
         // Owner 114 (ii), at write time: only a profile still as the proposal measured it (an image pin of the same provider with its `from` values) is re-pinned.
         const document = read.document as { admission: { registry: unknown } }, pins = imagePins(document), proposal = result.proposal;
-        const revision = reviseRegistryForProposal(document.admission.registry, { ...proposal, profiles: proposal.profiles.filter(entry => pins.some(pin => pin.profile.id === entry.profile.id
-          && pin.profile.version === entry.profile.version && pin.provider === entry.provider && pin.cliVersion === entry.changes.cliVersion.from && pin.imageId === entry.changes.imageId.from)) });
+        const measured = proposal.profiles.filter(entry => pins.some(pin => pin.profile.id === entry.profile.id && pin.profile.version === entry.profile.version
+          && pin.provider === entry.provider && pin.cliVersion === entry.changes.cliVersion.from && pin.imageId === entry.changes.imageId.from));
+        dropped = measured.length < proposal.profiles.length; // a profile this pass did not measure: its currency is not claimed (`unverified` below)
+        const revision = reviseRegistryForProposal(document.admission.registry, { ...proposal, profiles: measured });
         if (!revision) break;
         const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
         if (!scopeId) throw new CodedError('TERMINAL_SCOPE_REQUIRED');
@@ -107,7 +109,8 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   } catch (error) { code = dependencies.signal?.aborted ? 'REFRESH_STOPPED' : failureCode(error); } // a build ended by the stop is a stop, not a build fault
   const finishedAt = now();
   const imageId = result?.build?.imageId ?? null, imageVersion = result?.plan?.next?.imageVersion ?? null;
-  const unverified = code ? null : result?.plan ? unverifiedReason(result.plan.report) : null;
+  // Owner 114: a profile changed under the build was left untouched and not measured; the next refresh measures it (the existing concurrent-change code).
+  const unverified = code ? null : (result?.plan ? unverifiedReason(result.plan.report) : null) ?? (dropped ? 'CONFIG_CONCURRENT_REVISION_HOLD' : null);
   const state: ToolchainRefreshState = { ...base, phase: code ? 'failed' : unverified ? 'unverified' : 'current', reason: code ?? unverified, finishedAt, imageVersion, imageId, staleProviders: result?.plan?.staleProviders ?? [], appliedProfiles: applied };
   try { await writeState(home, state); } catch { /* the audit record below still states the outcome */ }
   try { await writeArtifact(join(home, 'refreshes'), refreshAuditName(startedAt, trigger), { schemaVersion: 1, kind: 'toolchain-refresh-audit', state, decision: result?.decision ?? null,
