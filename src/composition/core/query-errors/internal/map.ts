@@ -39,7 +39,7 @@ const delegationRefusalParams = (facts: NonNullable<AuthorityChangeError['refusa
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
   // alpha.56 U5-S1: the bound's refusal names the cell it stopped at and a hint chosen from display facts (never a decision input).
   if (error instanceof AuthorityChangeError && error.refusal) return registeredFailure(error.code, { params: delegationRefusalParams(error.refusal) });
-  if (error instanceof InstallationPublicationError && error.reason === 'governed-policy-advanced') {
+  if (error instanceof InstallationPublicationError && error.reason) {
     const failure = registeredFailure(error.code, { params: { reason: error.reason } });
     return new DeckentError(failure.code, failure.message, undefined, undefined, undefined, undefined, undefined, failure.category, undefined, failure.localize);
   }

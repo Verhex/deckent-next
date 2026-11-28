@@ -536,6 +536,7 @@
   "error.INSTALLATION_RECOVERY_CHANGED": "Kurulum kurtarma verisi doğrulanan hazırlıktan farklı.",
   "error.INSTALLATION_PUBLICATION_INVALID": "Açık kurulum seçimleri veya kurtarma girdisi eksik ya da geçersiz.",
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.",
+  "error.INSTALLATION_PUBLICATION_CONFLICT.attachedFolder": "Bu klasör kayıtlı bir kuruluma bağlı; ilk kurulum politikası yeniden kurulmaz. Bağlı klasör için bunun yerine `deckent terminal attach` kullanın; bağlantıyı uygulamak da reddedilebilir, örneğin disk numarası değişip onarıldıktan sonra.",
   "error.INSTALLATION_PUBLICATION_CHANGED": "Kurulum kanıtı veya yayımlanan durum değişti; tamamlanma kabul edilmedi.",
   "error.INSTALLATION_PUBLICATION_CHANGED.governedPolicy": "Kurulumdan sonra deckent politikada yapılan onaylı değişiklikleri kaydetti. İlk kurulum şablonu yeniden uygulanmadı. Geçerli politikayı görmek için `deckent policy status --scope <id>` komutunu kullanın.",
   "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Veritabanı dönüşümü için eksiksiz ve tutarlı iş oluşturma kanıtı gerekiyor. Veritabanı değiştirilmedi.",

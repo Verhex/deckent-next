@@ -29,11 +29,12 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }
-/** ID-1C: observe the composed identity before effects; config-publishing recovery owns its target layout and publication refuses existing invalid config. */
-export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false, options: ConfigLoadOptions = {}) {
+/** ID-1C: observe the composed identity before effects; config-publishing recovery owns its target layout and publication refuses existing invalid config.
+ * A3-K2 (owner): the plain policy installer's refusal in an attached folder names the attach route; supplied and resume keep their text. */
+export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false, options: ConfigLoadOptions = {}, attached?: 'attached-folder') {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
   try {
-    if (publicationGuarded && (await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT');
+    if (publicationGuarded && (await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false })).installation.sharedRegistrationId) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CONFLICT', attached);
     await loadConfiguredInstallationIdentity(projectRoot, { ...options, pendingBootstrap: 'config-settled' });
   } catch (error) { if (!publicationGuarded || !isCodedError(error, 'CONFIG_VALIDATION')) throw error; }
 }

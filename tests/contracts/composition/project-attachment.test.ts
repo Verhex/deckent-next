@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, applyPolicyTemplateInstallationWithSecretDefault, configuredProjectAttachment, relocateConfiguredProjectAttachment, executeConfiguredProjectAttachment, previewConfiguredUninstall, applyConfiguredUninstall, verifiedFirstPublicationPolicy } from '#composition/core/installation/index.js';
 import { configuredAttachmentStore, ensureConfiguredTerminalIdentity, inspectConfiguredInstallationSource, loadConfiguredScopeContext, loadConfiguredInstallationIdentity, resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -35,7 +35,7 @@ import { clearConfigCache, productResourcePath, DeckentError } from '#platform/i
 import { assessAttachmentLocation, readableInstallationRegistrationSchema, installationRegistrationSchema,
   normalizeAttachmentRegistration, attachmentRegistrationAllowance,
   countMismatchedAttachments, installationIdentitySchema, type AttachmentRevocation, type ReadableInstallationRegistration } from '#domain/index.js';
-import { resolveInstallationProjectContext, settleRemovedAttachment, verifySharedAttachmentRestore, ProjectAttachmentRelocationApplication,
+import { resolveInstallationProjectContext, firstPublicationReferenceDigests, settleRemovedAttachment, verifySharedAttachmentRestore, ProjectAttachmentRelocationApplication,
   assessInstallationBinding, planSourceRepair, type RegisteredInstallationBinding, type InstallationContextPorts, type AttachmentRegistryPort } from '#engine/index.js';
 import registrationV3Fixture from '../../fixtures/attachment-registration-v3.json' with { type: 'json' };
 const filesystem = await import('#adapters/core/installation-files/internal/filesystem-identity.js');
@@ -71,6 +71,25 @@ async function snapshotBytes(root: string, prefix = ''): Promise<Record<string, 
   }
   return result;
 }
+/** A3-K1: the witness leaves every file of the tree and the journal generation as they were; so does the wizard's real preview entry (host.ts:300)
+ * after it, except SQLite -wal/-shm that its own HEAD scoped reads create for a closed ledger (measured; outside the witness path). */
+async function wizardWitness(root: string, tree: string, options: { env: Record<string, string> }) {
+  const observe = async () => [await snapshotBytes(tree), (await platform.observeBootstrapState(root)).generation] as const, before = await observe();
+  const witness = await verifiedFirstPublicationPolicy(root, 'target', options), { createCliHost } = await import('#composition/core/cli/internal/host.js');
+  expect(await observe()).toEqual(before);
+  const history = await createCliHost({ root, locale: 'en', signal: new AbortController().signal }).previewSetupExecutionPermission(root, 'target', options).then(preview => preview.executionHistory, (error: { code?: string }) => error.code);
+  const after = await observe(); for (const path of Object.keys(after[0])) if (!(path in before[0]) && /\.db-(wal|shm)$/.test(path)) delete after[0][path];
+  expect(after).toEqual(before);
+  return { witness, history };
+}
+/** A3-K2: the real CLI in `root` (in-process, as ATTACH F3) at a person's terminal: exit code and everything printed. */
+async function cliIn(root: string, args: readonly string[], env: Record<string, string>) {
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  for (const key of [...(await loadComposedConfig(root, { env })).cli.agentEnvironment, 'CI']) vi.stubEnv(key, undefined);
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root), writes = [vi.spyOn(process.stdout, 'write'), vi.spyOn(process.stderr, 'write')]; let output = '';
+  writes.forEach(write => write.mockImplementation(((text: string) => { output += text; return true; }) as typeof process.stdout.write));
+  try { return { exit: await cliMain([...args]), output }; } finally { writes.forEach(write => write.mockRestore()); cwd.mockRestore(); vi.unstubAllEnvs(); }
+}
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-attachment-')); roots.push(root);
   const a = join(root, 'A'), b = join(root, 'B'), env = { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: join(root, 'global') }, options = { env };
@@ -91,6 +110,44 @@ async function fixture() {
   return { root, a, b, options, make, selected };
 }
 type AttachmentFixture = Awaited<ReturnType<typeof fixture>>;
+/** A3 (owner K1/K2) on the never-moved attached folder: the CLI refusal names the attach route; form (a) and its no-witness neighbours. */
+async function exerciseA3AttachedFolder(f: AttachmentFixture, target: Awaited<ReturnType<AttachmentFixture['make']>>, document: unknown) {
+  const plain = join(f.root, 'C'); await mkdir(join(plain, '.deckent'), { recursive: true, mode: 0o700 }); await writeFile(join(plain, '.deckent/policy.json'), '{}', { mode: 0o600 }); // A3-K2: re-running the policy installer here stays refused (exit 78, same code, nothing written) and names the attach route; a plain folder keeps its text.
+  const conflict = { en: 'Installation conflicts with existing resources or another recorded transaction.', tr: 'Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.' };
+  const attachRoute = { en: 'This folder is attached to a registered installation, so its first-run policy is not installed again. For an attached folder, use `deckent terminal attach` instead; applying the attachment can also be refused, for example after the disk number changed and was repaired.',
+    tr: 'Bu klasör kayıtlı bir kuruluma bağlı; ilk kurulum politikası yeniden kurulmaz. Bağlı klasör için bunun yerine `deckent terminal attach` kullanın; bağlantıyı uygulamak da reddedilebilir, örneğin disk numarası değişip onarıldıktan sonra.' };
+  for (const [where, scope, text] of [[f.b, 'target', attachRoute], [plain, 'plain', conflict]] as const) {
+    const run = (...extra: string[]) => cliIn(where, ['init', 'policy', '--scope', scope, '--apply', ...extra], f.options.env), tree = await snapshotBytes(f.root);
+    expect(await run('--json')).toEqual({ exit: 78, output: `${JSON.stringify({ code: 'INSTALLATION_PUBLICATION_CONFLICT', message: text.en })}\n` });
+    expect(await run('--lang', 'en')).toEqual({ exit: 78, output: `Error: ${text.en} [INSTALLATION_PUBLICATION_CONFLICT]\n` });
+    expect(await run('--lang', 'tr')).toEqual({ exit: 78, output: `Hata: ${text.tr} [INSTALLATION_PUBLICATION_CONFLICT]\n` });
+    if (where === f.b) expect(await snapshotBytes(f.root)).toEqual(tree);
+  }
+  expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: document, history: 'never' }); // A3-K1 form (a): X = R0 with its original bytes gives the full first root; other accepted bytes after the first observation, or a copy, give none.
+  const refPath = join(f.b, '.deckent/project-attachment.json'), originalRef = await readFile(refPath), written = platform.serializeJsonDocument(await target.store.attachment());
+  const registration = FileProjectAttachmentStore.prototype.registration; let reads = 0;
+  const between = vi.spyOn(FileProjectAttachmentStore.prototype, 'registration').mockImplementation(async function (this: FileProjectAttachmentStore) {
+    if (++reads === 2) await writeFile(refPath, written); return registration.call(this); });
+  try { expect(await verifiedFirstPublicationPolicy(f.b, 'target', f.options)).toBeNull(); } finally { between.mockRestore(); }
+  expect(reads).toBe(2); expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: document, history: 'never' }); // writer's bytes for X = R0
+  await writeFile(refPath, originalRef);
+  const copy = join(f.root, 'B-copy'); await cp(f.b, copy, { recursive: true });
+  expect(await wizardWitness(copy, f.root, f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_CHANGED' }); await rm(copy, { recursive: true });
+  const ledger = join(f.a, '.deckent/state/ledger.db'), source = await loadComposedConfig(f.a, f.options), sidecars = async () => (await readdir(join(f.a, '.deckent/state'))).filter(name => /-(wal|shm)$/.test(name)); // Round b, point 1: both passes read the source ledger through the side-effect-free view (view.ts:10): a closed ledger gains no sidecar, a live WAL's committed pin is seen.
+  openSqliteLedger(ledger, source.storage.sqlite, 'forbid').close(); expect(await sidecars()).toEqual([]); expect(await verifiedFirstPublicationPolicy(f.b, 'target', f.options)).toEqual(document); expect(await sidecars()).toEqual([]);
+  const db = openSqliteLedger(ledger, source.storage.sqlite, 'forbid'), pin = (company: string) => { db.prepare('INSERT OR IGNORE INTO companies(company_id) VALUES(?)').run(company); db.prepare('INSERT INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,?) ON CONFLICT(scope_id) DO UPDATE SET company_id=excluded.company_id').run('source', company, 'admission'); };
+  try { for (const [company, root] of [['foreign', null], [source.company.id, document]] as const) { pin(company); const live = await snapshotBytes(f.a); expect(await verifiedFirstPublicationPolicy(f.b, 'target', f.options)).toEqual(root); expect(await snapshotBytes(f.a)).toEqual(live); } } finally { db.close(); }
+  const journal = productResourcePath(platform.resolveProductLayout({ projectRoot: f.b }), 'installationJournal'), attachedJournal = await readFile(journal), held = join(f.root, 'B-attached'); // Point 2: a standalone journal written at this same path, under the attached state, is no history (R0 is required): the preview says Not now.
+  await rename(f.b, held); await mkdir(f.b, { mode: 0o700 }); await applyPolicyTemplateInstallation(f.b, 'target', f.options); const standalone = await readFile(journal); await rm(f.b, { recursive: true }); await rename(held, f.b);
+  const { checksum: ignored, ...payload } = (await platform.observeBootstrapState(f.b)).record!; void ignored; // attached journal edits: foreign transaction and plan, adopted preimage
+  for (const bytes of [standalone, ...[{ ...payload, transactionId: randomUUID() }, { ...payload, planDigest: 'f'.repeat(64) }, { ...payload, resources: payload.resources.map(item => item.resource === 'bindings' ? { ...item, preimageDigest: item.targetDigest } : item) }].map(record => platform.encodeBootstrapJournal(record))]) {
+    await writeFile(journal, bytes, { mode: 0o600 }); expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: null, history: 'unknown' }); }
+  await writeFile(journal, attachedJournal, { mode: 0o600 }); const observed = await platform.observeBootstrapState(f.b), drift = vi.spyOn(platform, 'observeBootstrapState').mockResolvedValue({ ...observed, generation: 'changed' }).mockResolvedValueOnce(observed);
+  try { expect(await verifiedFirstPublicationPolicy(f.b, 'target', f.options)).toBeNull(); } finally { drift.mockRestore(); } expect(await verifiedFirstPublicationPolicy(f.b, 'target', f.options)).toEqual(document);
+  const configPath = join(f.b, '.deckent/config.json'), config = await readFile(configPath), parsed = JSON.parse(config.toString('utf8')); // R0 present, resolver legacy
+  await writeFile(configPath, JSON.stringify({ ...parsed, installation: { ...parsed.installation, sharedRegistrationId: undefined } })); await rename(refPath, `${refPath}.held`); clearConfigCache();
+  expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: null, history: 'unknown' }); await writeFile(configPath, config); await rename(`${refPath}.held`, refPath); clearConfigCache();
+}
 /** Same existing journey case: keep its real backup/removal/recovery sequence together without adding test declarations. */
 async function exerciseAttachedLifecycle(input: { f: AttachmentFixture; target: Awaited<ReturnType<AttachmentFixture['make']>>;
   attached: Awaited<ReturnType<ProjectAttachmentApplication['apply']>>; original: Awaited<ReturnType<typeof loadConfiguredInstallationIdentity>>;
@@ -111,6 +168,7 @@ async function exerciseAttachedLifecycle(input: { f: AttachmentFixture; target: 
   expect((await loadComposedConfig(f.b, f.options)).layout.root).toBeNull();
   const restoredMove = join(f.root, 'restored-B-moved'); await rename(f.b, restoredMove);
   await relocateConfiguredProjectAttachment(restoredMove, 'target', f.options); f.b = restoredMove;
+  expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: null, history: 'unknown' }); // A3-K1: a person move rewrote the journal, R0 is gone
   expect(await (await loadConfiguredScopeContext(f.b, 'target', f.options, 'read')).path()).toBe(join(f.b, '.deckent/state/ledger.db'));
   await executeConfiguredBackup(f.b, { schemaVersion: 1, action: 'restore', scopeId: 'target', set: backupSet, target: f.b, confirmTarget: f.b }, passphrase, f.options);
   expect(await loadConfiguredInstallationIdentity(f.b, f.options)).toEqual(original);
@@ -409,12 +467,14 @@ describe.skipIf(process.platform !== 'linux')('shared installation / isolated pr
     expect(firstPolicy.grants.some((rule: { id: string }) => rule.id.startsWith('first-run-mcp-progress-'))).toBe(false);
     expect(context.installationLayout).toEqual(source.layout);
     expect(await target.app.apply('target', preview.planDigest, commandId)).toMatchObject({ status: 'attached', attachment: attached.attachment });
+    await exerciseA3AttachedFolder(f, target, context.document);
     // Retained crash prefix: earlier resources published, the last attachment publication and journal commit unfinished.
     await withInstallationJournal(f.b, { timeoutMs: 2000 }, async journal => {
       const observed = await journal.observe(), { checksum: ignored, ...record } = observed.record!; void ignored;
       await journal.write(observed, { ...record, phase: 'pending', blockers: ['POLICY_TEMPLATE_NOT_APPLIED'],
         resources: record.resources.map(resource => ({ ...resource, state: resource.resource === 'projectAttachment' ? 'pending' : 'published' })) });
     });
+    expect(await wizardWitness(f.b, f.root, f.options)).toEqual({ witness: null, history: 'BOOTSTRAP_INSTALLATION_INCOMPLETE' }); // A3-K1: a pending transaction is no history
     await rm(join(f.b, '.deckent/project-attachment.json'));
     const active = await target.store.registration();
     await target.store.hold(() => target.store.write(active, { ...active!, entries: active!.entries.map(entry => ({ ...entry, state: 'pending' })) }));
@@ -835,6 +895,7 @@ async function exerciseA2TerminalReopen() {
   r.devices.target = 30n;
   const before = await r.bytes();
   await expect(r.read()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
+  expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_CHANGED' }); // A3-K1: renumbered, not yet repaired
   expect(await r.bytes()).toEqual(before);
   r.filesystemAt.mockImplementation(async path => ({ status: 'available', identity: path === r.f.b ? { ...r.fsid, value: 'foreign' } : r.fsid }));
   await expect(r.write()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_CHANGED' });
@@ -870,6 +931,7 @@ async function exerciseA2TerminalReopen() {
     entries: [{ attachment: expected }], lineage: { headDevice: '20', pastDevices: [] } });
   expect(JSON.parse(done.identity).binding).toMatchObject({ schemaVersion: 3, device: '20' });
   expect(await r.read()).toMatchObject({ projectId: r.ref.projectId });
+  expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); // A3-K1 form (b): the real A2 L2 repair (v1 -> v2) output gives the full first root through the wizard entry.
   await writeFile(r.refPath, before.local);
   r.devices.target = 40n;
   await expect(r.read()).rejects.toMatchObject({ code: 'PROJECT_ATTACHMENT_DENIED' });
@@ -971,6 +1033,8 @@ async function exerciseA2RefusalsAndRaces() {
   await refuse('PROJECT_ATTACHMENT_PERSON_MISMATCH');
   await state(() => {}, { ...r.ref, projectId: randomUUID() });
   await refuse('PROJECT_ATTACHMENT_DENIED');
+  await state(() => {}, { ...r.ref, schemaVersion: 3 });
+  await refuse('PROJECT_ATTACHMENT_NEWER_RECORD');
   await state(() => {}, r.ref);
   const project = await readFile(r.projectIdentityPath, 'utf8');
   await writeFile(r.projectIdentityPath, JSON.stringify({ ...JSON.parse(project), projectId: randomUUID() }));
@@ -995,6 +1059,7 @@ async function exerciseA2RefusalsAndRaces() {
   r.devices.target = 30n;
   await state(record => { record.entries[0].attachment.location.device = '30'; }, r.ref);
   const localOnlyBefore = await r.bytes();
+  expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_DENIED' }); // A3-K1: local and inventory differ
   expect(JSON.parse(localOnlyBefore.registry).lineage).toMatchObject({ headDevice: '20', filesystemIdentity: r.fsid, pastDevices: [] });
   expect(JSON.parse(localOnlyBefore.identity).binding.device).toBe('20');
   await expect(r.write().catch((error: unknown) => {
@@ -1005,6 +1070,17 @@ async function exerciseA2RefusalsAndRaces() {
   expect(localOnlyAfter.local).not.toBe(localOnlyBefore.local);
   expect(localOnlyAfter).toEqual({ ...localOnlyBefore, local: platform.serializeJsonDocument(r.localAt('30')) });
   expect(JSON.parse(localOnlyAfter.registry).lineage.pastDevices).not.toContain('30');
+  expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); await writeFile(r.refPath, `${JSON.stringify(r.localAt('30'))}\n`); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'unknown' }); // A3-K1 form (b): the A2 writer's output for X gives the full first root; other bytes, or a revocation after the first observation, give none.
+  await writeFile(r.refPath, localOnlyAfter.local); const journalOf = platform.observeBootstrapState, across = async (change: () => Promise<unknown>) => { let calls = 0; const spy = vi.spyOn(platform, 'observeBootstrapState').mockImplementation(async root => { if (++calls === 2) await change(); return journalOf(root); }); // change between the passes (prepare's journal read)
+    try { return await verifiedFirstPublicationPolicy(r.f.b, 'target', r.f.options); } finally { spy.mockRestore(); } };
+  expect(await across(() => r.store.hold(async () => r.store.writeRevocation((await r.store.registration())!, { action: 'revoke', projectId: r.ref.projectId })))).toBeNull(); expect(JSON.parse((await r.bytes()).registry).entries[0].state).toBe('revoked');
+  r.devices.target = 20n; await state(() => {}, r.ref); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); // A3-K1: at the fixture start (hand-written writer bytes: the stated risk) only R0's authority decides once local and inventory agree.
+  expect(await across(async () => { await writeFile(r.registryPath, localOnlyAfter.registry); await writeFile(r.refPath, localOnlyAfter.local); r.devices.target = 30n; })).toBeNull(); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); r.devices.target = 20n; // a valid X changes between the passes; the changed X alone is valid
+  const commandId = randomUUID(); await state(record => { record.entries[0].attachment.commandId = commandId; }, { ...r.ref, commandId }); await expect(r.read()).resolves.toMatchObject({ projectId: r.ref.projectId }); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'unknown' });
+  const rows: [Parameters<typeof state>[0], Parameters<typeof state>[1], string][] = [[record => { record.entries[0].state = 'pending'; }, r.ref, 'INCOMPLETE'], [record => { record.entries[0].state = 'revoked'; }, r.ref, 'REVOKED'], [record => { record.unregistered = true; }, r.ref, 'UNAVAILABLE'], [() => {}, { ...r.ref, commandId: randomUUID() }, 'DENIED'], [() => {}, { ...r.ref, actor: { ...r.ref.actor, subject: 'different' } }, 'PERSON_MISMATCH'], [() => {}, { ...r.ref, projectId: randomUUID() }, 'DENIED'], [record => { record.entries[0].attachment.location.device = '30'; }, r.localAt('30'), 'CHANGED'], [() => {}, { ...r.ref, schemaVersion: 3 } as Parameters<typeof state>[1], 'NEWER_RECORD'], [() => { r.filesystemAt.mockImplementation(async path => ({ status: 'available', identity: path === r.f.b ? r.fsid : { ...r.fsid, value: 'foreign' } })); }, r.ref, 'UNAVAILABLE']]; // A3-K1: each refusal through the real wizard preview at the healthy device 20, so the row's own cause decides (the preview names it).
+  for (const [edit, local, code] of rows) { await state(edit, local); expect(await wizardWitness(r.f.b, r.f.root, r.f.options), code).toEqual({ witness: null, history: `PROJECT_ATTACHMENT_${code}` }); } r.filesystemAt.mockResolvedValue({ status: 'available', identity: r.fsid });
+  await writeFile(r.refPath, '{invalid'); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_INVALID' }); await state(() => {}, r.ref); await writeFile(r.projectIdentityPath, JSON.stringify({ ...JSON.parse(project), projectId: randomUUID() })); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_CHANGED' });
+  await writeFile(r.projectIdentityPath, project); await state(record => { record.lineage.toBinding = 'f'.repeat(64); }, r.ref); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); // lineage gates only A2 repair, never the read
 
   r.devices.target = 40n;
   await state(() => {}, r.ref);
@@ -1192,6 +1268,10 @@ it('attachment reader: L2 assessment, frozen lineage rules, exact admission and 
   const identity = 'filesystemIdentity' in location ? location.filesystemIdentity : null;
   const observed = { ...location, device: '20' };
   expect(assessAttachmentLocation(location, observed)).toBe(true);
+  const digests = { original: 'original', written: 'written' }; // A3-K1: the pure witness rule, device-only class
+  expect([firstPublicationReferenceDigests(reference, reference, digests), firstPublicationReferenceDigests(reference, { ...reference, location: observed }, digests),
+    ...[{ canonicalRoot: '/different' }, { inode: '3' }].map(patch => firstPublicationReferenceDigests(reference, { ...reference, location: { ...location, ...patch } }, digests))])
+    .toEqual([['original', 'written'], ['written'], [], []]);
   for (const patch of [{ filesystemIdentity: null }, { filesystemIdentity: { kind: 'other', value: identity!.value } },
     { filesystemIdentity: { ...identity!, value: 'other' } }, { canonicalRoot: '/different' }, { inode: '3' }]) {
     expect(assessAttachmentLocation(location, { ...observed, ...patch })).toBe(false);

@@ -661,8 +661,10 @@ const coreDefinitions: ErrorDefinitions = errorTable('core', {
   UNINSTALL_SERVICE_RUNNING: { category: 'error', render: (p, l) => ({ message: p['unit'] ? t('error.UNINSTALL_SERVICE_RUNNING', p, l) : t('error.UNINSTALL_SERVICE_RUNNING_UNMANAGED', p, l) }) },
 }, plainErrors('error.', {
   UNINSTALL_UNCERTAIN_EFFECTS: 'error', UNINSTALL_UNCERTAIN_MANAGED: 'error', UNINSTALL_DELIVERY_QUEUED: 'error', UNINSTALL_DELIVERY_TARGET_REQUIRED: 'error',
-  UNINSTALL_RETIRED: 'error', UNINSTALL_FLAG_MOVED: 'error', INSTALLATION_PUBLICATION_INVALID: 'config', INSTALLATION_PUBLICATION_CONFLICT: 'config',
+  UNINSTALL_RETIRED: 'error', UNINSTALL_FLAG_MOVED: 'error', INSTALLATION_PUBLICATION_INVALID: 'config',
 }), {
+  INSTALLATION_PUBLICATION_CONFLICT: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'attached-folder'
+    ? t('error.INSTALLATION_PUBLICATION_CONFLICT.attachedFolder', {}, l) : t('error.INSTALLATION_PUBLICATION_CONFLICT', {}, l) }) },
   INSTALLATION_PUBLICATION_CHANGED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'governed-policy-advanced'
     ? t('error.INSTALLATION_PUBLICATION_CHANGED.governedPolicy', {}, l) : t('error.INSTALLATION_PUBLICATION_CHANGED', {}, l) }) },
   WORKER_VERSION_COUNTER_TAKEN: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_VERSION_COUNTER_TAKEN', { detail: '', ...p }, l) }) },
