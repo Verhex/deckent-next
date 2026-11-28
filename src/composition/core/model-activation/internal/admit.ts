@@ -83,7 +83,7 @@ async function admit(root: string, input: ModelActivationCommand, options: Confi
 }
 
 async function planWorkerWrites(root: string, scopeId: string, reference: ModelReference, commandId: string, action: 'activate' | 'deactivate',
-  options: ConfigLoadOptions, context: Context, authority: ActivationAuthority, workerOnly: boolean) {
+  options: ConfigLoadOptions, context: Context, authority: ActivationAuthority, workerOnly: boolean, plannedChannel?: number) {
   const listed = await inspectConfiguredModelCatalog(root, { schemaVersion: 1, scopeId, channelId: reference.providerId }, options, { modelUse: false });
   const channel = listed.channels.find(row => row.access === 'allowed' && row.providerVersion === reference.providerVersion);
   const declared = workerOnly ? null : await configuredDeclarations(context);
@@ -106,12 +106,17 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
   }
   for (const [index, modelId] of targets.entries()) {
     const current = modelId === null ? channel.activation : model.activation;
-    if (current?.state === (action === 'activate' ? 'active' : 'inactive')) continue;
     const child = { schemaVersion: 1 as const, commandId: workerOnly ? `${prefix}.${index}` : `${prefix}-${index}`, scopeId, action,
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
+    const done = (revision: number | null) => { if (modelId === null) completed.channel = revision; return revision !== null; };
+    if (current?.state === (action === 'activate' ? 'active' : 'inactive')) {
+      // The channel is already open although the caller's plan saw it closed: only this command's own channel child (its child id and the
+      // planned revision, the same rule) hands its verified receipt's revision on; another command's opening hands nothing on.
+      if (modelId === null && action === 'activate' && plannedChannel !== undefined) done(await reached(context, { ...child, expectedRevision: plannedChannel }));
+      continue;
+    }
     // A chat receipt replay with a newly missing child still requires a witness. A concurrent delivery of the same command may complete
     // the child after its receipt was looked up: the revision conflict that follows is reconciled before it stands.
-    const done = (revision: number | null) => { if (modelId === null) completed.channel = revision; return revision !== null; };
     const planned = await planCatalogWrite(context, authority, child).catch(async (error: unknown) => {
       if (action === 'activate' && error instanceof ModelCatalogError && error.code === 'MODEL_CATALOG_REVISION_CONFLICT' && done(await reached(context, child))) return null;
       throw error;
@@ -151,12 +156,13 @@ const reached = async (context: Context, child: Exclude<ModelCatalogCommand, { a
 
 /** `written`: at least one child really written by this delivery; `channel`: the channel revision its own channel child wrote, else null. */
 type WorkerWrite = Readonly<{ written: boolean; channel: number | null }>;
-/** A named worker-only model has no chat declaration or whole-channel cascade. */
+/** A named worker-only model has no chat declaration or whole-channel cascade. `plannedChannel`: the closed channel's revision in the
+ * caller's own plan (the expected revision this command's channel child is built with). */
 export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {},
-  beforeWrite?: () => Promise<void>): Promise<WorkerWrite> {
+  beforeWrite?: () => Promise<void>, plannedChannel?: number): Promise<WorkerWrite> {
   try {
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
-    const { writes, conflict, completed } = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
+    const { writes, conflict, completed } = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true, plannedChannel);
     if (!writes.length && !conflict) return { written: false, channel: completed };
     await authority.witness('models.activate');
     if (conflict) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
