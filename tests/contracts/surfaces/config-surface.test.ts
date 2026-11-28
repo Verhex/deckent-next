@@ -126,6 +126,13 @@ it('unset removes the authored key and reports the remaining effective value and
   output.length = 0; await configCommand(['config', 'get', 'cli.agentEnvironment.1', '--lang', 'en'], ctx);
   expect(output.join('')).toContain('[REDACTED]'); expect(output.join('')).not.toContain('AKIAABCDEFGHIJKLMNOP');
   output.length = 0; await configCommand(['config', '--lang', 'en'], ctx); expect(output.join('')).not.toContain('cli.agentEnvironment.0');
+  // K3: an index unset reports the layer that was written; an element absent there is "not defined" in that layer, never a default source.
+  await writeFile(join(global, 'config.json'), JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT', 'B_AGENT'] } }));
+  await writeFile(path, JSON.stringify({ cli: { agentEnvironment: ['P_AGENT'] } })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--global', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from global. Effective value: B_AGENT (source: global)');
+  output.length = 0; await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from project. Effective value: not defined (source: project)');
 });
 
 it('explain uses the requested locale and the nested key’s own catalog description', async () => {

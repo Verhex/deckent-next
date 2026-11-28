@@ -1,6 +1,6 @@
 import { configSchemaNode, ProjectedConfigNode, projectConfigSchema, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
-import { AGENT_ENVIRONMENT_KEY, CONFIG_FIELDS, agentEnvironmentFloor, agentEnvironmentInLayer, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, CONFIG_FIELDS, agentEnvironmentFloor, agentEnvironmentInLayer, isAgentEnvironmentIndex, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
@@ -126,10 +126,10 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const sourcePath = (definition.derivedFrom?.[keyPath] ?? keyPath).split('.');
   // K3: an index of the floored marker list is the written layer's own element (what `set`/`unset` edit, absent: not defined); the whole key's
   // source is the project only when it adds a name, else the installation when its VALID list made the floor, else the default.
-  const own = keyPath.startsWith(`${AGENT_ENVIRONMENT_KEY}.`), whole = keyPath === AGENT_ENVIRONMENT_KEY, element = own ? atConfigPath(snapshot.document, path) : undefined;
+  const own = isAgentEnvironmentIndex(keyPath), whole = keyPath === AGENT_ENVIRONMENT_KEY, element = own ? atConfigPath(snapshot.document, path) : undefined;
   const added = whole ? agentEnvironmentFloor(snapshot.global, snapshot.project).length > agentEnvironmentFloor(snapshot.global, {}).length : atConfigPath(snapshot.project, sourcePath) !== undefined;
   const installed = whole ? agentEnvironmentInLayer(snapshot.global) : atConfigPath(snapshot.global, sourcePath) !== undefined;
-  const source = own ? element === undefined ? 'default' : snapshot.layer : env ? 'env' : added ? 'project' : installed ? 'global' : 'default';
+  const source = own ? snapshot.layer : env ? 'env' : added ? 'project' : installed ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);

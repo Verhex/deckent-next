@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
-import { AGENT_ENVIRONMENT_KEY, configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { configDisplayView, getConfigValue, isAgentEnvironmentIndex, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
 import { isSensitiveConfigKey, redactSensitive, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
@@ -69,7 +69,7 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
     const display = configDisplayView(config);
     // K3: an index of the floored marker list is the written layer's own element (the one `set`/`unset` edit), from the same field view as `explain`.
-    if (keyPath?.startsWith(`${AGENT_ENVIRONMENT_KEY}.`) && context.configApplication) {
+    if (keyPath !== undefined && isAgentEnvironmentIndex(keyPath) && context.configApplication) {
       const [field] = (await context.configApplication(root, { ...options, globalOnly: parsed.global }).inspect({ keyPath, layer: parsed.global ? 'global' : 'project' })).fields;
       emit(field?.value ?? null, { ...sinks, mode: config.output_mode, render: data => data === null ? t('config.surface.notDefined', {}, locale) : formatValue(data) }); return;
     }
@@ -128,7 +128,8 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const outcome = await app.submit(action, action === 'set' ? { ...input, value } : input);
   if (outcome.status === 'approval-pending') { emit(outcome, { ...sinks, render: () => renderConfigPending(outcome, locale, 'cli').join('\n') }); return; }
   const { result } = outcome;
-  const remaining = action === 'unset' ? await app.explain({ keyPath }) : undefined;
+  // The remaining value is read on the layer that was written (an index of the marker list is that layer's own element).
+  const remaining = action === 'unset' ? (await app.inspect({ keyPath, layer })).fields.find(item => item.key === keyPath) : undefined;
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
   emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale, remaining).join('\n') });
@@ -253,8 +254,8 @@ export async function terminalConfigWrite(root: string, request: Omit<ConfigWrit
     return { status: outcome.status, lines, approvalId: outcome.approval.approvalId };
   }
   pendingWrites.delete(key);
-  const field = await context.configApplication!(root, options).explain({ keyPath: request.keyPath });
-  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field.apply, outcome.result, null, locale, request.action === 'unset' ? field : undefined), approvalId: outcome.approvalId };
+  const field = (await context.configApplication!(root, options).inspect({ keyPath: request.keyPath, layer })).fields.find(item => item.key === request.keyPath);
+  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field!.apply, outcome.result, null, locale, request.action === 'unset' ? field : undefined), approvalId: outcome.approvalId };
 }
 
 /** `/config key=value` (T3 L4 shortcut): the key's schema reads the text (the text itself, else its JSON); the project layer is written. */

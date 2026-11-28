@@ -128,6 +128,16 @@ describe('config-change approval: request, decision, apply', () => {
     await f.decide(pending.approval.approvalId, 'allow', 'decide-unset');
     expect(await f.app.submit('unset', { ...f.command, commandId: 'cmd-unset', keyPath: 'max_workers', expect: pending.expect })).toMatchObject({ status: 'applied' });
     expect(JSON.parse((await bytesOf(f.path))!).max_workers).toBeUndefined();
+    // K3: an index of the floored marker list: the card's before is the written layer's own element, and an index unset says what really goes.
+    const installed = resolveGlobalConfigPaths(f.options.env).platformPath; await mkdir(dirname(installed), { recursive: true });
+    await writeFile(installed, JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT'] } }));
+    await writeFile(f.path, JSON.stringify({ ...JSON.parse((await bytesOf(f.path))!), cli: { agentEnvironment: ['MY_AGENT'] } })); clearConfigCache();
+    await f.writePolicy(principals => [{ id: 'company-config-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:cli.agentEnvironment.0'] } }]);
+    const entry = await f.app.submit('set', { ...f.command, commandId: 'cmd-entry', keyPath: 'cli.agentEnvironment.0', value: 'NEW_AGENT' });
+    const removal = await f.app.submit('unset', { ...f.command, commandId: 'cmd-entry-unset', keyPath: 'cli.agentEnvironment.0' });
+    if (entry.status !== 'approval-pending' || removal.status !== 'approval-pending') throw new Error('expected pending');
+    expect(entry.approval.summary).toBe('Setting will change: cli.agentEnvironment.0 MY_AGENT → NEW_AGENT (project)');
+    expect(removal.approval.summary).toBe('List entry will be removed: cli.agentEnvironment.0 MY_AGENT (project); the entries after it move up one place');
   });
 });
 

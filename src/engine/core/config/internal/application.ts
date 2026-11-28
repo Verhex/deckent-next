@@ -3,7 +3,7 @@ import { capabilityProfileChange, assertCatalogProfileBindings } from './model-p
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
-import { isCodedError, digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
+import { isAgentEnvironmentIndex, isCodedError, digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
 import { allConfigKeys, isDerivedConfigPath, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
@@ -206,7 +206,9 @@ function assertSubscriptionProfilesByPerson(input: ConfigWriteInput, before: unk
 function configChangeSubject(snapshot: ConfigSnapshot, input: ConfigWriteInput, unset: boolean, ruleId: string): ConfigChangeSubject {
   const path = configPath(input.keyPath);
   return Object.freeze({ kind: 'config-change' as const, commandId: input.commandId, action: unset ? 'unset' as const : 'set' as const, layer: snapshot.layer,
-    keyPath: input.keyPath, before: configDisplayText(snapshot, input.keyPath, atConfigPath(snapshot.effective, path), CONFIG_CHANGE_DISPLAY_MAX),
+    // K3: the marker list's index is the written layer's own element, so its before comes from the one field view (as `get`/`explain` show it).
+    keyPath: input.keyPath, before: configDisplayText(snapshot, input.keyPath, isAgentEnvironmentIndex(input.keyPath) ? configFieldView(snapshot, input.keyPath).value
+      : atConfigPath(snapshot.effective, path), CONFIG_CHANGE_DISPLAY_MAX),
     after: unset ? null : configDisplayText(snapshot, input.keyPath, input.value, CONFIG_CHANGE_DISPLAY_MAX), expectDigest: snapshot.digest,
     valueDigest: unset ? null : sha256(encodeCommandProjection('config-change-value:1', { value: input.value ?? null })), ruleId });
 }

@@ -95,6 +95,8 @@ export async function loadConfigLanguage(projectRoot = process.cwd(), options: P
 }
 /** K3: the one config key whose effective value is a floor union of the layers (surfaces and the config engine name it through this). */
 export const AGENT_ENVIRONMENT_KEY = 'cli.agentEnvironment';
+/** An indexed path of that key: it always means the written layer's own array (never an effective position). */
+export const isAgentEnvironmentIndex = (keyPath: string) => keyPath.startsWith(`${AGENT_ENVIRONMENT_KEY}.`);
 const agentList = (layer: unknown) => isRecord(layer) && isRecord(layer['cli']) && Object.hasOwn(layer['cli'], 'agentEnvironment') ? layer['cli']['agentEnvironment'] : undefined;
 const agentNames = (layer: unknown) => { const value = agentList(layer); return value === undefined ? undefined : CORE_SCHEMA.shape.cli.safeParse({ agentEnvironment: value }).data?.agentEnvironment; };
 /** K3 (owner 2026-11-27): the one effective `cli.agentEnvironment` of every reader. The installation layer's list when it is set (an empty one

@@ -4,7 +4,7 @@ import { ConfigApplication, ConfigApplicationError, ConfigChangeApprovalBroker, 
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
 import { attestLocalInteractiveTerminal, configLayersShareFile, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
   resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
-import { isCodedError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { isAgentEnvironmentIndex, isCodedError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { configuredMemoryRolloutPrecondition } from '#composition/core/memory-rollout/index.js';
 export async function resolveConfiguredConfigPrincipal(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<VerifiedPrincipal> {
@@ -47,7 +47,9 @@ const cardValue = (text: string) => /^"(?:[^"\\]|\\.)*"$/.test(text) ? JSON.pars
 function configChangeSummary(subject: ConfigChangeSubject, locale: Locale) {
   const values = { key: subject.keyPath, before: cardValue(subject.before), after: subject.after === null ? '' : cardValue(subject.after),
     layer: subject.layer === 'global' ? t('config.surface.source.global', {}, locale) : t('config.surface.source.project', {}, locale) };
-  return subject.action === 'set' ? t('config.approval.summary.set', values, locale) : t('config.approval.summary.unset', values, locale);
+  // K3: removing an index of the marker list takes that entry out of the layer's own list; no lower layer's value comes back at that index.
+  return subject.action === 'set' ? t('config.approval.summary.set', values, locale)
+    : isAgentEnvironmentIndex(subject.keyPath) ? t('config.approval.summary.unsetEntry', values, locale) : t('config.approval.summary.unset', values, locale);
 }
 /**
  * T3 L2 CONFIG-APPROVAL: the approval port of the configured write path — the principal's current policy decides (`evaluateConfigWrite`), the

@@ -2,6 +2,7 @@
   "config.field.configFile": "Config yedek saklama ve yazma kilidi bekleme sınırları",
   "config.approval.summary.set": "ayar değişecek: {key} {before} → {after} ({layer})",
   "config.approval.summary.unset": "ayar kaldırılacak: {key} {before} → bir alt katmandaki değer ({layer})",
+  "config.approval.summary.unsetEntry": "liste öğesi kaldırılacak: {key} {before} ({layer}); sonraki öğeler bir sıra yukarı kayar",
   "config.approval.pending": "Hiçbir şey yazılmadı; {id} onayı bekliyor. Ne: {summary}",
   "config.approval.resubmitCli": "Terminalde /approvals ya da deckent approval decide --input <JSON dosyası|-> ile karar verin. Onaydan sonra uygulamak için aynı komutu --command-id {commandId} --expect {expect} ile yeniden çalıştırın.",
   "config.approval.resubmitTerminal": "/approvals ile karar verin. Onaydan sonra /config içinde aynı değeri ve katmanı yeniden seçin (satır kipinde: komutu yineleyin).",
