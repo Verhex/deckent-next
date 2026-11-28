@@ -365,23 +365,27 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   // channel open cascades to chat-on models): this delivery writes only the model, and the second target's wide check does not take the
   // outside revision as this connect's own: it stops; the first model's write stays. The channel row (a) wrote stands in for that command.
   const [opening] = f.rows("SELECT * FROM model_catalog_activations WHERE channel_id='openai-api' AND model_id=''");
+  const worker = activationOwners.activateConfiguredWorkerModel;
+  const outside = async (commandId: string) => {
+    const firsts: string[] = [];
+    const opens = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
+      if (!firsts.length) {
+        const db = new DatabaseSync(f.ledger);
+        try { db.prepare('INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)')
+          .run(...(['scope_id', 'channel_id', 'model_id', 'revision', 'state', 'record'] as const).map(column => opening![column] as string | number)); } finally { db.close(); }
+      }
+      firsts.push(args[2].modelId);
+      return worker(...args);
+    });
+    try {
+      await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId }, f.options, { registry: localRegistry }))
+        .rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
+    } finally { opens.mockRestore(); }
+    expect.soft(firsts).toHaveLength(1);
+    expect.soft(activeRows()).toEqual([{ model_id: '' }, { model_id: expect.any(String) }]);
+  };
   closeChannel();
-  const worker = activationOwners.activateConfiguredWorkerModel, firsts: string[] = [];
-  const opens = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
-    if (!firsts.length) {
-      const db = new DatabaseSync(f.ledger);
-      try { db.prepare('INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)')
-        .run(...(['scope_id', 'channel_id', 'model_id', 'revision', 'state', 'record'] as const).map(column => opening![column] as string | number)); } finally { db.close(); }
-    }
-    firsts.push(args[2].modelId);
-    return worker(...args);
-  });
-  try {
-    await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId: 'pull-outside' }, f.options, { registry: localRegistry }))
-      .rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
-  } finally { opens.mockRestore(); }
-  expect.soft(firsts).toHaveLength(1);
-  expect.soft(activeRows()).toEqual([{ model_id: '' }, { model_id: expect.any(String) }]);
+  await outside('pull-outside');
   // (c) Another delivery of the SAME worker command completes the first target's children right before this one writes (T25): this
   // delivery writes nothing, hands on the channel revision from its channel child's verified receipt, and the next targets go on.
   closeChannel();
@@ -406,19 +410,34 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   // wide check and before this delivery's own catalog listing (the worker's entry is that seam). This delivery skips both children, is not
   // written again, hands on its channel child's verified receipt revision (its child id, the planned revision) and the next targets go on.
   // (b) above is the same early window for an outside command: no receipt of this command, nothing handed on, refused as before.
+  const early = async (commandId: string) => {
+    const results: unknown[] = [];
+    const spy = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
+      if (!results.length) { await worker(...args); results.push(await worker(...args)); return results[0] as Awaited<ReturnType<typeof worker>>; }
+      return worker(...args);
+    });
+    try { return { outcome: await connectConfiguredModel(f.project, { ...pull, commandId }, f.options, { registry: localRegistry }).catch((error: unknown) => error), results }; }
+    finally { spy.mockRestore(); }
+  };
+  const revisions = () => f.rows("SELECT revision FROM model_catalog_activations WHERE channel_id='openai-api' AND state='active'").map(row => row['revision']);
   closeChannel();
-  const results: unknown[] = [];
-  const early = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
-    if (!results.length) { await worker(...args); results.push(await worker(...args)); return results[0] as Awaited<ReturnType<typeof worker>>; }
-    return worker(...args);
-  });
-  try {
-    await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId: 'pull-early' }, f.options, { registry: localRegistry }))
-      .resolves.toMatchObject({ status: 'connected' });
-  } finally { early.mockRestore(); }
-  expect.soft(results).toEqual([{ written: false, channel: 1 }]);
-  expect.soft(f.rows("SELECT revision FROM model_catalog_activations WHERE channel_id='openai-api' AND state='active'").map(row => row['revision'])).toEqual(
-    Array(opened.models!.filter(row => row.state === 'connected').length + 1).fill(1));
+  const before = await early('pull-early');
+  expect.soft(before.outcome).toMatchObject({ status: 'connected' });
+  expect.soft(before.results).toEqual([{ written: false, channel: 1 }]);
+  expect.soft(revisions()).toEqual(Array(opened.models!.filter(row => row.state === 'connected').length + 1).fill(1));
+  // (e) The same early race when THIS connect registers the missing catalog (no channel in its plan): the first target's wide check
+  // accepted an empty activation, so this command's channel child is expected at revision 0 and its verified receipt is handed on.
+  const unregister = () => { const db = new DatabaseSync(f.ledger); try { for (const table of ['model_catalog_activations', 'model_catalog_models', 'model_catalog_channels'])
+    db.prepare(`DELETE FROM ${table} WHERE channel_id='openai-api'`).run(); } finally { db.close(); } };
+  unregister();
+  const registers = await early('pull-early-registers');
+  expect.soft(registers.outcome).toMatchObject({ status: 'connected', steps: { catalog: 'written' } });
+  expect.soft(registers.results).toEqual([{ written: false, channel: 1 }]);
+  expect.soft(revisions()).toEqual(Array(opened.models!.filter(row => row.state === 'connected').length + 1).fill(1));
+  // (f) The outside opening of (b) on that registering path: no receipt of this command's channel child at the expected revision 0, so
+  // nothing is handed on and the next worker target stops before its write; the first model's write stays.
+  unregister();
+  await outside('pull-outside-registers');
 });
 
 it.skipIf(process.platform !== 'linux')('explicit model state writes both owners; conflicting legacy rows remain byte-identical through read-only inspection', async () => {
