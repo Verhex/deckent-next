@@ -34,7 +34,7 @@ import { ProjectAttachmentApplication } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, DeckentError } from '#platform/index.js';
 import { assessAttachmentLocation, readableInstallationRegistrationSchema, installationRegistrationSchema,
   normalizeAttachmentRegistration, attachmentRegistrationAllowance,
-  countMismatchedAttachments, installationIdentitySchema, type AttachmentRevocation, type ReadableInstallationRegistration } from '#domain/index.js';
+  countMismatchedAttachments, installationIdentitySchema, type AttachmentRevocation, type ReadableInstallationRegistration, type ReadableProjectAttachment } from '#domain/index.js';
 import { resolveInstallationProjectContext, firstPublicationReferenceDigests, settleRemovedAttachment, verifySharedAttachmentRestore, ProjectAttachmentRelocationApplication,
   assessInstallationBinding, planSourceRepair, type RegisteredInstallationBinding, type InstallationContextPorts, type AttachmentRegistryPort } from '#engine/index.js';
 import registrationV3Fixture from '../../fixtures/attachment-registration-v3.json' with { type: 'json' };
@@ -114,8 +114,8 @@ type AttachmentFixture = Awaited<ReturnType<typeof fixture>>;
 async function exerciseA3AttachedFolder(f: AttachmentFixture, target: Awaited<ReturnType<AttachmentFixture['make']>>, document: unknown) {
   const plain = join(f.root, 'C'); await mkdir(join(plain, '.deckent'), { recursive: true, mode: 0o700 }); await writeFile(join(plain, '.deckent/policy.json'), '{}', { mode: 0o600 }); // A3-K2: re-running the policy installer here stays refused (exit 78, same code, nothing written) and names the attach route; a plain folder keeps its text.
   const conflict = { en: 'Installation conflicts with existing resources or another recorded transaction.', tr: 'Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.' };
-  const attachRoute = { en: 'This folder is attached to a registered installation, so its first-run policy is not installed again. For an attached folder, use `deckent terminal attach` instead; applying the attachment can also be refused, for example after the disk number changed and was repaired.',
-    tr: 'Bu klasör kayıtlı bir kuruluma bağlı; ilk kurulum politikası yeniden kurulmaz. Bağlı klasör için bunun yerine `deckent terminal attach` kullanın; bağlantıyı uygulamak da reddedilebilir, örneğin disk numarası değişip onarıldıktan sonra.' };
+  const attachRoute = { en: 'This folder is configured to use a shared installation. The first-run policy was not applied again. Use `deckent terminal attach` instead; applying the attachment can also be refused, for example after the disk number changed and was repaired.',
+    tr: 'Bu klasör ortak bir kurulum kullanacak şekilde yapılandırılmış. İlk kurulum politikası yeniden uygulanmadı. Bunun yerine `deckent terminal attach` kullanın; bağlantıyı uygulamak da reddedilebilir, örneğin disk numarası değişip onarıldıktan sonra.' };
   for (const [where, scope, text] of [[f.b, 'target', attachRoute], [plain, 'plain', conflict]] as const) {
     const run = (...extra: string[]) => cliIn(where, ['init', 'policy', '--scope', scope, '--apply', ...extra], f.options.env), tree = await snapshotBytes(f.root);
     expect(await run('--json')).toEqual({ exit: 78, output: `${JSON.stringify({ code: 'INSTALLATION_PUBLICATION_CONFLICT', message: text.en })}\n` });
@@ -1080,7 +1080,7 @@ async function exerciseA2RefusalsAndRaces() {
   const rows: [Parameters<typeof state>[0], Parameters<typeof state>[1], string][] = [[record => { record.entries[0].state = 'pending'; }, r.ref, 'INCOMPLETE'], [record => { record.entries[0].state = 'revoked'; }, r.ref, 'REVOKED'], [record => { record.unregistered = true; }, r.ref, 'UNAVAILABLE'], [() => {}, { ...r.ref, commandId: randomUUID() }, 'DENIED'], [() => {}, { ...r.ref, actor: { ...r.ref.actor, subject: 'different' } }, 'PERSON_MISMATCH'], [() => {}, { ...r.ref, projectId: randomUUID() }, 'DENIED'], [record => { record.entries[0].attachment.location.device = '30'; }, r.localAt('30'), 'CHANGED'], [() => {}, { ...r.ref, schemaVersion: 3 } as Parameters<typeof state>[1], 'NEWER_RECORD'], [() => { r.filesystemAt.mockImplementation(async path => ({ status: 'available', identity: path === r.f.b ? r.fsid : { ...r.fsid, value: 'foreign' } })); }, r.ref, 'UNAVAILABLE']]; // A3-K1: each refusal through the real wizard preview at the healthy device 20, so the row's own cause decides (the preview names it).
   for (const [edit, local, code] of rows) { await state(edit, local); expect(await wizardWitness(r.f.b, r.f.root, r.f.options), code).toEqual({ witness: null, history: `PROJECT_ATTACHMENT_${code}` }); } r.filesystemAt.mockResolvedValue({ status: 'available', identity: r.fsid });
   await writeFile(r.refPath, '{invalid'); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_INVALID' }); await state(() => {}, r.ref); await writeFile(r.projectIdentityPath, JSON.stringify({ ...JSON.parse(project), projectId: randomUUID() })); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: null, history: 'PROJECT_ATTACHMENT_CHANGED' });
-  await writeFile(r.projectIdentityPath, project); await state(record => { record.lineage.toBinding = 'f'.repeat(64); }, r.ref); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); // lineage gates only A2 repair, never the read
+  await writeFile(r.projectIdentityPath, project); await state(record => { record.lineage.toBinding = 'f'.repeat(64); }, r.ref); expect(await wizardWitness(r.f.b, r.f.root, r.f.options)).toEqual({ witness: (await r.read()).document, history: 'never' }); for (const [device, root] of [['1'.repeat(21), null], ['30', (await r.read()).document]] as const) { const v2 = { ...r.ref, schemaVersion: 2, location: { ...r.ref.location, device, filesystemIdentity: r.fsid } } as Parameters<typeof state>[1]; await state(record => { record.entries[0].attachment = v2; }, v2); expect(await wizardWitness(r.f.b, r.f.root, r.f.options), device).toEqual({ witness: root, history: root ? 'never' : 'unknown' }); } // lineage gates only A2 repair, never the read; P1: a v2 no repair can write (21-digit device) is no witness, a producible v2 keeps the root
 
   r.devices.target = 40n;
   await state(() => {}, r.ref);
@@ -1268,10 +1268,10 @@ it('attachment reader: L2 assessment, frozen lineage rules, exact admission and 
   const identity = 'filesystemIdentity' in location ? location.filesystemIdentity : null;
   const observed = { ...location, device: '20' };
   expect(assessAttachmentLocation(location, observed)).toBe(true);
-  const digests = { original: 'original', written: 'written' }; // A3-K1: the pure witness rule, device-only class
-  expect([firstPublicationReferenceDigests(reference, reference, digests), firstPublicationReferenceDigests(reference, { ...reference, location: observed }, digests),
-    ...[{ canonicalRoot: '/different' }, { inode: '3' }].map(patch => firstPublicationReferenceDigests(reference, { ...reference, location: { ...location, ...patch } }, digests))])
-    .toEqual([['original', 'written'], ['written'], [], []]);
+  const digests = { original: 'original', written: 'written' }, first = { ...reference, schemaVersion: 1 as const, location: { canonicalRoot: location.canonicalRoot, device: location.device, inode: location.inode } }; // A3-K1: the witness rule shares the repair's production contract
+  const pairs: [ReadableProjectAttachment, ReadableProjectAttachment][] = [[reference, reference], [reference, { ...reference, location: observed }], [first, first], [first, { ...reference, location: observed }], [first, { ...reference, location: { ...observed, device: '1'.repeat(21) } }],
+    ...[{ canonicalRoot: '/different' }, { inode: '3' }].map(patch => [first, { ...reference, location: { ...location, ...patch } }] as [ReadableProjectAttachment, ReadableProjectAttachment])];
+  expect(pairs.map(([a, b]) => firstPublicationReferenceDigests(a, b, digests))).toEqual([['original', 'written'], [], ['original', 'written'], ['written'], [], [], []]);
   for (const patch of [{ filesystemIdentity: null }, { filesystemIdentity: { kind: 'other', value: identity!.value } },
     { filesystemIdentity: { ...identity!, value: 'other' } }, { canonicalRoot: '/different' }, { inode: '3' }]) {
     expect(assessAttachmentLocation(location, { ...observed, ...patch })).toBe(false);

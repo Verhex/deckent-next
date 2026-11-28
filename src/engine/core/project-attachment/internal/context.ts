@@ -86,13 +86,6 @@ export function sameProjectAttachmentAuthority(left: ProjectAttachment, right: P
   void ignoredLeft; void ignoredRight; void versionLeft; void versionRight;
   return isDeepStrictEqual(a, b);
 }
-/** Owner K1 (A3): the digests of on-disk bytes at which the verified current reference still witnesses the first publication's: same
- * authority, root and inode only (a device-number repair); its original bytes when it is that reference, else the repair writer's exact output. */
-export function firstPublicationReferenceDigests(first: ProjectAttachment, current: ProjectAttachment, digests: { readonly original: string; readonly written: string }): readonly string[] {
-  if (!sameProjectAttachmentAuthority(first, current) || first.location.canonicalRoot !== current.location.canonicalRoot
-    || first.location.inode !== current.location.inode) return [];
-  return isDeepStrictEqual(first, current) ? [digests.original, digests.written] : [digests.written];
-}
 
 export async function matchesObservedAttachmentLocation(ports: Pick<InstallationContextPorts, 'observeFilesystemIdentity'>,
   retained: ReadableAttachmentLocation, observed: AttachmentLocation) {

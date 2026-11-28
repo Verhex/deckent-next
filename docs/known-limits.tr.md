@@ -1016,6 +1016,9 @@ denetim kayıtlarında olduğu gibi politika dosyasında yazıldığı biçimde 
   ile kaydedilmiş her çağrının okunurken `MODEL_INVOCATION_CORRUPT` vermesine, yeni konuları içeren denetim sayfalarının
   tamamının `AUDIT_INTEGRITY` ile ve `cli.observation` içeren işçi dökümlerinin tamamının durmasına neden olur.
   Yeni denetim kayıtlarını asla budamayın.
+- **Kurulum sihirbazının yürütme izni önizlemesi SQLite yan dosyaları bırakabilir.** Önizlemenin kendi kapsam okuması kaynak ve hedef
+  ledger'ları açar; temiz kapatılmış bir ledger'ın yanında `ledger.db-shm` ve boş bir `ledger.db-wal` bırakabilir. Bu, ilk yayın
+  tanığının (tanık özel bir kopyayı okur) değil önizlemenin okumasıdır ve hiçbir kaydı değiştirmez.
 
 - **Docker ayarı olmayan yapılandırmayı eski build okuyamaz (alpha.63, R8b).** `execution` yalnız `git` taşıdığında alpha.63 öncesi build
   config'i katı şemayla reddeder ve açılmaz. *Yol:* geri dönmek için yükseltme öncesi yedeği geri yükleyin.
