@@ -584,6 +584,7 @@
   "cli.runtime.toolchainRefreshFailed": "İşçi imajı yenilemesi başarısız ({code}); önceki imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",
   "cli.runtime.toolchainRefreshUpdated": "İşçi imajı {version} sürümüne güncellendi; {count} profil revizyonu yalnız yeni işlere uygulanır.",
   "cli.runtime.toolchainRefreshUnverified": "İşçi imajı güncelliği doğrulanamadı ({code}); mevcut imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",
+  "cli.runtime.toolchainRefreshUnverifiedRest": "Kalan profillerin güncelliği doğrulanamadı ({code}); sonraki denetim yeniden dener.",
   "cli.runtime.toolchainRefreshCurrent": "İşçi imajı güncel.",
   "doctor.nodeUnsupported": "Node.js: {version}, desteklenen {floor} aralığından eski; Node.js sürümünü güncelleyin (eski sürümlerde düzeltilmiş güvenlik açıkları vardır)",
   "doctor.nodeUnsupported.init": "Node.js {version}, desteklenen {floor} aralığından eski: bu kurulumu kullanmadan önce Node.js sürümünü güncelleyin.",

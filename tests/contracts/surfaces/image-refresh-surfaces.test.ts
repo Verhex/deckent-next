@@ -56,7 +56,8 @@ it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr',
   expect(JSON.parse(lines.join(''))).toMatchObject({ imageRefresh: null }); // a failing read never fails doctor
 });
 
-it.each([['started', 'en', 'started in the background'], ['failed', 'tr', 'başarısız (WORKER_IMAGE_BUILD_FAILED)'], ['current', 'en', 'updated to r5-20261006'], ['unverified', 'en', 'could not be verified (NPM_REGISTRY_UNAVAILABLE)']] as const)('runtime serve prints the typed refresh event after ready (%s, %s)', async (phase, locale, text) => {
+it.each([['started', 'en', 'started in the background'], ['failed', 'tr', 'başarısız (WORKER_IMAGE_BUILD_FAILED)'], ['current', 'en', 'updated to r5-20261006'], ['unverified', 'en', // owner 114: one profile applied, the rest unverified: the line names both, never "the current image stays in use"
+  'Worker image updated to r5-20261006; 1 profile revision(s) apply to new Runs only. Currency of the remaining profiles could not be verified (NPM_REGISTRY_UNAVAILABLE); the next check retries.']] as const)('runtime serve prints the typed refresh event after ready (%s, %s)', async (phase, locale, text) => {
   const controller = new AbortController(); controller.abort(); const out: string[] = [], errs: string[] = [];
   const code = await main(['runtime', 'serve', '--lang', locale], { root: '/fixture/project', env: { HOME: '/fixture/home' }, signal: controller.signal, stdout: stdout(out), stderr: stdout(errs),
     async startRuntimeService(_root, observer) {
