@@ -47,18 +47,18 @@ export function insertHistoryLine(dockerfile: string, line: string): string {
   return dockerfile.slice(0, index) + line + '\n' + dockerfile.slice(index);
 }
 /** Pure plan: a build is proposed only when an npm provider is stale; nothing here touches packages, images or config. `only` (owner 114): the
- * providers with an image-running pin behind the published version; a stale provider outside it is never built. */
+ * providers with an image-running pin behind the published version decide instead of the report status; a provider outside it is never built. */
 export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[]; heldVersion?: string | null; only?: readonly string[] }>): ToolchainUpdatePlan {
   const recipe = workerImageRecipeSchema.safeParse(input.recipe);
   if (!recipe.success) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID');
-  const stale = input.report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm' && (!input.only || input.only.includes(entry.provider))).map(entry => entry.provider).sort();
+  const stale = input.report.providers.filter(entry => entry.mechanism === 'npm' && (input.only ? input.only.includes(entry.provider) : entry.status === 'stale')).map(entry => entry.provider).sort();
   const affected = input.affectedProfiles.map(item => affectedProfileSchema.parse(item)).filter(item => stale.includes(item.provider));
   const current = { imageVersion: recipe.data.imageVersion, repository: recipe.data.repository };
   const basis = 'stale means an admitted preflight pin is older than the published npm latest tag; the plan proposes one new image version and never edits installed config, package assets or running work';
   if (!stale.length) return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'no-change', staleProviders: [], report: input.report, current, next: null, affectedProfiles: [], basis });
   const version = nextImageVersion(recipe.data.imageVersion, input.plannedAt, input.heldVersion ?? null);
   const skipped = input.heldVersion && counterOf(input.heldVersion) > counterOf(recipe.data.imageVersion) ? `; counter past daemon-held ${input.heldVersion}` : '';
-  const reasons = stale.map(provider => { const entry = input.report.providers.find(item => item.provider === provider)!; return `${provider} ${entry.admitted.map(item => item.version ?? item.cliVersion).join('/')} -> ${entry.latest?.version ?? '?'}`; }).join('; ');
+  const reasons = stale.map(provider => { const entry = input.report.providers.find(item => item.provider === provider)!; return `${provider} ${entry.admitted.map(item => item.version ?? 'unparsed').join('/')} -> ${entry.latest?.version ?? '?'}`; }).join('; '); // raw version text never enters the Dockerfile
   const historyLine = `# version ${version} | ${input.plannedAt.slice(0, 10)} | base ${recipe.data.schemaVersion === 3 ? recipe.data.base.image : recipe.data.baseImage} | supersedes ${recipe.data.imageVersion} | toolchain currency: ${reasons}${skipped}`;
   const nextRecipe = workerImageRecipeSchema.parse({ ...recipe.data, imageVersion: version, previousVersion: recipe.data.imageVersion });
   return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'build', staleProviders: stale, report: input.report, current,

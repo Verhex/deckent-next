@@ -285,16 +285,35 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect(f.events.map(event => event.phase)).toEqual(['unverified']); expect(f.events[0]!.code).toEqual(expect.any(String));
     expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
     expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'unknown' });
-    // Owner 114: a stale codex image pin next to a connected codex pin whose version cannot be read is HEAD's `unverified` (CURRENCY_UNPARSED), never a
-    // recorded `current` for a build that was not made.
+    // Owner 114 (Astra 3835 P1; this tail pinned the old zero builds with the stale pin kept): a stale codex image pin next to a connected codex pin whose
+    // version cannot be read is rebuilt and re-pinned. The report keeps the connected pin's uncertainty (`unverified`, CURRENCY_UNPARSED), the connected
+    // profile is untouched, and no consent, or only another stale provider's, builds nothing.
     const document = JSON.parse(await readFile(f.path, 'utf8')), { executable, ...limits } = document.execution.docker; void executable;
     const unreadable = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: 'unreadable', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' },
       { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque',
         definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } });
     document.admission.registry.profiles.push(unreadable); document.admission.registry.kinds.push({ kind: 'connected', profile: { id: unreadable.id, version: 1 } });
-    await writeFile(f.path, JSON.stringify(document)); clearConfigCache();
-    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'unverified', event: { code: 'CURRENCY_UNPARSED' } });
-    expect(f.state.builds).toBe(0); expect(await readToolchainRefreshState(f.root, f.options)).toMatchObject({ phase: 'unverified', reason: 'CURRENCY_UNPARSED' });
+    const consents = document.toolchains.image.consents, recipe = (await readWorkerImageSources(process.cwd())).recipe;
+    const claude = { ...consents[0], id: 'consent-claude', ...workerConsentBinding({ recipe, providers: ['claude'], npmRegistry: 'https://registry.example.invalid', sources: {} }) };
+    const write = async (records: unknown[]) => { document.toolchains.image.consents = records; await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); };
+    await write([]); const before = await f.registry(); f.latest['@anthropic-ai/claude-code'] = '2.1.300'; // claude is stale only through its login-closed pin
+    for (const records of [[], [claude]]) {
+      await write(records);
+      expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+    }
+    expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(before);
+    f.latest['@anthropic-ai/claude-code'] = '2.1.278'; await write(consents);
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'unverified', event: { code: 'CURRENCY_UNPARSED', appliedProfiles: 1 } });
+    expect(f.state.builds).toBe(1);
+    expect(await readToolchainRefreshState(f.root, f.options)).toMatchObject({ phase: 'unverified', reason: 'CURRENCY_UNPARSED', staleProviders: ['codex'], appliedProfiles: 1 });
+    const after = await f.registry();
+    expect(after.kinds.find(kind => kind.kind === 'codex-pinned')!.profile).toEqual({ id: 'codex-pinned', version: 2 });
+    expect(after.kinds.find(kind => kind.kind === 'connected')).toEqual(before.kinds.find(kind => kind.kind === 'connected'));
+    expect(after.profiles.filter(profile => profile.id === unreadable.id)).toEqual(before.profiles.filter(profile => profile.id === unreadable.id));
+    // The unreadable version text never reaches the Dockerfile history line.
+    const plans = (await readdir(join(f.root, '.deckent'), { recursive: true })).filter(name => /toolchains\/plans\/[^/]+\.json$/.test(name));
+    const lines = await Promise.all(plans.map(async name => JSON.parse(await readFile(join(f.root, '.deckent', name), 'utf8')).next.historyLine as string));
+    expect(lines).toEqual([expect.stringContaining('toolchain currency: codex 0.155.1/unparsed -> 0.156.0')]);
   });
   it('an installation without Docker execution is never touched', async () => {
     const f = await fixture(); const config = JSON.parse(await readFile(f.path, 'utf8')); delete config.execution; await writeFile(f.path, JSON.stringify(config));

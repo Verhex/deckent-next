@@ -47,6 +47,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<RunCommandCon
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
   // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.
   inspectToolchainRefresh?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly reason: string | null; readonly imageVersion: string | null } | null>;
+  /** Owner 114: the toolchain pins whose kind runs its image (the refresh's own view); doctor `--toolchains` only, read-soft. */
+  inspectToolchainImagePins?: (root: string, options: ConfigLoadOptions) => Promise<readonly Readonly<{ provider: string; cliVersion: string }>[]>;
   // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
   inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<InstallationBindingReport | null>;
   // PRE-34: the execution environment (Docker) as `deckent init` detects and decides it; doctor-only, read-only, bounded by the detection deadline.

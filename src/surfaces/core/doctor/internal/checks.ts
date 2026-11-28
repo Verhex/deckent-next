@@ -6,7 +6,7 @@ import { shortImageId, filesystemIdentityText } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 export const DOCTOR_NATIVE_PLUGIN_SCAN = Object.freeze(registry.nativePluginScan);
 import { workerReadinessText, workerReadinessNext, firstJobKind, firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
-import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
+import { imageProvidersBehind, type RecoveryModeState, type ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { countMismatchedAttachments } from '#domain/index.js';
 import { runProgressionLines, readRunProgressionDiagnostic, recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
@@ -67,6 +67,8 @@ export interface DoctorCheckFacts {
   /** `connection` (R8b): execution is configured without Docker, so work runs on a connected subscription. */
   readonly firstJob?: Readonly<{ execution: boolean; registry: boolean; connection?: boolean }> | null;
   readonly toolchainUpdateEnabled: boolean;
+  /** Owner 114: the toolchain pins whose kind runs its image (the refresh's own view); absent or null when not read. */
+  readonly toolchainImagePins?: readonly Readonly<{ provider: string; cliVersion: string }>[] | null;
   /** PRE-34: the configured worker image (evidence when the refresh marker names no version); null when no execution section sets one. */
   readonly imageId?: string | null;
   /** BR1 1c: whether the daemon has the configured image (read-only `image inspect`); null when not checked (no image, Docker not ready). */
@@ -327,11 +329,15 @@ function executionRow(f: DoctorCheckFacts, l: Locale): DoctorCheck {
 function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   if (!f.toolchainsRequested || !r.toolchains) return [row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.notRequested', {}, l), 'deckent doctor --toolchains')];
   const fix = f.toolchainUpdateEnabled ? registry.fixes.find(entry => entry.checks.includes('tools.toolchains'))?.id : undefined;
+  // Owner 114: the image update is offered only for a provider with an image pin behind (what the refresh builds); a connected or login-closed pin
+  // alone is never rebuilt, and pins not read offer nothing.
+  const behind = f.toolchainImagePins ? imageProvidersBehind(f.toolchainImagePins, r.toolchains) : [];
   return r.toolchains.providers.map(entry => {
-    const params = { provider: entry.provider, latest: entry.latest?.version ?? '-', reason: entry.reason ?? entry.status };
+    const params = { provider: entry.provider, latest: entry.latest?.version ?? '-', reason: entry.reason ?? entry.status }, image = behind.includes(entry.provider);
     if (entry.status === 'fresh' || entry.status === 'ahead') return row('tools', 'tools.toolchains', 'ok', t('doctor.check.toolchains.fresh', params, l));
-    if (entry.status === 'stale') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.stale', params, l), 'deckent toolchains update', fix);
-    if (entry.status === 'unparsed' || entry.status === 'unsupported') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.unreadable', params, l), 'deckent doctor --toolchains --verbose');
+    if (entry.status === 'stale') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.stale', params, l), image ? 'deckent toolchains update' : undefined, image ? fix : undefined);
+    if (entry.status === 'unparsed' || entry.status === 'unsupported') return row('tools', 'tools.toolchains', 'warning', t('doctor.check.toolchains.unreadable', params, l),
+      image ? 'deckent toolchains update' : 'deckent doctor --toolchains --verbose', image ? fix : undefined);
     if (entry.status === 'not-admitted') return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.notAdmitted', params, l));
     if (entry.status === 'disabled') return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.disabled', params, l));
     return row('tools', 'tools.toolchains', 'untested', t('doctor.check.toolchains.unknown', params, l));

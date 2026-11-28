@@ -284,15 +284,23 @@ describe('doctor subscription rows (pure)', () => {
       .toContain('; ağ: sağlayıcı izin listesi dışında 1 bağlantı reddedildi (adresler: -)');
     expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: null }] }), 'en').find(row => row.id === 'work.brainLogin')?.text).not.toContain('network');
   });
-  it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
+  it('tool rows: the update fix only with an image pin behind, not-admitted and offline are "not tested" in words (no raw status code)', () => {
     const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
       { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },
       { provider: 'cursor', status: 'unknown-offline', reason: 'CURRENCY_UNKNOWN_OFFLINE', admitted: [], latest: null }] };
-    const rows = doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true }), 'tr').filter(row => row.group === 'tools');
+    const rows = doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true, toolchainImagePins: [{ provider: 'claude', cliVersion: '2.8.0' }] }), 'tr').filter(row => row.group === 'tools');
     expect(rows.map(row => [row.state, row.fix ?? null])).toEqual([['warning', 'toolchain-update'], ['untested', null], ['untested', null]]);
     expect(rows[1]!.text).toBe('codex: bu kurulumda kabul edilmiş sürüm yok, karşılaştırılacak bir şey yok');
     expect(rows.map(row => row.text).join('\n')).not.toContain('not-admitted');
-    expect(doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true, toolchainUpdateEnabled: false }), 'en').find(row => row.id === 'tools.toolchains')?.fix).toBeUndefined();
+    expect(doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true, toolchainUpdateEnabled: false, toolchainImagePins: [{ provider: 'claude', cliVersion: '2.8.0' }] }), 'en').find(row => row.id === 'tools.toolchains')?.fix).toBeUndefined();
+    // Owner 114 (Astra 3835 P2; this declaration pinned the offer on every stale row): with no image pin behind (none, an image pin already current while
+    // a connected pin is stale, or pins not read) the row keeps informing but offers no image update; an unreadable row with one behind offers it.
+    for (const pins of [[], [{ provider: 'claude', cliVersion: '2.9.0' }], undefined]) expect(doctorChecks({ ...report, toolchains } as never, facts({ toolchainsRequested: true, toolchainImagePins: pins }), 'en')
+      .find(row => row.id === 'tools.toolchains')).toEqual({ group: 'tools', id: 'tools.toolchains', state: 'warning', text: 'claude: a newer version exists (2.9.0)' });
+    const unparsed = { ...toolchains, providers: [{ provider: 'codex', status: 'unparsed', admitted: [], latest: { version: '0.156.0' } }] };
+    expect([[{ provider: 'codex', cliVersion: 'codex-cli 0.155.1' }], []].map(pins => doctorChecks({ ...report, toolchains: unparsed } as never, facts({ toolchainsRequested: true, toolchainImagePins: pins }), 'en')
+      .find(row => row.id === 'tools.toolchains')).map(row => [row?.state, row?.next, row?.fix ?? null])).toEqual([['warning', 'deckent toolchains update', 'toolchain-update'],
+      ['warning', 'deckent doctor --toolchains --verbose', null]]);
   });
   it('fixes come from the registry: the hard-floor item is listed and never offered, chmod waits for its policy action', async () => {
     expect(DOCTOR_FIXES.find(fix => fix.id === 'audit-rebaseline')?.hardFloor).toBe(true);
@@ -305,7 +313,8 @@ describe('doctor subscription rows (pure)', () => {
 // Owner 114: the failed image row no longer carries the update fix (a manual build re-pins nothing); the stale tool row does, so the card is still reached.
 const fixable = { inspectToolchainRefresh: async () => ({ status: 'failed', reason: 'BUILD_FAILED', imageVersion: null }), inspectToolchainCurrency: async () => ({ schemaVersion: 1,
   measuredAt: '2026-11-27T00:00:00.000Z', mode: 'report', registryEndpoint: 'https://registry.npmjs.org', basis: 'fixture', providers: [{ provider: 'codex', mechanism: 'npm',
-    admitted: [], latest: { version: '0.156.0', source: 'fixture', observedAt: '2026-11-27T00:00:00.000Z' }, status: 'stale', update: 'fixture' }] }) };
+    admitted: [], latest: { version: '0.156.0', source: 'fixture', observedAt: '2026-11-27T00:00:00.000Z' }, status: 'stale', update: 'fixture' }] }),
+  inspectToolchainImagePins: async () => [{ provider: 'codex', cliVersion: 'codex-cli 0.155.1' }] };
 const doctorRegistry = fixtureDockerRegistry(['coding']);
 const doctorDocker = {
   docker: Object.fromEntries(Object.entries({ ...doctorRegistry.profiles[0]!.parameters, executable: 'docker' }).filter(([key]) => key !== 'argv')),

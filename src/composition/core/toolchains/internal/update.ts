@@ -5,7 +5,7 @@ import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, compareToolchainVersions, extractToolchainVersion, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, imageProvidersBehind, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { buildWorkerImageInHome, readBuiltWorkerLineage, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { imagePins, inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -38,17 +38,16 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
   const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher, config);
-  // Owner 114, no consent rule change: HEAD's one report decides (its stale providers are the consent identity); the build and its re-pins keep
-  // only the image pins of those providers, from the one configuration read the report itself comes from, and only where an image pin is behind the
-  // report's published version (a connected pin, never re-pinned, would otherwise keep a fresh image rebuilding).
-  const basis = report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort(), image = imagePins(config);
-  const latest = (provider: string) => report.providers.find(entry => entry.provider === provider)?.latest?.version;
-  const behind = image.filter(pin => { const version = extractToolchainVersion(pin.provider, pin.cliVersion), to = latest(pin.provider); return version !== null && to !== undefined && compareToolchainVersions(version, to) < 0; });
+  // Owner 114, no consent rule change: the build and its re-pins keep only the image pins behind the report's published version, from the one
+  // configuration read the report itself comes from (a connected pin, never re-pinned, would otherwise keep a fresh image rebuilding, and an unreadable
+  // one would hide a stale image pin). The consent identity is HEAD's stale providers plus every provider built, so it never narrows or empties.
+  const image = imagePins(config), behind = imageProvidersBehind(image, report);
+  const basis = [...new Set([...report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider), ...behind])].sort();
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
   const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const lineage = selectWorkerLineage(sources, await readBuiltWorkerLineage(home));
-  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: image, heldVersion, only: behind.map(pin => pin.provider) });
+  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: image, heldVersion, only: behind });
   const proposed = planFor(null);
   if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
