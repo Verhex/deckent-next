@@ -114,6 +114,18 @@ it('unset removes the authored key and reports the remaining effective value and
   output.length = 0; await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'en'], ctx);
   expect(JSON.parse(await readFile(path, 'utf8')).cli.agentEnvironment).toEqual([]);
   output.length = 0; await configCommand(['config', 'explain', 'cli.agentEnvironment', '--lang', 'en'], ctx); expect(output.join('')).toContain('Source: global');
+  // K3: an index is the written layer's own element on every surface: absent is "not defined" (never a default), masked element by element.
+  output.length = 0; await configCommand(['config', 'get', 'cli.agentEnvironment.0', '--lang', 'en'], ctx); expect(output.join('').trim()).toBe('not defined');
+  await writeFile(join(global, 'config.json'), JSON.stringify({ cli: { agentEnvironment: [] } })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'get', 'cli.agentEnvironment.0', '--global', '--lang', 'en'], ctx); expect(output.join('').trim()).toBe('not defined');
+  await writeFile(join(global, 'config.json'), JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT'] } }));
+  await writeFile(path, JSON.stringify({ cli: { agentEnvironment: ['MY_AGENT', 'AKIAABCDEFGHIJKLMNOP'] } })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'explain', 'cli.agentEnvironment.0', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Value: MY_AGENT'); expect(output.join('')).toContain('Source: project');
+  output.length = 0; await configCommand(['config', 'get', 'cli.agentEnvironment.0', '--lang', 'en'], ctx); expect(output.join('').trim()).toBe('MY_AGENT');
+  output.length = 0; await configCommand(['config', 'get', 'cli.agentEnvironment.1', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('[REDACTED]'); expect(output.join('')).not.toContain('AKIAABCDEFGHIJKLMNOP');
+  output.length = 0; await configCommand(['config', '--lang', 'en'], ctx); expect(output.join('')).not.toContain('cli.agentEnvironment.0');
 });
 
 it('explain uses the requested locale and the nested key’s own catalog description', async () => {

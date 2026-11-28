@@ -68,11 +68,13 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     // so the dispatcher's non-healing language/identity probe cannot preempt recovery or inspect project for --global.
     await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
     const display = configDisplayView(config);
-    // K3: an index of the floored marker list is the written layer's own index, the one `set`/`unset` edit.
-    const own = keyPath?.startsWith(`${AGENT_ENVIRONMENT_KEY}.`) && context.configApplication ? { cli: { agentEnvironment: (await context.configApplication(root, { ...options,
-      globalOnly: parsed.global }).inspectValue({ keyPath: AGENT_ENVIRONMENT_KEY, layer: parsed.global ? 'global' : 'project' })).value ?? [] } } : display;
+    // K3: an index of the floored marker list is the written layer's own element (the one `set`/`unset` edit), from the same field view as `explain`.
+    if (keyPath?.startsWith(`${AGENT_ENVIRONMENT_KEY}.`) && context.configApplication) {
+      const [field] = (await context.configApplication(root, { ...options, globalOnly: parsed.global }).inspect({ keyPath, layer: parsed.global ? 'global' : 'project' })).fields;
+      emit(field?.value ?? null, { ...sinks, mode: config.output_mode, render: data => data === null ? t('config.surface.notDefined', {}, locale) : formatValue(data) }); return;
+    }
     let value: unknown;
-    try { value = keyPath === undefined ? display : getConfigValue(own, keyPath); }
+    try { value = keyPath === undefined ? display : getConfigValue(display, keyPath); }
     catch (error) {
       // An optional section (inference_serving, operations, ...) the registry declares but this installation leaves out is "not defined", not unknown.
       if (keyPath === undefined || !context.configApplication) throw error;

@@ -1,6 +1,6 @@
 import { configSchemaNode, ProjectedConfigNode, projectConfigSchema, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
-import { AGENT_ENVIRONMENT_KEY, CONFIG_FIELDS, agentEnvironmentFloor, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, CONFIG_FIELDS, agentEnvironmentFloor, agentEnvironmentInLayer, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
@@ -124,15 +124,18 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
   const sourcePath = (definition.derivedFrom?.[keyPath] ?? keyPath).split('.');
-  // K3: the project is the source of the floored marker list only when it adds a name to the floor.
-  const floored = keyPath === AGENT_ENVIRONMENT_KEY && agentEnvironmentFloor(snapshot.global, snapshot.project).length === agentEnvironmentFloor(snapshot.global, {}).length;
-  const source = env ? 'env' : !floored && atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
+  // K3: an index of the floored marker list is the written layer's own element (what `set`/`unset` edit, absent: not defined); the whole key's
+  // source is the project only when it adds a name, else the installation when its VALID list made the floor, else the default.
+  const own = keyPath.startsWith(`${AGENT_ENVIRONMENT_KEY}.`), whole = keyPath === AGENT_ENVIRONMENT_KEY, element = own ? atConfigPath(snapshot.document, path) : undefined;
+  const added = whole ? agentEnvironmentFloor(snapshot.global, snapshot.project).length > agentEnvironmentFloor(snapshot.global, {}).length : atConfigPath(snapshot.project, sourcePath) !== undefined;
+  const installed = whole ? agentEnvironmentInLayer(snapshot.global) : atConfigPath(snapshot.global, sourcePath) !== undefined;
+  const source = own ? element === undefined ? 'default' : snapshot.layer : env ? 'env' : added ? 'project' : installed ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);
   const toolchains = snapshot.effective.toolchains, providers = [...new Set(toolchains.image.consents.flatMap(record => record.providers))];
-  const derived = atConfigPath({ ...snapshot.effective, toolchains: { ...toolchains, image: { ...toolchains.image, providers } } }, path);
-  const value = redact(derived, path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
+  const derived = own ? element : atConfigPath({ ...snapshot.effective, toolchains: { ...toolchains, image: { ...toolchains.image, providers } } }, path);
+  const value = redact(derived, path, secretPaths), defaultValue = own ? undefined : redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
   const descriptionKey = schema.description ?? definition.descriptionKey;
   return { key: keyPath, value, defaultValue, source, descriptionKey,
     description: messageText(descriptionKey, resolveLocale(undefined, snapshot.env, snapshot.effective.language)) ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
@@ -154,14 +157,14 @@ export function allConfigKeys(snapshot: ConfigSnapshot): string[] {
       if (inner.options.length) { for (const option of inner.options) visit(option, path, value); return; }
       if (inner.properties) { for (const [key, child] of Object.entries(inner.properties)) visit(child, [...path, key], atConfigPath(value, [key])); return; }
       keys.push(path.join('.'));
-      if (inner.item && Array.isArray(value)) value.forEach((item, index) => visit(inner.item!, [...path, String(index)], item));
+      if (inner.item && Array.isArray(value) && path.join('.') !== AGENT_ENVIRONMENT_KEY) value.forEach((item, index) => visit(inner.item!, [...path, String(index)], item));
       if (inner.entry && isRecord(value)) for (const [key, item] of Object.entries(value)) if (!key.includes('.')) visit(inner.entry!, [...path, key], item);
       return;
     }
     if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) { for (const option of inner.options) visit(option as z.ZodType, path, value); return; }
     if (inner instanceof z.ZodObject) { for (const [key, child] of Object.entries(inner.shape)) visit(child as ConfigSchemaNode, [...path, key], atConfigPath(value, [key])); return; }
     keys.push(path.join('.'));
-    if (inner instanceof z.ZodArray && Array.isArray(value)) value.forEach((item, index) => visit(inner.element as z.ZodType, [...path, String(index)], item));
+    if (inner instanceof z.ZodArray && Array.isArray(value) && path.join('.') !== AGENT_ENVIRONMENT_KEY) value.forEach((item, index) => visit(inner.element as z.ZodType, [...path, String(index)], item));
     if (inner instanceof z.ZodRecord && isRecord(value)) for (const [key, item] of Object.entries(value)) if (!key.includes('.')) visit(inner.valueType as z.ZodType, [...path, key], item);
   }
   for (const [key, definition] of configDefinitions()) visit(definition.schema, [key], snapshot.effective[key]);

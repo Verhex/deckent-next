@@ -315,8 +315,9 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   kurulum sahibi için kipleri açar ya da kapatır; yapay zekâ araçları, borular ve CI yapamaz. Uygulamadan sonra politika yeni bir `a-…`
   revizyonu alır; bu yüzden `deckent doctor` artık ona `first-run-template-v13` demez ve sonraki `init policy --upgrade` yalnız ekleyen
   yolu izler. Terminal tanığı kontrol eden terminaldir: aynı UID'li bir süreç sahte pty üretebilir (SEC-1 sınırı; bir Enterprise
-  bileşimi daha güçlü tanık verebilir); ortamı geçerli işaret listesindeki (`cli.agentEnvironment`) bir ada değer (boş, `0` ya da `false` dışında) veren yapay zekâ ajanının
-  kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder. İkisi de aynı listeyi okur: kurulumun listesi (kurulum liste
+  bileşimi daha güçlü tanık verebilir); yapay zekâ ajanının kabuğunu, ortamı geçerli işaret listesindeki (`cli.agentEnvironment`) bir
+  ada sayılan bir değer verdiğinde yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder: boş değer sayılmaz, kırpılıp küçük harfe
+  çevrildikten sonra `0` ya da `false` da sayılmaz; yalnız boşluktan oluşan değer sayılır. Bu komutun kişi denetimi ve kartı aynı listeyi okur: kurulumun listesi (kurulum liste
   vermezse yerleşik liste; kurulumun boş listesi de verilmiş sayılır); proje dosyası bu listeye ad ekleyebilir ama listeden ad çıkaramaz. Kurulum ayarının kendisi yine
   kısaltılabilir ve hesabınızdaki bir süreç kendi işaret değişkenini kaldırabilir ya da terminal taklit edebilir (SEC-1 sınırı); bu
   yüzden işaret hiçbir zaman güvenlik sınırı değildir.

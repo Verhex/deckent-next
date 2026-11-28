@@ -100,6 +100,8 @@ const agentNames = (layer: unknown) => { const value = agentList(layer); return 
 /** K3 (owner 2026-11-27): the one effective `cli.agentEnvironment` of every reader. The installation layer's list when it is set (an empty one
  * too), else the packaged default, is a floor; a project layer only adds names (floor first, de-duplicated). An invalid layer list adds nothing
  * (an invalid installation list leaves the default floor), so the floor never depends on what a project file can break. */
+/** Whether a layer sets a VALID marker list: the one test the floor itself applies (an invalid list counts as absent). */
+export const agentEnvironmentInLayer = (layer: unknown) => agentNames(layer) !== undefined;
 export function agentEnvironmentFloor(global: unknown, project: unknown): string[] {
   return [...new Set([...agentNames(global) ?? CORE_SCHEMA.shape.cli.parse({}).agentEnvironment, ...agentNames(project) ?? []])];
 }
