@@ -40,7 +40,7 @@ it('the monitor snapshot carries the refresh as typed diagnostics, nothing for u
   expect(await snapshot(async () => { throw Object.assign(new Error('x'), { code: 'EIO' }); })).toContain('image-refresh-unreadable:EIO');
 });
 
-it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr', 'önceki imaj kullanılıyor'], ['current', 'en', 'current (r5-20261006)']] as const)('doctor shows the image refresh line (%s, %s) and keeps unknown silent', async (status, locale, text) => {
+it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr', 'yenileme başarısız (WORKER_IMAGE_BUILD_FAILED); iş türleri sabitledikleri imajı korur'], ['current', 'en', 'current (r5-20261006)']] as const)('doctor shows the image refresh line (%s, %s) and keeps unknown silent', async (status, locale, text) => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-refresh-')); roots.push(root); const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
   const lines: string[] = [];
   await runKernelCommand(['doctor', '--verbose', '--lang', locale], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status, reason: 'WORKER_IMAGE_BUILD_FAILED', imageVersion: 'r5-20261006' }) });
@@ -56,7 +56,8 @@ it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr',
   expect(JSON.parse(lines.join(''))).toMatchObject({ imageRefresh: null }); // a failing read never fails doctor
 });
 
-it.each([['started', 'en', 'started in the background'], ['failed', 'tr', 'başarısız (WORKER_IMAGE_BUILD_FAILED)'], ['current', 'en', 'updated to r5-20261006'], ['unverified', 'en', 'could not be verified (NPM_REGISTRY_UNAVAILABLE)']] as const)('runtime serve prints the typed refresh event after ready (%s, %s)', async (phase, locale, text) => {
+it.each([['started', 'en', 'started in the background'], ['failed', 'tr', 'başarısız (WORKER_IMAGE_BUILD_FAILED)'], ['current', 'en', 'updated to r5-20261006'], ['unverified', 'en', // owner 114: one profile applied, the rest unverified: the line names both, never "the current image stays in use"
+  'Worker image updated to r5-20261006; 1 profile revision(s) apply to new Runs only. Currency of the remaining profiles could not be verified (NPM_REGISTRY_UNAVAILABLE); the next check retries.']] as const)('runtime serve prints the typed refresh event after ready (%s, %s)', async (phase, locale, text) => {
   const controller = new AbortController(); controller.abort(); const out: string[] = [], errs: string[] = [];
   const code = await main(['runtime', 'serve', '--lang', locale], { root: '/fixture/project', env: { HOME: '/fixture/home' }, signal: controller.signal, stdout: stdout(out), stderr: stdout(errs),
     async startRuntimeService(_root, observer) {

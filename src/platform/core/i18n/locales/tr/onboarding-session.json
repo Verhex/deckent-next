@@ -154,6 +154,7 @@
   "worker.kind.image-unverified": "{kind} iş türü kullanılamıyor: sabitlenmiş işçi imajı doğrulanamadı.",
   "worker.kind.rebind": "deckent coding template --kind {kind} --connection <id> ile yeniden bağlayın; bağlantıyı deckent models list üzerinden seçin.",
   "worker.kind.restore": "Bu profilin sabitlenmiş imageId değerini deckent coding --json ile bulun ve imajı sakladığınız derleme veya yedekten geri yükleyin; coding template bu hazır profili yeniden bağlayamaz.",
+  "worker.kind.docker-login-closed": "{kind} iş türü çalıştırılamaz: CLI'sini Docker içinde çalıştırır ve deckent bu CLI'nin oturumunu Docker'da kullanmaz.",
   "worker.kinds.image-missing": "Kullanılamayan iş türleri (işçi imajı eksik): {kinds}.",
   "worker.kinds.image-unverified": "Kullanılamayan iş türleri (işçi imajı doğrulanamadı): {kinds}.",
   "error.BRAIN_GRAPH_INVALID.unusableKind": "Model kullanılamayan bir iş türü planladı. {detail} Kullanılabilir iş türleri: {registered}. İş oluşturulmadı. Sonraki adım için deckent coding veya deckent doctor kullanın."

@@ -194,7 +194,7 @@
   "cli.toolchains.auto.propose": "Otomatik güncelleme: yalnız öneri — deckent toolchains update onayınızdan sonra derler.",
   "cli.toolchains.auto.off": "Otomatik güncelleme: kapalı (toolchains.update.mode off).",
   "cli.toolchains.update.disabled": "Araç güncellemeleri kapalı (toolchains.update.mode off); plan yapılmadı.",
-  "cli.toolchains.update.noChange": "Her araç güncel; yeni işçi imajı gerekmiyor.",
+  "cli.toolchains.update.noChange": "İşçi imajı yenilemesi planlanmadı.",
   "cli.toolchains.update.planned": "Plan: {tools} için yeni işçi imajı {version}.",
   "cli.toolchains.update.applyHint": "Hiçbir şey derlenmedi. deckent toolchains update --apply derler (Docker).",
   "cli.toolchains.update.built": "İşçi imajı {version} derlendi ({image}). Profil değişikliği önerisi: {proposal} — kurulumun profilleri burada değişmez.",

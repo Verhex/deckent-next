@@ -46,11 +46,12 @@ export function insertHistoryLine(dockerfile: string, line: string): string {
   if (index < 0) throw new ToolchainUpdateError('TOOLCHAIN_HISTORY_INVALID');
   return dockerfile.slice(0, index) + line + '\n' + dockerfile.slice(index);
 }
-/** Pure plan: a build is proposed only when an npm provider is stale; nothing here touches packages, images or config. */
-export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[]; heldVersion?: string | null }>): ToolchainUpdatePlan {
+/** Pure plan: a build is proposed only when an npm provider is stale; nothing here touches packages, images or config. `only` (owner 114): the
+ * providers with an image-running pin behind the published version; a stale provider outside it is never built. */
+export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyReport; recipe: unknown; plannedAt: string; affectedProfiles: readonly AffectedProfile[]; heldVersion?: string | null; only?: readonly string[] }>): ToolchainUpdatePlan {
   const recipe = workerImageRecipeSchema.safeParse(input.recipe);
   if (!recipe.success) throw new ToolchainUpdateError('TOOLCHAIN_RECIPE_INVALID');
-  const stale = input.report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort();
+  const stale = input.report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm' && (!input.only || input.only.includes(entry.provider))).map(entry => entry.provider).sort();
   const affected = input.affectedProfiles.map(item => affectedProfileSchema.parse(item)).filter(item => stale.includes(item.provider));
   const current = { imageVersion: recipe.data.imageVersion, repository: recipe.data.repository };
   const basis = 'stale means an admitted preflight pin is older than the published npm latest tag; the plan proposes one new image version and never edits installed config, package assets or running work';

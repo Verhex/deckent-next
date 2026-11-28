@@ -154,6 +154,7 @@
   "worker.kind.image-unverified": "Task kind {kind} is unusable: its pinned worker image could not be verified.",
   "worker.kind.rebind": "Rebind with deckent coding template --kind {kind} --connection <id>; choose a connection from deckent models list.",
   "worker.kind.restore": "Inspect deckent coding --json for this profile's pinned imageId and restore that image from your retained build or backup; coding template cannot rebind this prepared profile.",
+  "worker.kind.docker-login-closed": "Task kind {kind} cannot run: it runs its CLI in Docker, and deckent does not use this CLI's login in Docker.",
   "worker.kinds.image-missing": "Unusable task kinds (worker image missing): {kinds}.",
   "worker.kinds.image-unverified": "Unusable task kinds (worker image unverified): {kinds}.",
   "error.BRAIN_GRAPH_INVALID.unusableKind": "The model planned an unusable task kind. {detail} Usable task kinds: {registered}. No Run was created. Inspect deckent coding or deckent doctor for the next step."

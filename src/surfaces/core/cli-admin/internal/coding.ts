@@ -125,7 +125,8 @@ async function codingList(argv: readonly string[], context: AdminCommandContext)
       renderCliTable(columns, data.profiles.map(row => [row.kind, `${row.profile.id}@${row.profile.version}`, row.provider ?? '-', row.cliVersion ?? '-', shortImage(row.imageId), runtimeLabel(row.runtime === 'subscription', locale), row.connection ? label(row.connection) : '-']),
         cliTableStyle(context)),
       t('clisetup.coding.configuredImage', { image: shortImage(configured) }, locale), ...(unused ? [t('clisetup.coding.imageUnused', {}, locale)] : []),
-      ...(data.workerKinds ?? []).flatMap(row => row.reason ? [row.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: row.kind }, locale) : t('worker.kind.image-unverified', { kind: row.kind }, locale),
+      ...(data.workerKinds ?? []).flatMap(row => row.notRunnable ? [t('worker.kind.docker-login-closed', { kind: row.kind }, locale), ...(row.rebind ? [t('worker.kind.rebind', { kind: row.kind }, locale)] : [])] // owner 114, as doctor
+        : row.reason ? [row.reason === 'image-missing' ? t('worker.kind.image-missing', { kind: row.kind }, locale) : t('worker.kind.image-unverified', { kind: row.kind }, locale),
         row.rebind ? t('worker.kind.rebind', { kind: row.kind }, locale) : t('worker.kind.restore', { kind: row.kind }, locale)] : []),
       available, ...limits, t('clisetup.coding.next', {}, locale)].join('\n');
   } });

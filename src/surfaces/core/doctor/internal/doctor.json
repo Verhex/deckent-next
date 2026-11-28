@@ -19,8 +19,7 @@
     {
       "id": "toolchain-update",
       "checks": [
-        "tools.toolchains",
-        "work.image"
+        "tools.toolchains"
       ],
       "port": "updateToolchains",
       "hardFloor": false

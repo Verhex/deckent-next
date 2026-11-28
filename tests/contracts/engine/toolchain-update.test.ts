@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { affectedToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, insertHistoryLine, nextImageVersion, planToolchainUpdate, proposeProfileRevisions } from '#engine/index.js';
+import { affectedToolchainProfiles, imageToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, insertHistoryLine, nextImageVersion, planToolchainUpdate, proposeProfileRevisions } from '#engine/index.js';
 
 const recipe = { schemaVersion: 2, repository: 'deckent/worker', imageVersion: 'r2-20260922', previousVersion: 'r1-20260921', baseImage: 'node:24-trixie-slim', npmProviders: [], cursor: {} };
 const published = (version: string) => ({ kind: 'published' as const, published: { version, source: 'fixture', observedAt: '2026-09-23T08:00:00.000Z' } });
@@ -81,4 +81,13 @@ it('derives update candidates from prepared native profiles of the admission reg
     { profile: { id: 'codex-b', version: 2 }, provider: 'codex', cliVersion: 'codex-cli 1.0.0', imageId: null },
     { profile: { id: 'claude-a', version: 2 }, provider: 'claude', cliVersion: 'claude-cli 1.0.0', imageId: null }]);
   expect(affectedToolchainProfiles({})).toEqual([]); expect(affectedToolchainProfiles({ admission: { registry: { profiles: 'no' } } })).toEqual([]);
+  // Owner 114 option 0: the refresh's own view leaves out a template carrying a `worker` binding (a valid one runs on its connection, a malformed
+  // one such as this is refused by the adapter: neither runs its image) and a Docker pin of a login-closed CLI; Docker pins and every other reader's view stay.
+  const template = (id: string, worker?: unknown) => ({ id, version: 1, adapter: { id: 'native-coding-template', version: worker ? 2 : 1 },
+    parameters: { docker: { imageId: digest }, invocation: { provider: 'codex', cliVersion: '1.0.0' }, ...(worker ? { worker } : {}) } });
+  const mixed = { admission: { registry: { profiles: [native('codex-a', 'codex', digest), native('claude-a', 'claude', digest), template('bound', { connectionId: 'c' }), template('docker-t')] } } };
+  expect(affectedToolchainProfiles(mixed).map(pin => pin.profile.id)).toEqual(['codex-a', 'claude-a', 'bound', 'docker-t']);
+  expect(imageToolchainProfiles(mixed, provider => provider === 'claude')).toEqual([{ profile: { id: 'codex-a', version: 2 }, provider: 'codex', cliVersion: 'codex-cli 1.0.0', imageId: digest },
+    { profile: { id: 'docker-t', version: 1 }, provider: 'codex', cliVersion: '1.0.0', imageId: digest }]);
+  expect(imageToolchainProfiles(mixed, () => false).map(pin => pin.profile.id)).toEqual(['codex-a', 'claude-a', 'docker-t']);
 });

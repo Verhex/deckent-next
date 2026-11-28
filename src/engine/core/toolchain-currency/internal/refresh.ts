@@ -99,7 +99,8 @@ const asRecord = (value: unknown): Record<string, JsonValue> | null => value !==
 function repinParameters(parameters: Record<string, JsonValue>, to: { cliVersion: string; imageId: string }): boolean {
   const view = parameters as { docker?: JsonValue; invocation?: JsonValue; imageId?: JsonValue; nativeSubscription?: JsonValue };
   const docker = asRecord(view.docker ?? null), invocation = asRecord(view.invocation ?? null);
-  if (docker && invocation) { docker['imageId'] = to.imageId; invocation['cliVersion'] = to.cliVersion; return true; }
+  // R8 (owner 114): a template bound to a connection never takes an image's CLI version; its record follows its connection.
+  if (docker && invocation) { if ('worker' in parameters) return false; docker['imageId'] = to.imageId; invocation['cliVersion'] = to.cliVersion; return true; }
   const preflight = asRecord(asRecord(view.nativeSubscription ?? null)?.['preflight']);
   if (preflight && typeof view.imageId === 'string') { view.imageId = to.imageId; preflight['cliVersion'] = to.cliVersion; return true; }
   return false;

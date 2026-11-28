@@ -194,7 +194,7 @@
   "cli.toolchains.auto.propose": "Automatic update: proposal only — deckent toolchains update builds it after you confirm.",
   "cli.toolchains.auto.off": "Automatic update: off (toolchains.update.mode off).",
   "cli.toolchains.update.disabled": "Toolchain updates are off (toolchains.update.mode off); nothing was planned.",
-  "cli.toolchains.update.noChange": "Every tool is current; no new worker image is needed.",
+  "cli.toolchains.update.noChange": "No worker image refresh was planned.",
   "cli.toolchains.update.planned": "Planned: new worker image {version} for {tools}.",
   "cli.toolchains.update.applyHint": "Nothing was built. deckent toolchains update --apply builds it (Docker).",
   "cli.toolchains.update.built": "Built worker image {version} ({image}). Profile change proposal: {proposal} — the installation's profiles are not changed here.",

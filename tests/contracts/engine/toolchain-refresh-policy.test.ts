@@ -48,20 +48,24 @@ describe('registry revision of a built image', () => {
     nativeSubscription: { provider: 'p', preflight: { cliVersion: cli } } } });
   const template = (id: string, version: number, image: string, cli: string) => ({ id, version, adapter: { id: 'native-coding-template', version: 1 },
     parameters: { docker: { imageId: image }, invocation: { provider: 'p', cliVersion: cli } } });
+  const bound = (id: string, version: number, image: string, cli: string) => ({ ...template(id, version, image, cli), adapter: { id: 'native-coding-template', version: 2 },
+    parameters: { ...template(id, version, image, cli).parameters, worker: { connectionId: 'c' } } });
   const registry = (profiles: unknown[], kinds: [string, string, number][]) => ({ schemaVersion: 1, revision: 'rev', profiles, kinds: kinds.map(([kind, id, version]) => ({ kind, profile: { id, version } })),
     evaluators: [{ id: 'e', version: 1, implementation: { id: 'e', version: 1 } }] });
   const proposal = (...ids: [string, number][]) => ({ schemaVersion: 1, kind: 'profile-revision-proposal', proposedAt: '2026-10-06T10:00:00.000Z', imageVersion: 'r5-20261006', imageId: sha('b'), tag: null, application: 'not-applied', basis: 'x',
     profiles: ids.map(([id, version]) => ({ profile: { id, version }, provider: 'p', changes: { cliVersion: { from: 'old', to: 'new' }, imageId: { from: sha('a'), to: sha('b') } } })) }) as never;
   it('adds a new version with the new image and CLI pin, repoints only its kinds, keeps the old version, bumps the revision', () => {
-    const input = registry([native('n', 1, sha('a'), 'old'), template('t', 1, sha('a'), 'old'), native('other', 1, sha('a'), 'old')], [['kn', 'n', 1], ['kt', 't', 1], ['ko', 'other', 1]]);
-    const revised = reviseRegistryForProposal(input, proposal(['n', 1], ['t', 1]))!;
+    // R8 (owner 114): a template bound to a connection is never re-pinned to an image's CLI version, even when a proposal names it.
+    const input = registry([native('n', 1, sha('a'), 'old'), template('t', 1, sha('a'), 'old'), native('other', 1, sha('a'), 'old'), bound('b', 1, sha('a'), 'old')], [['kn', 'n', 1], ['kt', 't', 1], ['ko', 'other', 1], ['kb', 'b', 1]]);
+    const revised = reviseRegistryForProposal(input, proposal(['n', 1], ['t', 1], ['b', 1]))!;
     expect(revised.applied).toEqual([{ profile: 'n', from: 1, to: 2 }, { profile: 't', from: 1, to: 2 }]);
     const byKey = (id: string, version: number) => revised.registry.profiles.find(profile => profile.id === id && profile.version === version) as unknown as { parameters: Record<string, never> };
     expect(byKey('n', 1).parameters).toMatchObject({ imageId: sha('a') });
     expect(byKey('n', 2).parameters).toMatchObject({ imageId: sha('b'), nativeSubscription: { preflight: { cliVersion: 'new' } } });
     expect(byKey('t', 2).parameters).toMatchObject({ docker: { imageId: sha('b') }, invocation: { cliVersion: 'new' } });
     expect(byKey('other', 1).parameters).toMatchObject({ imageId: sha('a') });
-    expect(revised.registry.kinds.map(kind => `${kind.kind}:${kind.profile.version}`)).toEqual(['kn:2', 'kt:2', 'ko:1']);
+    expect(revised.registry.kinds.map(kind => `${kind.kind}:${kind.profile.version}`)).toEqual(['kn:2', 'kt:2', 'ko:1', 'kb:1']);
+    expect(revised.registry.profiles.filter(profile => profile.id === 'b')).toEqual([bound('b', 1, sha('a'), 'old')]);
     expect(revised.registry.revision).toBe('rev@r5-20261006');
     expect((input.profiles[0] as { version: number }).version).toBe(1); // the input is never mutated
   });

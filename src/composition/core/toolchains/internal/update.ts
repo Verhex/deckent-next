@@ -5,9 +5,9 @@ import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, compareToolchainVersions, extractToolchainVersion, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { buildWorkerImageInHome, readBuiltWorkerLineage, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
-import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
+import { imagePins, inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 /** @deprecated No importer in Core; barrel name kept for one release (Tur 2 Q17). */ export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
@@ -37,12 +37,18 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const policy = config.toolchains.update;
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
-  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
+  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher, config);
+  // Owner 114, no consent rule change: HEAD's one report decides (its stale providers are the consent identity); the build and its re-pins keep
+  // only the image pins of those providers, from the one configuration read the report itself comes from, and only where an image pin is behind the
+  // report's published version (a connected pin, never re-pinned, would otherwise keep a fresh image rebuilding).
+  const basis = report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort(), image = imagePins(config);
+  const latest = (provider: string) => report.providers.find(entry => entry.provider === provider)?.latest?.version;
+  const behind = image.filter(pin => { const version = extractToolchainVersion(pin.provider, pin.cliVersion), to = latest(pin.provider); return version !== null && to !== undefined && compareToolchainVersions(version, to) < 0; });
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
   const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const lineage = selectWorkerLineage(sources, await readBuiltWorkerLineage(home));
-  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config), heldVersion });
+  const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: image, heldVersion, only: behind.map(pin => pin.provider) });
   const proposed = planFor(null);
   if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
@@ -52,7 +58,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
     const planPath = await writeArtifact(join(home, 'plans'), limits.planTemplate.replace('{version}', proposed.next!.imageVersion).replace('{at}', plannedAt.replace(/[:.]/g, '-')), proposed);
     return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath, build: null, proposal: null, proposalPath: null });
   }
-  const binding = workerConsentBinding({ recipe: sources.recipe, providers: proposed.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
+  const binding = workerConsentBinding({ recipe: sources.recipe, providers: basis, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
   return configuredWorkerBuilder(projectRoot, options, { packageRoot: root, home, binding, refreshExisting: dependencies.refreshExisting === true, plannedAt, ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, async (reservation, buildSignal, retain) => {
     const signal = { signal: buildSignal };
     const plan = planFor(`r${Number(/^r([0-9]+)/u.exec(reservation.version)![1]) - 1}-00000000`);

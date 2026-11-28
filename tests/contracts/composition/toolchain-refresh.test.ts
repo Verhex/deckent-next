@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,13 +6,13 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh,
+import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh, updateConfiguredToolchains,
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { workerConsentBinding, configServiceState, restartConfigDigest } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
-import { readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { createNativeCodingTemplate, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 
 beforeEach(context => { if (process.platform !== 'linux') context.skip('configured policy/integrity flows need a verified POSIX UID'); });
 const roots: string[] = [];
@@ -105,6 +106,54 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     await write(); // the same old registry pins, now attested by the layered receipt
     expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
     expect(f.state.builds).toBe(2);
+    // Owner 114, no consent rule change: a two-provider consent is stored as one record per provider (one provider each), so the consent HEAD's view
+    // matched (claude's Docker pin stale too) still covers the narrower codex-only build without receipts; claude's record alone never covers codex.
+    const recipe = (await readWorkerImageSources(process.cwd())).recipe;
+    const consented = (provider: string) => ({ operation: 'worker-image.consent@1', id: `consent-${provider}`, person: { id: 'fixture', issuer: 'local-os', subject: 'fixture' }, scopeId: 'installation',
+      ...workerConsentBinding({ recipe, providers: [provider], npmRegistry: document.toolchains.currency.registryEndpoint, sources: {} }), createdAt: new Date().toISOString() });
+    await rm(receiptPath); f.latest['@anthropic-ai/claude-code'] = '2.1.300';
+    document.toolchains.image = { consents: [consented('claude')] }; await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+    document.toolchains.image = { consents: [consented('claude'), consented('codex')] }; await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(3); expect(await readToolchainRefreshState(f.root, f.options)).toMatchObject({ staleProviders: ['codex'] });
+    // Owner 114, both directions of the receipt exemption are HEAD's: an image receipt attesting codex and claude together still exempts the
+    // codex-only build (HEAD's basis is both stale providers)...
+    const layered = (providers: string[]) => writeFile(receiptPath, JSON.stringify({ ...receipt, schemaVersion: 3, images: [{ imageId: bounds.imageId, providers }] }));
+    document.toolchains.image = { consents: [] }; await layered(['codex', 'claude']); await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(4);
+    // ...and a stale connected codex template whose image no receipt attests still asks for the consent HEAD asked for, though it is never rebuilt.
+    f.latest['@anthropic-ai/claude-code'] = '2.1.278'; await layered(['codex']);
+    const { executable, ...limits } = document.execution.docker; void executable;
+    const bound = createNativeCodingTemplate({ ...limits, imageId: 'sha256:' + 'e'.repeat(64) }, { provider: 'codex', cliVersion: '0.150.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' },
+      { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque',
+        definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } });
+    document.admission.registry.profiles.push(bound); document.admission.registry.kinds.push({ kind: 'connected', profile: { id: bound.id, version: 1 } }); await write();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+    expect(f.state.builds).toBe(4);
+    // One decision moment as at HEAD: claude's Docker pin, stale when the report reads the configuration, is removed while npm answers; the consent
+    // still covers what HEAD's single report saw (codex and claude), so the codex receipt alone exempts nothing and no image is built.
+    document.admission.registry.profiles.pop(); document.admission.registry.kinds.pop(); f.latest['@anthropic-ai/claude-code'] = '2.1.300'; await write();
+    let raced = false;
+    const racing = { ...f.deps, fetcher: async (request: { package: string }) => { if (!raced) { raced = true; const current = JSON.parse(await readFile(f.path, 'utf8'));
+      current.admission.registry.profiles = current.admission.registry.profiles.filter((profile: { id: string }) => profile.id !== 'claude-pinned');
+      current.admission.registry.kinds = current.admission.registry.kinds.filter((kind: { kind: string }) => kind.kind !== 'claude-pinned'); await writeFile(f.path, JSON.stringify(current)); clearConfigCache(); }
+      return f.fetcher(request); } };
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, racing)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+    expect(raced).toBe(true); expect(f.state.builds).toBe(4);
+    // One configuration read: the report and the image pins come from the same loaded configuration. A stale codex Docker kind added after that
+    // read changes neither view (no-change, the report names only the connected kind); the next read sees it and asks for HEAD's consent.
+    await rm(receiptPath); document.admission.registry.profiles = [bound]; document.admission.registry.kinds = [{ kind: 'connected', profile: { id: bound.id, version: 1 } }]; await write();
+    const docker = nativeProfile('codex-docker', 'codex', 'codex-cli 0.155.1'), added = structuredClone(document);
+    added.admission.registry.profiles.push(docker); added.admission.registry.kinds.push({ kind: 'codex-docker', profile: { id: docker.id, version: docker.version } });
+    let late = false;
+    const after = { ...f.deps, get fetcher() { if (!late) { late = true; writeFileSync(f.path, JSON.stringify(added)); clearConfigCache(); } return f.fetcher; } };
+    const once = await updateConfiguredToolchains(f.root, { apply: true }, f.options, after);
+    expect(late).toBe(true); expect(once.decision).toBe('no-change');
+    expect(once.plan!.report.providers.find(entry => entry.provider === 'codex')!.admitted.map(pin => pin.profile.id)).toEqual([bound.id]);
+    await expect(updateConfiguredToolchains(f.root, { apply: true }, f.options, f.deps)).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONSENT_MISSING' });
+    expect(f.state.builds).toBe(4);
   });
 
   it('a stale install starts the refresh in the background without delaying the caller, then revises only the active profile version', async () => {
@@ -138,7 +187,23 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
 
   it('a second refresh of an already refreshed install builds nothing new and leaves the registry unchanged', async () => {
     const f = await fixture();
-    await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
+    // Owner 114 option 0: a template bound to a connection (codex, its record behind the latest) and claude's Docker pin (a CLI whose login may not
+    // be used in Docker, made stale here) are not image pins: one codex build for the Docker kind and the connected record kept. The consent is judged
+    // on HEAD's basis (both stale tools), so the installation holds a claude record next to codex's, as HEAD asked.
+    const document = JSON.parse(await readFile(f.path, 'utf8')), { executable, ...limits } = document.execution.docker; void executable;
+    document.toolchains.image.consents.push({ ...document.toolchains.image.consents[0], id: 'fixture-consent-claude',
+      ...workerConsentBinding({ recipe: (await readWorkerImageSources(process.cwd())).recipe, providers: ['claude'], npmRegistry: 'https://registry.example.invalid', sources: {} }) });
+    const binding = { schemaVersion: 1 as const, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64),
+      resourceKey: 'opaque-subscription-fixture', definition: { schemaVersion: 1 as const, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'no-state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } };
+    const connected = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: '0.150.0', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' }, binding);
+    document.admission.registry.profiles.push(connected); document.admission.registry.kinds.push({ kind: 'connected-codex', profile: { id: connected.id, version: connected.version } });
+    await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); f.latest['@anthropic-ai/claude-code'] = '2.1.300';
+    expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(1);
+    const refreshed = await f.registry();
+    expect(refreshed.profiles.filter(profile => profile.id === connected.id)).toEqual([connected]);
+    expect(refreshed.kinds.find(kind => kind.kind === 'connected-codex')!.profile).toEqual({ id: connected.id, version: 1 });
+    expect(refreshed.kinds.find(kind => kind.kind === 'claude-pinned')!.profile).toEqual({ id: 'claude-pinned', version: 1 });
     const after = await f.registry(); f.state.builds = 0; f.latest['@openai/codex'] = '0.156.0';
     const second = await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer);
     expect(second.outcome).toBe('current'); expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(after);
@@ -220,6 +285,16 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect(f.events.map(event => event.phase)).toEqual(['unverified']); expect(f.events[0]!.code).toEqual(expect.any(String));
     expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
     expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'unknown' });
+    // Owner 114: a stale codex image pin next to a connected codex pin whose version cannot be read is HEAD's `unverified` (CURRENCY_UNPARSED), never a
+    // recorded `current` for a build that was not made.
+    const document = JSON.parse(await readFile(f.path, 'utf8')), { executable, ...limits } = document.execution.docker; void executable;
+    const unreadable = createNativeCodingTemplate(limits, { provider: 'codex', cliVersion: 'unreadable', discovery: { schemaVersion: 1, mode: 'disabled' }, permissionMode: 'unattended' },
+      { schemaVersion: 1, connectionId: 'aabbccdd-1234-4123-8123-123456789abc', protocolFamily: 'claude-code-stream-json', profileDigest: 'b'.repeat(64), resourceKey: 'opaque',
+        definition: { schemaVersion: 1, executable: '/fixture/cli', configDir: '/fixture/login', stateDir: join(f.root, 'state'), ownerUid: 1000, minCliVersion: '0.100.0', delegatedUse: null } });
+    document.admission.registry.profiles.push(unreadable); document.admission.registry.kinds.push({ kind: 'connected', profile: { id: unreadable.id, version: 1 } });
+    await writeFile(f.path, JSON.stringify(document)); clearConfigCache();
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).toMatchObject({ outcome: 'unverified', event: { code: 'CURRENCY_UNPARSED' } });
+    expect(f.state.builds).toBe(0); expect(await readToolchainRefreshState(f.root, f.options)).toMatchObject({ phase: 'unverified', reason: 'CURRENCY_UNPARSED' });
   });
   it('an installation without Docker execution is never touched', async () => {
     const f = await fixture(); const config = JSON.parse(await readFile(f.path, 'utf8')); delete config.execution; await writeFile(f.path, JSON.stringify(config));
@@ -311,6 +386,20 @@ describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
     expect(registry.kinds.map(kind => kind.kind)).toContain('operator-kind'); // the operator's edit survives
     expect(registry.kinds.find(kind => kind.kind === 'codex-pinned')!.profile.version).toBe(2); // and the refresh still applied
     expect((await readToolchainRefreshState(f.root, f.options))).toMatchObject({ phase: 'current', appliedProfiles: 1 });
+    // Owner 114 (ii), at write time: a profile replaced during the codex build under the same id and version (a claude Docker profile, or codex with
+    // other pins) is not the one the proposal measured, so it is left untouched; HEAD would have re-pinned it with the codex receipt's image and CLI
+    // (`current`, one applied). Its currency was not measured by this pass, so the refresh records `unverified` with the concurrent-change code, also
+    // when another measured profile (`codex-two`) is applied; the next refresh measures the new pins.
+    for (const [replacement, other] of [[nativeProfile('codex-pinned', 'claude', '2.1.278 (Claude Code)'), true], [nativeProfile('codex-pinned', 'codex', 'codex-cli 0.150.0'), false]] as const) {
+      const g = await fixture(), two = nativeProfile('codex-two', 'codex', 'codex-cli 0.155.1'), start = JSON.parse(await readFile(g.path, 'utf8'));
+      if (other) { start.admission.registry.profiles.push(two); start.admission.registry.kinds.push({ kind: 'codex-two', profile: { id: two.id, version: 1 } }); await writeFile(g.path, JSON.stringify(start)); clearConfigCache(); }
+      const swap = async () => { const current = JSON.parse(await readFile(g.path, 'utf8'));
+        current.admission.registry.profiles = current.admission.registry.profiles.map((profile: { id: string }) => profile.id === 'codex-pinned' ? replacement : profile); await writeFile(g.path, JSON.stringify(current)); clearConfigCache(); };
+      expect(await refreshConfiguredToolchains(g.root, 'startup', g.options, { ...g.deps, onBuild: swap }, g.observer))
+        .toMatchObject({ outcome: 'unverified', event: { appliedProfiles: other ? 1 : 0, code: 'CONFIG_CONCURRENT_REVISION_HOLD' } });
+      expect(await readToolchainRefreshState(g.root, g.options)).toMatchObject({ phase: 'unverified', reason: 'CONFIG_CONCURRENT_REVISION_HOLD', appliedProfiles: other ? 1 : 0 });
+      expect(g.state.builds).toBe(1); expect((await g.registry()).profiles.filter(profile => profile.id === 'codex-pinned')).toEqual([replacement]);
+    }
   });
   it('P1-2: a registry that keeps changing is never overwritten: typed hold after the bounded retries, nothing of the refresh written, audit kept', async () => {
     const f = await fixture(); let n = 0;

@@ -11,7 +11,8 @@ vi.mock('#composition/core/toolchains/index.js', async original => ({ ...await o
 vi.mock('#composition/core/runs/index.js', () => ({ inspectConfiguredPoolCapacity: async () => state.pool ? { schemaVersion: 1 } : null }));
 vi.mock('#adapters/index.js', async original => ({ ...await original<object>(),
   workerImagePresence: async (input: { imageId: string }) => { state.presence.push(input.imageId); return state.found; } }));
-const { configuredWorkerKinds } = await import('../../../src/composition/core/toolchains/internal/worker-kinds.js');
+const { configuredWorkerKinds, inspectConfiguredWorkerKinds } = await import('../../../src/composition/core/toolchains/internal/worker-kinds.js');
+const { imagePins } = await import('../../../src/composition/core/toolchains/internal/currency.js');
 const { configuredWorkerSetupFact } = await import('../../../src/composition/core/run-planner/internal/intent-facts.js');
 
 it('R8b: a person who had a Docker image consent and rebinds the work kind to a subscription connection is not parked as worker setup pending', async () => {
@@ -39,6 +40,24 @@ it('R8b: a person who had a Docker image consent and rebinds the work kind to a 
   state.config = mixed;
   expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: true, params: { phase: 'ready', 'image-missing.1': 'missing-code' } });
   expect(await configuredWorkerKinds(mixed as never)).toEqual([{ kind: 'code', reason: null, rebind: false }, { kind: 'missing-code', reason: 'image-missing', rebind: true }]);
+  // Owner 114: an existing Docker kind of a CLI whose login may not be used in Docker is named as not runnable on the doctor view only; the planner
+  // and setup view stays byte-identical, so its Run-start refusal does not move, and the connected Claude kind is never marked.
+  const closed = { ...missing, id: 'claude-docker', parameters: { ...missing.parameters, invocation: { ...missing.parameters['invocation'] as object, provider: 'claude' } } };
+  const probes = config(connected); probes.admission.registry.profiles.push(missing, closed as never);
+  probes.admission.registry.kinds.push({ kind: 'missing-code', profile: { id: missing.id, version: missing.version } }, { kind: 'probe', profile: { id: closed.id, version: closed.version } });
+  state.config = probes;
+  expect(await configuredWorkerKinds(probes as never)).toEqual([{ kind: 'code', reason: null, rebind: false }, { kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'probe', reason: 'image-missing', rebind: true }]);
+  expect(await inspectConfiguredWorkerKinds('/unused')).toEqual([{ kind: 'code', reason: null, rebind: false }, { kind: 'missing-code', reason: 'image-missing', rebind: true },
+    { kind: 'probe', reason: 'image-missing', rebind: true, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }]);
+  // An older claude Docker profile (its subscription names the CLI, no version pin) is refused at Run start the same way; the doctor view names it from
+  // that subscription (its image is not probed, as at HEAD), and the planner row stays as it was.
+  const old = { id: 'claude-old', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...limits, argv: ['claude', '--print', 'old-task'], nativeSubscription: { schemaVersion: 1, provider: 'claude' } } };
+  probes.admission.registry.profiles.push(old as never); probes.admission.registry.kinds.push({ kind: 'old', profile: { id: old.id, version: old.version } });
+  expect((await configuredWorkerKinds(probes as never)).at(-1)).toEqual({ kind: 'old', reason: null, rebind: false });
+  expect((await inspectConfiguredWorkerKinds('/unused')).at(-1)).toEqual({ kind: 'old', reason: null, rebind: false, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' });
+  // The image refresh's own view (report, plan, receipt check): the connected and the login-closed kinds leave it, the codex Docker kind stays.
+  expect(imagePins({ admission: { registry: { profiles: [connected, missing, closed] } } }).map(pin => pin.profile.id)).toEqual([missing.id]);
+  state.config = mixed;
   state.pool = false;
   expect(await configuredWorkerSetupFact('/unused', 's')).toMatchObject({ ready: false });
   state.pool = true; state.presence = [];

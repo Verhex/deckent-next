@@ -1,14 +1,22 @@
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { admittedToolchains, assessToolchain, buildToolchainCurrencyReport, toolchainCatalog,
-  type LatestLookup, type ToolchainCurrencyReport } from '#engine/index.js';
-import { fetchNpmLatestVersion, NpmRegistryError, type NpmLatestVersion, type NpmLatestVersionInput } from '#adapters/index.js';
+import { admittedToolchains, imageToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, toolchainCatalog,
+  type LatestLookup, type ToolchainAdmissionSource, type ToolchainCurrencyReport } from '#engine/index.js';
+import { fetchNpmLatestVersion, nativeDockerCredential, NpmRegistryError, type NpmLatestVersion, type NpmLatestVersionInput } from '#adapters/index.js';
 
 export type NpmLatestVersionFetcher = (input: NpmLatestVersionInput) => Promise<NpmLatestVersion>;
+/** Owner 114 (2026-11-08 custody data): a CLI whose login may not be used in Docker; a CLI the adapter catalog does not list stays counted. */
+export const dockerLoginClosed = (provider: string) => { try { return nativeDockerCredential(provider as Parameters<typeof nativeDockerCredential>[0]) === 'prohibited'; } catch { return false; } };
+/** Owner 114 option 0: the pins whose kind runs its image, the only ones the refresh builds and re-pins; the report itself keeps every admitted pin. */
+export const imagePins = (config: ToolchainAdmissionSource) => imageToolchainProfiles(config, dockerLoginClosed);
+/** The public read (CLI, MCP, SDK as `inspectConfiguredToolchainCurrency`): HEAD's signature, loaded by its own root and options. */
+export const inspectProjectToolchainCurrency = (projectRoot: string, options: ConfigLoadOptions = {}, fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> =>
+  inspectConfiguredToolchainCurrency(projectRoot, options, fetcher);
 /** Read-only currency report. Network is used only when `toolchains.currency.mode` is `report`, one bounded request per npm package;
- * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. */
+ * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. `loaded` (owner 114, composition only): the update passes
+ * the configuration it already read, so its report and its image pins come from one read; the barrel exports `inspectProjectToolchainCurrency` instead. */
 export async function inspectConfiguredToolchainCurrency(projectRoot: string, options: ConfigLoadOptions = {},
-  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> {
-  const config = await loadConfig(projectRoot, options);
+  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion, loaded?: Awaited<ReturnType<typeof loadConfig>>): Promise<ToolchainCurrencyReport> {
+  const config = loaded ?? await loadConfig(projectRoot, options);
   const policy = config.toolchains.currency;
   const admitted = admittedToolchains(config);
   const lookups = new Map<string, Promise<LatestLookup>>();

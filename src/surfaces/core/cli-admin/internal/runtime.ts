@@ -246,7 +246,9 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     onToolchainRefresh: async event => { output({ ...event },
       () => event.phase === 'started' ? t('cli.runtime.toolchainRefreshStarted', {}, locale)
         : event.phase === 'failed' ? t('cli.runtime.toolchainRefreshFailed', { code: event.code ?? 'UNKNOWN' }, locale)
-        : event.phase === 'unverified' ? t('cli.runtime.toolchainRefreshUnverified', { code: event.code ?? 'UNKNOWN' }, locale)
+        // Owner 114: profiles moved to the new image are named (HEAD's applied sentence); the rest stays unverified.
+        : event.phase === 'unverified' ? event.appliedProfiles > 0 ? [t('cli.runtime.toolchainRefreshUpdated', { version: event.imageVersion ?? '-', count: event.appliedProfiles }, locale),
+          t('cli.runtime.toolchainRefreshUnverifiedRest', { code: event.code ?? 'UNKNOWN' }, locale)].join(' ') : t('cli.runtime.toolchainRefreshUnverified', { code: event.code ?? 'UNKNOWN' }, locale)
         : event.imageId ? t('cli.runtime.toolchainRefreshUpdated', { version: event.imageVersion ?? '-', count: event.appliedProfiles }, locale)
         : t('cli.runtime.toolchainRefreshCurrent', {}, locale), event.phase === 'failed' ? 'error' : 'info'); },
     onToolCallApprovalsExpired: async result => { output({ schemaVersion: 1, event: 'tool-call-approvals-expired', ...result },
