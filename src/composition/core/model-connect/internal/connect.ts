@@ -113,7 +113,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       },
       adapter: (_id, value) => siwc ? siwc.adapter(value.existing) : cli ? cli.adapter(kind!, value) : connectionAdapter(kind!, { ...value, endpoint: value.endpoint ?? '' }),
       workerActivate: (reference, commandId, beforeWrite) => authority!.applyWorker(reference,
-        () => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options, beforeWrite)),
+        planned => activateConfiguredWorkerModel(projectRoot, scopeId, reference, commandId, options, beforeWrite, planned)),
       async authorizeDelegation() { await authority!.witness(); },
       principal,
       async layers() {

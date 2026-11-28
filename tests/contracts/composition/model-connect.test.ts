@@ -402,6 +402,23 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   } finally { same.mockRestore(); race.mockRestore(); }
   expect.soft(raced).toBe(1);
   expect.soft(activeRows().length).toBe(opened.models!.filter(row => row.state === 'connected').length + 1);
+  // (d) The same race one step earlier: the other delivery of the SAME worker command completes the first target's children after its
+  // wide check and before this delivery's own catalog listing (the worker's entry is that seam). This delivery skips both children, is not
+  // written again, hands on its channel child's verified receipt revision (its child id, the planned revision) and the next targets go on.
+  // (b) above is the same early window for an outside command: no receipt of this command, nothing handed on, refused as before.
+  closeChannel();
+  const results: unknown[] = [];
+  const early = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
+    if (!results.length) { await worker(...args); results.push(await worker(...args)); return results[0] as Awaited<ReturnType<typeof worker>>; }
+    return worker(...args);
+  });
+  try {
+    await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId: 'pull-early' }, f.options, { registry: localRegistry }))
+      .resolves.toMatchObject({ status: 'connected' });
+  } finally { early.mockRestore(); }
+  expect.soft(results).toEqual([{ written: false, channel: 1 }]);
+  expect.soft(f.rows("SELECT revision FROM model_catalog_activations WHERE channel_id='openai-api' AND state='active'").map(row => row['revision'])).toEqual(
+    Array(opened.models!.filter(row => row.state === 'connected').length + 1).fill(1));
 });
 
 it.skipIf(process.platform !== 'linux')('explicit model state writes both owners; conflicting legacy rows remain byte-identical through read-only inspection', async () => {

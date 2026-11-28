@@ -120,11 +120,14 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   const writtenChannels = new Map<string, { state: 'active'; revision: number }>();
   return { current, initial: () => initial!, witness, attest, inspect, beforeDiscovery, mightWithdraw, mightObserve, withdrawal, discoveryAuthority, targets, config,
     authorizeCarry: (reference: ModelReference) => chat(initial!, reference),
-    async applyWorker(reference: ModelReference, write: () => Promise<Readonly<{ written: boolean; channel: number | null }>>) {
-      ModelConnectApplication.assertWorkerWrite(plannedWorkers.get(key(reference)), await workerFacts(reference, null, readCatalog), writtenChannels.get(reference.providerId));
+    async applyWorker(reference: ModelReference, write: (plannedChannel?: number) => Promise<Readonly<{ written: boolean; channel: number | null }>>) {
+      const planned = plannedWorkers.get(key(reference));
+      ModelConnectApplication.assertWorkerWrite(planned, await workerFacts(reference, null, readCatalog), writtenChannels.get(reference.providerId));
       // The next target takes as this connect's own only a channel revision its own channel child wrote (that child's receipt); a model
-      // child alone, or a channel another command opened meanwhile, leaves the planned channel revision in force.
-      const result = await write();
+      // child alone, or a channel another command opened meanwhile, leaves the planned channel revision in force. A channel the plan saw
+      // closed passes its planned revision on, the expected revision this command's channel child is built with.
+      const channel = planned?.channel?.access === 'allowed' && planned.channel.activation?.state !== 'active' ? planned.channel.activation?.revision ?? 0 : undefined;
+      const result = await write(channel);
       if (result.channel !== null) writtenChannels.set(reference.providerId, { state: 'active', revision: result.channel });
       return result.written;
     },
