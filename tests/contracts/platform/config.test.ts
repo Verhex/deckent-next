@@ -240,6 +240,9 @@ describe('new config contract and write authority', () => {
     expect(getConfigValue(createDefaultConfig(), 'layout.root')).toBeNull();
     expect(() => getConfigValue({}, '__proto__.polluted')).toThrow();
     expect(() => getConfigValue({}, 'missing')).toThrow();
+    // K3: the effective marker list is a floor union whose positions are no layer's own index (the CLI edits those): an index is refused, the whole key reads.
+    expect(getConfigValue(createDefaultConfig(), 'cli.agentEnvironment')).toContain('CLAUDECODE');
+    expect(() => getConfigValue(createDefaultConfig(), 'cli.agentEnvironment.0')).toThrow(expect.objectContaining({ code: 'CONFIG_ARRAY_INDEX_INVALID' }));
   });
   it('does not resolve secrets from the old sibling file and resolves fresh values from the injected backend', async () => {
     const f = await fixture();

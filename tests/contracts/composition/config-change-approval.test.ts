@@ -138,6 +138,12 @@ describe('config-change approval: request, decision, apply', () => {
     if (entry.status !== 'approval-pending' || removal.status !== 'approval-pending') throw new Error('expected pending');
     expect(entry.approval.summary).toBe('Setting will change: cli.agentEnvironment.0 MY_AGENT → NEW_AGENT (project)');
     expect(removal.approval.summary).toBe('List entry will be removed: cli.agentEnvironment.0 MY_AGENT (project); the entries after it move up one place');
+    // K3: a layer that never wrote the list: the planner changes nothing, so the card says there is no such entry instead of promising a removal.
+    const withoutList = JSON.parse((await bytesOf(f.path))!) as Record<string, unknown>; delete withoutList['cli'];
+    await writeFile(f.path, JSON.stringify(withoutList)); clearConfigCache();
+    const absent = await f.app.submit('unset', { ...f.command, commandId: 'cmd-entry-absent', keyPath: 'cli.agentEnvironment.0' });
+    if (absent.status !== 'approval-pending') throw new Error('expected pending');
+    expect(absent.approval.summary).toBe('No list entry to remove: cli.agentEnvironment.0 is not in this layer (project); the setting stays unchanged');
   });
 });
 

@@ -130,9 +130,17 @@ it('unset removes the authored key and reports the remaining effective value and
   await writeFile(join(global, 'config.json'), JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT', 'B_AGENT'] } }));
   await writeFile(path, JSON.stringify({ cli: { agentEnvironment: ['P_AGENT'] } })); clearConfigCache(); output.length = 0;
   await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--global', '--scope', 'scope-a', '--lang', 'en'], ctx);
-  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from global. Effective value: B_AGENT (source: global)');
-  output.length = 0; await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'en'], ctx);
-  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from project. Effective value: not defined (source: project)');
+  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from global. Value in this layer: B_AGENT. Apply:');
+  output.length = 0; await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'tr'], ctx);
+  expect(output.join('')).toContain('cli.agentEnvironment.0, proje katmanından kaldırıldı. Bu katmandaki değer: tanımlı değil. Uygulama:');
+  output.length = 0; await configCommand(['config', 'explain', 'cli.agentEnvironment.0', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('Source: project'); expect(output.join('')).not.toContain('Source: default');
+  // A reader that returns no row for the index still reports the removal, and never borrows a value from another view.
+  await writeFile(path, JSON.stringify({ cli: { agentEnvironment: ['P_AGENT'] } })); clearConfigCache(); output.length = 0;
+  const rowless = { ...ctx, configApplication: (at: string, options: ConfigLoadOptions) => Object.assign(ctx.configApplication(at, options),
+    { inspect: async () => ({ schemaVersion: 1 as const, digest: '', layer: 'project' as const, fields: [] }) }) };
+  await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'en'], rowless);
+  expect(output.join('')).toContain('Removed cli.agentEnvironment.0 from project. Value in this layer: -. Apply:');
 });
 
 it('explain uses the requested locale and the nested key’s own catalog description', async () => {
@@ -145,6 +153,13 @@ it('explain uses the requested locale and the nested key’s own catalog descrip
     expect(text).not.toMatch(/retirement|emeklilik/u);
     expect(text).toContain('stop-at-limit'); expect(text).toContain('continue'); expect(text).toContain('config unset');
     expect(text).toContain(locale === 'en' ? 'keeps the key in the file' : 'anahtarı dosyada tutar');
+  }
+  // K3: the marker list's per-layer limit is in that field's own description, not in its sibling `cli` fields'.
+  const [markers, sibling] = await app.explainMany({ keys: ['cli.agentEnvironment', 'cli.graphInputMaxBytes'] }), flat = (text: string) => text.replace(/\s+/gu, ' ');
+  for (const locale of ['en', 'tr'] as const) {
+    expect(flat(renderConfigExplanation(markers!, locale))).toContain(locale === 'en' ? 'Each layer lists at most 64 names' : 'Her katman en çok 64 ad listeler');
+    expect(flat(renderConfigExplanation(markers!, locale))).toContain(locale === 'en' ? 'cannot remove the installation' : 'kurulumun listesini');
+    expect(flat(renderConfigExplanation(sibling!, locale))).not.toMatch(/64 names|64 ad/u);
   }
 });
 it('human explain preserves schema literal alternatives as allowed values', () => {

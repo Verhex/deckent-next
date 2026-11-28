@@ -47,9 +47,10 @@ const cardValue = (text: string) => /^"(?:[^"\\]|\\.)*"$/.test(text) ? JSON.pars
 function configChangeSummary(subject: ConfigChangeSubject, locale: Locale) {
   const values = { key: subject.keyPath, before: cardValue(subject.before), after: subject.after === null ? '' : cardValue(subject.after),
     layer: subject.layer === 'global' ? t('config.surface.source.global', {}, locale) : t('config.surface.source.project', {}, locale) };
-  // K3: removing an index of the marker list takes that entry out of the layer's own list; no lower layer's value comes back at that index.
-  return subject.action === 'set' ? t('config.approval.summary.set', values, locale)
-    : isAgentEnvironmentIndex(subject.keyPath) ? t('config.approval.summary.unsetEntry', values, locale) : t('config.approval.summary.unset', values, locale);
+  // K3: removing an index of the marker list takes that entry out of the layer's own list (no lower layer's value comes back there). Its before is
+  // that layer's own element, a quoted name when present, so `null` means the layer has no list there and the planner changes nothing.
+  return subject.action === 'set' ? t('config.approval.summary.set', values, locale) : !isAgentEnvironmentIndex(subject.keyPath) ? t('config.approval.summary.unset', values, locale)
+    : subject.before === 'null' ? t('config.approval.summary.unsetEntryAbsent', values, locale) : t('config.approval.summary.unsetEntry', values, locale);
 }
 /**
  * T3 L2 CONFIG-APPROVAL: the approval port of the configured write path — the principal's current policy decides (`evaluateConfigWrite`), the

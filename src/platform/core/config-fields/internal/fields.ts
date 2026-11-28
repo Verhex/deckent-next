@@ -82,7 +82,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli-run', 'src/surfaces/core/cli-human'] }, 'live', z.strictObject({ get graphInputMaxBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1048576); }, get invocationInputMaxBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1048576); },
     /** INIT-D7 (UX only, never a security boundary): exact environment variable names that mark an AI agent caller (no prefix match); any
      * non-empty value other than 0/false makes the CLI plain and never asks a question. Evidence of each default: L-KIT HANDOFF (2026-10-19). */
-    get agentEnvironment() { return z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).prefault(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
+    get agentEnvironment() { return z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).prefault(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']).describe('config.field.cli.agentEnvironment'); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
   policy: field('config.field.policy', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'live', z.strictObject({
     get mcp() { return z.strictObject({ optInGroups: z.array(z.string().regex(/^[a-z][a-z0-9.-]{0,47}$/u)).max(64).prefault([]) }).prefault({}); },
   }).prefault({})),

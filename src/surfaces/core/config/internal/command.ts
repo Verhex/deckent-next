@@ -128,8 +128,7 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const outcome = await app.submit(action, action === 'set' ? { ...input, value } : input);
   if (outcome.status === 'approval-pending') { emit(outcome, { ...sinks, render: () => renderConfigPending(outcome, locale, 'cli').join('\n') }); return; }
   const { result } = outcome;
-  // The remaining value is read on the layer that was written (an index of the marker list is that layer's own element).
-  const remaining = action === 'unset' ? (await app.inspect({ keyPath, layer })).fields.find(item => item.key === keyPath) : undefined;
+  const remaining = action !== 'unset' ? undefined : isAgentEnvironmentIndex(keyPath) ? await layerElement(app, keyPath, layer) : await app.explain({ keyPath });
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
   emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale, remaining).join('\n') });
@@ -193,12 +192,16 @@ async function openPanel(context: ConfigCommandContext, root: string, options: C
   const lines = written.length ? written : pushed;
   if (lines.length) emit(lines.join('\n'), { ...sinks, json: false });
 }
+/** K3: what an index unset of the marker list leaves in the written layer (null when the reader returns no row for that index). */
+const layerElement = async (app: ConfigApplication, keyPath: string, layer: 'project' | 'global') => (await app.inspect({ keyPath, layer })).fields.find(item => item.key === keyPath) ?? null;
+/** `remaining`: undefined after a `set`; after an `unset` the view of what is left (null: an index whose row was not returned, shown as "-"). */
 function renderConfigChanged(keyPath: string, layer: 'project' | 'global', apply: 'live' | 'restart', result: { readonly backupPath: string | null; readonly overridden: boolean },
-  service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale, remaining?: ConfigFieldView): string[] {
+  service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale, remaining?: ConfigFieldView | null): string[] {
   const values = { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale, keyPath), backup: result.backupPath ?? '-' };
-  return [remaining ? t('config.surface.removed', { ...values, value: remaining.value === undefined ? t('config.surface.notDefined', {}, locale)
-    : terminalSafeText(configValueWord(remaining.value, remaining.redacted, locale)), source: sourceWord(remaining.source, locale) }, locale)
-    : t('config.surface.changed', values, locale),
+  const shown = (view: ConfigFieldView) => view.value === undefined ? t('config.surface.notDefined', {}, locale) : terminalSafeText(configValueWord(view.value, view.redacted, locale));
+  return [remaining === undefined ? t('config.surface.changed', values, locale)
+    : remaining === null || isAgentEnvironmentIndex(keyPath) ? t('config.surface.removedEntry', { ...values, value: remaining ? shown(remaining) : '-' }, locale)
+    : t('config.surface.removed', { ...values, value: shown(remaining), source: sourceWord(remaining.source, locale) }, locale),
     ...applyGuidance(apply, locale, keyPath),
     ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : []),
     ...(service ? [{ current: t('config.surface.service.current', {}, locale), stale: t('config.surface.service.stale', {}, locale),
@@ -254,8 +257,9 @@ export async function terminalConfigWrite(root: string, request: Omit<ConfigWrit
     return { status: outcome.status, lines, approvalId: outcome.approval.approvalId };
   }
   pendingWrites.delete(key);
-  const field = (await context.configApplication!(root, options).inspect({ keyPath: request.keyPath, layer })).fields.find(item => item.key === request.keyPath);
-  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field!.apply, outcome.result, null, locale, request.action === 'unset' ? field : undefined), approvalId: outcome.approvalId };
+  const app = context.configApplication!(root, options), field = await app.explain({ keyPath: request.keyPath });
+  const remaining = request.action !== 'unset' ? undefined : isAgentEnvironmentIndex(request.keyPath) ? await layerElement(app, request.keyPath, layer) : field;
+  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field.apply, outcome.result, null, locale, remaining), approvalId: outcome.approvalId };
 }
 
 /** `/config key=value` (T3 L4 shortcut): the key's schema reads the text (the text itself, else its JSON); the project layer is written. */
