@@ -1013,6 +1013,9 @@ in the policy file, as in every other audit record; do not put private text in r
   Going further back to beta.1.2 makes every invocation recorded
   with plan-usage v2 fail on read with `MODEL_INVOCATION_CORRUPT`, whole audit pages with the new subjects fail with
   `AUDIT_INTEGRITY`, and worker transcripts containing `cli.observation` fail as a whole. Never prune the new audit records.
+- **The setup wizard's execution-permission preview can leave SQLite sidecar files.** Its own scoped read opens the source and target
+  ledgers; beside a cleanly closed ledger it can leave `ledger.db-shm` and an empty `ledger.db-wal`. This is the preview's read, not
+  the first-publication witness (which reads a private copy), and it changes no record.
 
 - **A configuration without Docker settings cannot be read by an older build (alpha.63, R8b).** Once `execution` holds only `git`, a build
   before alpha.63 refuses the config with its strict schema and does not open. *Workaround:* to go back, restore the pre-upgrade backup.
