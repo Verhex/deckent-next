@@ -93,10 +93,12 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
     ? row.model.id === reference.modelId && row.model.version === reference.modelVersion : row.model.nativeId === nativeId) : undefined;
   if (channel?.access !== 'allowed' || !model) {
     if (workerOnly) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-    return { writes: [], conflict: false };
+    return { writes: [], conflict: false, completed: null };
   }
-  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes: (() => Promise<boolean>)[] = [];
+  const targets = action === 'activate' ? [null, model.modelId] : [model.modelId], writes: (() => Promise<WorkerWrite>)[] = [];
+  // `completed`: the channel revision of a channel child this same command completed (T25, read from its verified receipt).
   let conflict = false;
+  const completed: { channel: number | null } = { channel: null };
   const prefix = workerOnly ? commandId : `model-state-${createHash('sha256').update(commandId).digest('hex')}`;
   if (action === 'activate') {
     refuseRetiredModelActivation(channel.models, model.modelId, Date.now());
@@ -109,51 +111,58 @@ async function planWorkerWrites(root: string, scopeId: string, reference: ModelR
       channelId: channel.channelId, modelId, expectedRevision: current?.revision ?? 0 };
     // A chat receipt replay with a newly missing child still requires a witness. A concurrent delivery of the same command may complete
     // the child after its receipt was looked up: the revision conflict that follows is reconciled before it stands.
+    const done = (revision: number | null) => { if (modelId === null) completed.channel = revision; return revision !== null; };
     const planned = await planCatalogWrite(context, authority, child).catch(async (error: unknown) => {
-      if (action === 'activate' && error instanceof ModelCatalogError && error.code === 'MODEL_CATALOG_REVISION_CONFLICT' && await reached(context, child)) return null;
+      if (action === 'activate' && error instanceof ModelCatalogError && error.code === 'MODEL_CATALOG_REVISION_CONFLICT' && done(await reached(context, child))) return null;
       throw error;
     });
     if (!planned) continue;
     // A matching child receipt: when the row read again in this context holds the requested state (a concurrent delivery of the same
     // command completed it), the child is done and is not written again. Otherwise the conflict is noted; every child is still planned,
     // so a later child's refusal keeps its place.
-    if (action === 'activate' && planned.replay) { if (!await reached(context, child)) conflict = true; continue; }
+    if (action === 'activate' && planned.replay) { if (!done(await reached(context, child))) conflict = true; continue; }
     // The writer can be the first to see the receipt: the same rule then decides (done without a write, or the conflict), and only a real
-    // write counts as written.
+    // write counts as written. A channel revision is named only by this command's own channel child: written now, or completed (its receipt).
     writes.push(async () => {
       const result = await planned.write(channel, [model.modelId]);
-      if (result.replayed && action === 'activate' && !await reached(context, child)) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
-      return !result.replayed;
+      const replayed = result.replayed && action === 'activate' ? await reached(context, child) : null;
+      if (result.replayed && action === 'activate' && replayed === null) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
+      const opened = modelId === null && !result.replayed ? result.receipt.changes.find(change => change.kind === 'activation' && change.modelId === null)?.revision : undefined;
+      return { written: !result.replayed, channel: modelId === null ? opened ?? replayed : null };
     });
   }
-  return { writes, conflict };
+  return { writes, conflict, completed: completed.channel };
 }
 
 /** A child completed by this same command: its receipt (same command and actor) is verified like a parent's, a broken one is an error
- * (199/1), and its row, read now in the command's own context, is active past the receipt's expected revision. `reached` only reads. */
-const reached = async (context: Context, child: Exclude<ModelCatalogCommand, { action: 'register' }>) => {
+ * (199/1), and its row, read now in the command's own context, is active past the receipt's expected revision. Returns the revision the
+ * receipt records for that child, else null. `reached` only reads. */
+const reached = async (context: Context, child: Exclude<ModelCatalogCommand, { action: 'register' }>): Promise<number | null> => {
   const reader = await openSqliteModelCatalogReader(await context.path(), activationReceiptOptions(context));
   try {
     const { id, issuer, subject, assurance } = context.principal, receipt = await reader.loadReceipt!(child.scopeId, child.commandId);
-    if (!receipt || !sameModelCatalogRequest(receipt, child, modelActivationActorSchema.parse({ id, issuer, subject, assurance }))) return false;
+    if (!receipt || !sameModelCatalogRequest(receipt, child, modelActivationActorSchema.parse({ id, issuer, subject, assurance }))) return null;
     verifyCatalogActivationChange(receipt, child);
     const row = await reader.activation(child.scopeId, child.channelId, child.modelId);
-    return row?.state === 'active' && row.revision > child.expectedRevision;
+    const change = receipt.changes.find(item => item.kind === 'activation' && item.modelId === child.modelId);
+    return row?.state === 'active' && row.revision > child.expectedRevision ? change?.revision ?? null : null;
   } finally { reader.close(); }
 };
 
+/** `written`: at least one child really written by this delivery; `channel`: the channel revision its own channel child wrote, else null. */
+type WorkerWrite = Readonly<{ written: boolean; channel: number | null }>;
 /** A named worker-only model has no chat declaration or whole-channel cascade. */
 export async function activateConfiguredWorkerModel(root: string, scopeId: string, reference: ModelReference, commandId: string, options: ConfigLoadOptions = {},
-  beforeWrite?: () => Promise<void>): Promise<boolean> {
+  beforeWrite?: () => Promise<void>): Promise<WorkerWrite> {
   try {
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read'), authority = activationAuthority(root, scopeId, options, context);
-    const { writes, conflict } = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
-    if (!writes.length && !conflict) return false;
+    const { writes, conflict, completed } = await planWorkerWrites(root, scopeId, reference, commandId, 'activate', options, context, authority, true);
+    if (!writes.length && !conflict) return { written: false, channel: completed };
     await authority.witness('models.activate');
     if (conflict) throw new ModelCatalogError('MODEL_CATALOG_REVISION_CONFLICT');
     // A caller's own check (a connect's wide check) runs right before each durable write.
-    let written = false;
-    for (const write of writes) { await beforeWrite?.(); if (await write()) written = true; }
-    return written;
+    let written = false, channel: number | null = completed;
+    for (const write of writes) { await beforeWrite?.(); const result = await write(); written ||= result.written; channel = result.channel ?? channel; }
+    return { written, channel };
   } catch (error) { throw queryFailure(error); }
 }

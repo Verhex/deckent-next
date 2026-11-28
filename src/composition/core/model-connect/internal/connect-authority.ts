@@ -120,12 +120,13 @@ export function connectAuthority(root: string, command: ModelConnectCommand, opt
   const writtenChannels = new Map<string, { state: 'active'; revision: number }>();
   return { current, initial: () => initial!, witness, attest, inspect, beforeDiscovery, mightWithdraw, mightObserve, withdrawal, discoveryAuthority, targets, config,
     authorizeCarry: (reference: ModelReference) => chat(initial!, reference),
-    async applyWorker(reference: ModelReference, write: () => Promise<boolean>) {
-      const parent = ModelConnectApplication.assertWorkerWrite(plannedWorkers.get(key(reference)),
-        await workerFacts(reference, null, readCatalog), writtenChannels.get(reference.providerId));
+    async applyWorker(reference: ModelReference, write: () => Promise<Readonly<{ written: boolean; channel: number | null }>>) {
+      ModelConnectApplication.assertWorkerWrite(plannedWorkers.get(key(reference)), await workerFacts(reference, null, readCatalog), writtenChannels.get(reference.providerId));
+      // The next target takes as this connect's own only a channel revision its own channel child wrote (that child's receipt); a model
+      // child alone, or a channel another command opened meanwhile, leaves the planned channel revision in force.
       const result = await write();
-      if (result && parent?.state !== 'active') writtenChannels.set(reference.providerId, { state: 'active', revision: (parent?.revision ?? 0) + 1 });
-      return result;
+      if (result.channel !== null) writtenChannels.set(reference.providerId, { state: 'active', revision: result.channel });
+      return result.written;
     },
     async beforeProbes(base: string, ids: readonly string[], layers: Layers) {
       if (!('pull' in command.model) || !ids.length) return;

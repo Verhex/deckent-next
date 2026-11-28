@@ -454,7 +454,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     remove('');
     const worker = (commandId: string) => () => activateConfiguredWorkerModel(direct.project, 's', direct.reference, commandId, direct.options);
     const openWorkerStore = witnessAdapters.openSqliteModelCatalogStore;
-    let fired = false, firstWrote: boolean | undefined;
+    let fired = false, firstWrote: Awaited<ReturnType<typeof activateConfiguredWorkerModel>> | undefined;
     const behind = (commandId: string, after?: () => Promise<unknown>) => vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
       if (!running && !fired) {
         fired = running = true;
@@ -463,8 +463,10 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       return openWorkerStore(...args);
     });
     let writer = behind('worker-behind');
-    try { await expect.soft(asPerson(worker('worker-behind'))).resolves.toBe(false); } finally { writer.mockRestore(); }
-    expect.soft(firstWrote).toBe(true);
+    // The completed delivery wrote nothing; it names the channel revision the first delivery's channel child wrote (1: the row was removed),
+    // read from that child's verified receipt of this command and actor. The first one opened the channel itself.
+    try { await expect.soft(asPerson(worker('worker-behind'))).resolves.toEqual({ written: false, channel: 1 }); } finally { writer.mockRestore(); }
+    expect.soft(firstWrote).toEqual({ written: true, channel: 1 });
     remove(''); fired = false;
     writer = behind('worker-closed', () => applyModelCatalog(direct.project, { schemaVersion: 1, commandId: 'close-meanwhile', scopeId: 's', action: 'deactivate',
       channelId: SEED_CHANNEL, modelId: f.model.nativeId, expectedRevision: 1 }, direct.options));

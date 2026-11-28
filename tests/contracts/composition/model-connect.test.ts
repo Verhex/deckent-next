@@ -354,6 +354,54 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   // The v1 frame may resize after converting this synthetic v2 fixture; the next exact reconnect is stable.
   await connectConfiguredModel(f.project, { ...command, commandId: 'billing-stable' }, f.options, { registry: localRegistry });
   expect((await f.config()).provider_invocation_profiles.profiles.find(row => row['id'] === current['id'])).toEqual(kept);
+  // Two worker targets of one channel in one pull, the channel closed at the start. (a) The first target opens it itself: the connect goes on.
+  const closeChannel = () => { const db = new DatabaseSync(f.ledger); try { db.prepare("DELETE FROM model_catalog_activations WHERE channel_id='openai-api'").run(); } finally { db.close(); } };
+  const pull = { ...command, model: { pull: 'available' } }, activeRows = () => f.rows("SELECT model_id FROM model_catalog_activations WHERE channel_id='openai-api' AND state='active' ORDER BY model_id");
+  closeChannel();
+  const opened = await connectConfiguredModel(f.project, { ...pull, commandId: 'pull-opens' }, f.options, { registry: localRegistry });
+  expect.soft(opened.models?.filter(row => row.state === 'connected').length).toBeGreaterThan(1);
+  expect.soft(activeRows().length).toBe(opened.models!.filter(row => row.state === 'connected').length + 1);
+  // (b) Another command opens only the channel after the first target's start check (as when the later targets' chat is not on yet; a
+  // channel open cascades to chat-on models): this delivery writes only the model, and the second target's wide check does not take the
+  // outside revision as this connect's own: it stops; the first model's write stays. The channel row (a) wrote stands in for that command.
+  const [opening] = f.rows("SELECT * FROM model_catalog_activations WHERE channel_id='openai-api' AND model_id=''");
+  closeChannel();
+  const worker = activationOwners.activateConfiguredWorkerModel, firsts: string[] = [];
+  const opens = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
+    if (!firsts.length) {
+      const db = new DatabaseSync(f.ledger);
+      try { db.prepare('INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)')
+        .run(...(['scope_id', 'channel_id', 'model_id', 'revision', 'state', 'record'] as const).map(column => opening![column] as string | number)); } finally { db.close(); }
+    }
+    firsts.push(args[2].modelId);
+    return worker(...args);
+  });
+  try {
+    await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId: 'pull-outside' }, f.options, { registry: localRegistry }))
+      .rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
+  } finally { opens.mockRestore(); }
+  expect.soft(firsts).toHaveLength(1);
+  expect.soft(activeRows()).toEqual([{ model_id: '' }, { model_id: expect.any(String) }]);
+  // (c) Another delivery of the SAME worker command completes the first target's children right before this one writes (T25): this
+  // delivery writes nothing, hands on the channel revision from its channel child's verified receipt, and the next targets go on.
+  closeChannel();
+  const openStore = witnessAdapters.openSqliteModelCatalogStore;
+  let winner: (() => Promise<unknown>) | null = null, raced = 0;
+  const race = vi.spyOn(witnessAdapters, 'openSqliteModelCatalogStore').mockImplementation(async (...args) => {
+    const run = winner; winner = null;
+    if (run) { raced++; await run(); }
+    return openStore(...args);
+  });
+  const same = vi.spyOn(activationOwners, 'activateConfiguredWorkerModel').mockImplementation(async (...args) => {
+    if (!raced && !winner) winner = () => worker(...args);
+    return worker(...args);
+  });
+  try {
+    await expect.soft(connectConfiguredModel(f.project, { ...pull, commandId: 'pull-same' }, f.options, { registry: localRegistry }))
+      .resolves.toMatchObject({ status: 'connected' });
+  } finally { same.mockRestore(); race.mockRestore(); }
+  expect.soft(raced).toBe(1);
+  expect.soft(activeRows().length).toBe(opened.models!.filter(row => row.state === 'connected').length + 1);
 });
 
 it.skipIf(process.platform !== 'linux')('explicit model state writes both owners; conflicting legacy rows remain byte-identical through read-only inspection', async () => {
