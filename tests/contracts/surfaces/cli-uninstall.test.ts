@@ -168,6 +168,12 @@ it('the reopen card counts unknown results from a fresh preview, says when it co
     expect(await reopenRetiredFolder(config, 'en', {}, { previewUninstall: async () => ({ work: { complete: false, uncertain: [] } }) })).toBe(false);
     expect(asked[2]!.body!.join('\n')).toContain('could not be checked'); expect(asked[2]!.body!.join('\n')).not.toContain('still unknown');
     expect(await lstat(join(data, 'installation/retired.json'))).toBeTruthy();
+    // K3: the real card gate gets the host's effective list: a process carrying only the installation's own marker is no person; the record stays.
+    const tty = { isTTY: true, setRawMode: () => undefined };
+    ask.mockImplementationOnce(async (request, io) => { card.cliCardGate(request, { ...io, stdin: tty as never, stdout: tty }); return 'continue'; });
+    await expect(reopenRetiredFolder(config, 'en', { CORP_AGENT: '1' }, { previewUninstall: async () => ({ work: { complete: true, uncertain: [] } }), agentEnvironment: ['CORP_AGENT'] }))
+      .rejects.toMatchObject({ code: 'TERMINAL_TTY_REQUIRED' });
+    expect(await lstat(join(data, 'installation/retired.json'))).toBeTruthy();
   } finally { ask.mockRestore(); await rm(project, { recursive: true, force: true }); }
 });
 

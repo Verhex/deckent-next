@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AGENT_ENVIRONMENT } from '#surfaces/core/cli-human/index.js';
+import { resolveGlobalConfigPaths } from '#platform/index.js';
 import { personEnv } from '../support/person-env.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
@@ -159,9 +160,9 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       const home = await mkdtemp(join(tmpdir(), 'deckent-init-execution-home-')), root = await mkdtemp(join(tmpdir(), 'deckent-init-execution-root-'));
       roots.push(home, root);
       const env = personEnv({ PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
-      const run = async (args: string[], steps: unknown[], expectedStatus = 0, size = [24, 60], argv = [process.execPath, cli, ...args]) => {
+      const run = async (args: string[], steps: unknown[], expectedStatus = 0, size = [24, 60], argv = [process.execPath, cli, ...args], runEnv = env) => {
         const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify(argv), root, JSON.stringify(size)],
-          { env, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
+          { env: runEnv, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
         const result = JSON.parse(stdout) as { status: number; output: string; marks: number[]; snapshots: Record<string, string | null>[]; timeout?: string };
         expect(result.timeout, result.output?.slice(-4000)).toBeUndefined(); expect(result.status, result.output?.slice(-4000)).toBe(expectedStatus);
         return result;
@@ -170,7 +171,12 @@ describe.skipIf(process.platform !== 'linux')('119-F1b execution consent on the 
       const observed = await execute(process.execPath, [cli, 'policy', 'upgrade', '--template', 'current', '--only', 'ai-execution', '--scope', 'erp', '--preview', '--json'], { cwd: root, env, timeout: 120_000 });
       expect(JSON.parse(observed.stdout)).toMatchObject({ executionHistory: 'unknown' }); // Governed CLI stays archive-only.
       // A real, witnessed non-execution write before a second init must preserve the fresh-origin default.
-      await run(['init', 'policy', '--modes', 'full-auto', '--scope', 'erp', '--apply', '--lang', locale], [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']]);
+      // K3: the installation list is set to [] here, so CLAUDECODE is no marker: the person's --modes card opens (it used to refuse with the default list).
+      const installed = resolveGlobalConfigPaths(env).platformPath, original = await readFile(installed, 'utf8').catch(() => null);
+      await mkdir(dirname(installed), { recursive: true }); await writeFile(installed, JSON.stringify({ ...JSON.parse(original ?? '{}') as object, cli: { agentEnvironment: [] } }));
+      const modesArgs = ['init', 'policy', '--modes', 'full-auto', '--scope', 'erp', '--apply', '--lang', locale];
+      await run(modesArgs, [[locale === 'en' ? 'Enter confirm' : 'Enter onayla', 'y']], 0, [24, 60], [process.execPath, cli, ...modesArgs], { ...env, CLAUDECODE: '1' });
+      await (original === null ? rm(installed) : writeFile(installed, original)); // the later marked steps run with the default list again
       // The installer grant publication above is keyed; permanent /mode writes are two distinct keyless edges.
       const modes = await execute(process.execPath, ['--input-type=module', '-e', `
         const { FilePolicySource, LocalOsSessionAuthority } = await import(${JSON.stringify(resolve('dist/adapters/index.js'))});

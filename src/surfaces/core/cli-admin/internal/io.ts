@@ -11,7 +11,7 @@ export async function askAdminCard(context: AdminCommandContext, locale: Locale,
   const ttlMs = await loadConfig(context.root ?? process.cwd(), { env }).then(config => config.approvals.sessionTtlMs, () => getConfigFieldDefault('approvals').sessionTtlMs);
   return askCliCard(request, { locale, env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
     ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-    ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+    agentEnvironment: context.agentEnvironment });
 }
 /** Apply / cancel answers; nothing is preselected, so Enter alone decides nothing. */
 export const confirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('cli.admin.card.apply', {}, locale), role: 'yes' },

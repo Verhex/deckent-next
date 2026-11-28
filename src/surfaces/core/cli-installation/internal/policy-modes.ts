@@ -47,7 +47,7 @@ export async function policyModesCommand(context: InstallationCommandContext, in
   const who = whoText(preview);
   const answer = await askCliCard({ title: t('cli.init.policyModes.cardTitle', { who, scope: terminalSafeText(scopeId) }, locale), body: modeLines(preview, locale),
     options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), role: 'no' }] },
-  { locale, ...(context.env ? { env: context.env } : {}), signal: AbortSignal.timeout(ttlMs) });
+  { locale, ...(context.env ? { env: context.env } : {}), agentEnvironment: context.agentEnvironment, signal: AbortSignal.timeout(ttlMs) });
   if (answer !== 'apply') return show({ ...preview, status: 'cancelled' });
   show(await handler(root, scopeId, { ...call, apply: true, expect: preview.revision! }));
 }

@@ -85,7 +85,7 @@ export async function hubCommand(argv: readonly string[], context: HubCommandCon
     { subject: 'cli.input.subject.hub', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin) : {};
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw ErrorRegistry.createError('CLI_USAGE');
   const value = raw as Record<string, unknown>, configured = (config.terminal as { scopeId?: string } | undefined)?.scopeId;
-  const ask = (request: Parameters<typeof askCliCard>[0]) => askCliCard(request, { ...context, locale, signal: AbortSignal.any([AbortSignal.timeout(config.approvals.sessionTtlMs), ...(context.signal ? [context.signal] : [])]) });
+  const ask = (request: Parameters<typeof askCliCard>[0]) => askCliCard(request, { ...context, locale, agentEnvironment: context.agentEnvironment, signal: AbortSignal.any([AbortSignal.timeout(config.approvals.sessionTtlMs), ...(context.signal ? [context.signal] : [])]) });
   const scope = await resolveCommandScope({ command: 'deckent hub', locale, explicit: args.scope ?? (typeof value.scopeId === 'string' ? value.scopeId : undefined),
     configured, mutating: writing, interactive: cliMode(context, args.json).mode === 'interactive', listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return 1;

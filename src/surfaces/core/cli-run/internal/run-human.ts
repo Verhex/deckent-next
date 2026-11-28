@@ -16,7 +16,7 @@ export async function runHumanIo(context: RunCommandContext, locale: Locale): Pr
   return { locale, root, options, print: text => out.write(`${text}\n`),
     ask: request => askCliCard(request, { locale, env: options.env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
       ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-      ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }) };
+      agentEnvironment: context.agentEnvironment }) };
 }
 
 /** The Run as a person names it: its first titled task, else the first line of a task request, else (PRE-5: a delivery-queue verify Run records

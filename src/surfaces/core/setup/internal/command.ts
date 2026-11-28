@@ -76,7 +76,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   if (permission) {
     emit(ErrorRegistry.createError('PATCH_UNSAFE', { params: { ...permission, reason: 'git-directory-write' }, locale }).message, { ...sinks, level: 'warning' });
     if (person) {
-      try { await context.gitDeliveryPermission!(root, { env }, async (path, before, after, command) => await askCliCard(directoryPermissionCard(path, before, after, locale, command), { ...context, locale, env }) === 'yes'); }
+      try { await context.gitDeliveryPermission!(root, { env }, async (path, before, after, command) => await askCliCard(directoryPermissionCard(path, before, after, locale, command), { ...context, locale, env, agentEnvironment: context.agentEnvironment }) === 'yes'); }
       catch (error) { emit(formatHumanError(error instanceof DeckentError ? error : ErrorRegistry.createError('PATCH_UNSAFE'), { locale, noColor: true }), { ...sinks, level: 'warning' }); }
     }
   }

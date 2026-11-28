@@ -19,7 +19,7 @@ export async function offerAttachedSession(context: CommandContext, locale: Loca
       connections: terminalSafeText(connections || t('setup.session.noConnection', {}, locale)), costs: terminalSafeText(costs || t('setup.session.noConnection', {}, locale)),
       writeRoot: terminalSafeText(offer.writeRoot) }, locale)],
     options: [{ id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'no' },
-  { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
+  { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment,
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
   if (answer !== 'yes') return true;

@@ -58,7 +58,7 @@ export async function queueCommand(argv: readonly string[], context: QueueComman
     const resolved = await resolveCommandScope({ command, locale, explicit: values.get('--scope'), configured: typeof configured === 'string' ? configured : undefined,
       mutating, interactive, listScopes: () => scopeLister(context, root, { env })().catch(() => []),
       pick: request => askCliCard(request, { locale, env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
-        ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }) });
+        ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment }) });
     if (!resolved) return;
     scopeId = resolved.scopeId; if (resolved.source !== 'flag' && !json) emit(scopeNotice(resolved, locale), sinks);
   }

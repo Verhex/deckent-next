@@ -103,6 +103,17 @@ it('unset removes the authored key and reports the remaining effective value and
   await writeFile(path, JSON.stringify({ language: 'en' })); clearConfigCache(); output.length = 0;
   await configCommand(['config', 'unset', 'language', '--scope', 'scope-a', '--lang', 'en'], { ...ctx, env: { ...env, DECKENT_LANGUAGE: 'tr' } });
   expect(output.join('')).toContain('Effective value: tr (source: env)');
+  // K3: the floored marker list shows unindexed; an index a person reads is the written layer's index they edit; a project never overrides it.
+  await writeFile(join(global, 'config.json'), JSON.stringify({ cli: { agentEnvironment: ['AI_AGENT'] } }));
+  await writeFile(path, JSON.stringify({ cli: { agentEnvironment: ['MY_AGENT'] } })); clearConfigCache(); output.length = 0;
+  await configCommand(['config', 'get', 'cli.agentEnvironment', '--lang', 'en'], ctx);
+  expect(output.join('')).toContain('AI_AGENT, MY_AGENT'); expect(output.join('')).not.toContain('cli.agentEnvironment.1');
+  output.length = 0; await configCommand(['config', 'get', 'cli.agentEnvironment.0', '--lang', 'en'], ctx); expect(output.join('')).toContain('MY_AGENT');
+  output.length = 0; await configCommand(['config', 'set', 'cli.agentEnvironment', '["AI_AGENT"]', '--global', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(output.join('')).not.toMatch(/overridden/u);
+  output.length = 0; await configCommand(['config', 'unset', 'cli.agentEnvironment.0', '--scope', 'scope-a', '--lang', 'en'], ctx);
+  expect(JSON.parse(await readFile(path, 'utf8')).cli.agentEnvironment).toEqual([]);
+  output.length = 0; await configCommand(['config', 'explain', 'cli.agentEnvironment', '--lang', 'en'], ctx); expect(output.join('')).toContain('Source: global');
 });
 
 it('explain uses the requested locale and the nested key’s own catalog description', async () => {

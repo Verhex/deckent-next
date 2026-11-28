@@ -14,7 +14,8 @@ export type CliCardOption = QuestionOption;
 /** A card: title, body lines (untrusted text is redacted and made terminal-safe), answers; `initial` preselects one (none: Enter alone answers nothing). */
 export type CliCardRequest = Readonly<{ title: string; body?: readonly string[]; options: readonly CliCardOption[]; initial?: string; hints?: string }>;
 export type CliCardIo = Readonly<{ locale: Locale; stdin?: Readable & { isTTY?: boolean; setRawMode?: unknown }; stdout?: unknown; env?: NodeJS.ProcessEnv;
-  agentEnvironment?: readonly string[]; signal?: AbortSignal; known?: KnownSecretSnapshot }>;
+  /** K3: required, so no card can drop the host's effective list (undefined: the host read none, so the default). */
+  agentEnvironment: readonly string[] | undefined; signal?: AbortSignal; known?: KnownSecretSnapshot }>;
 
 /**
  * Who may be asked: both streams a real terminal with raw mode and a person at it (never an agent, CI, pipe or dumb terminal), and a card

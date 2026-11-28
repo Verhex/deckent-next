@@ -36,7 +36,7 @@ export async function siwcCliCommand(argv: readonly string[], context: CliBaseCo
   const deadline = AbortSignal.timeout(config.approvals.sessionTtlMs ?? getConfigFieldDefault('approvals').sessionTtlMs);
   const signal = AbortSignal.any([deadline, ...(context.signal ? [context.signal] : [])]), keys = (context.stdin ?? process.stdin) as KeyInput;
   const ask = (request: CliCardRequest) => askCliCard(request, { locale, env, signal, ...(context.stdin ? { stdin: context.stdin } : {}),
-    ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+    ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment });
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scope = await resolveCommandScope({ command: `deckent models ${argv[1]}`, locale, explicit: flags.get('--scope'),
     configured: typeof configured === 'string' ? configured : undefined, mutating: true, interactive: true,

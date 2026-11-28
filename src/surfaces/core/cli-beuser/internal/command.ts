@@ -42,7 +42,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
   const oneCommand = args.action === 'walk' && !args.scope;
   if ((args.action === 'setup' || oneCommand) && cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: argv.slice(0, 2).join(' ') } });
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
-  const card: Card = async request => askCliCard(request, { locale, env: options.env,
+  const card: Card = async request => askCliCard(request, { locale, env: options.env, agentEnvironment: context.agentEnvironment,
     signal: AbortSignal.any([AbortSignal.timeout((await loadConfig(root, { ...options, heal: false })).approvals.sessionTtlMs), ...(context.signal ? [context.signal] : [])]),
     ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}) });
   if (args.action === 'walk' && !args.journey) {

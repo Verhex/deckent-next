@@ -1,4 +1,4 @@
-import { t, type Locale } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, t, type Locale } from '#platform/index.js';
 import type { ConfigApplication, ConfigFieldView } from '#engine/index.js';
 import { renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 import { configValueWord, sourceWord, applyWord } from './render.js';
@@ -37,6 +37,8 @@ const columns = (locale: Locale) => t('clisetup.config.columns', {}, locale).spl
 
 /** Leaf rows of a displayed configuration (already redacted) under `prefix`: `key · value`, arrays and objects flattened to their leaves. */
 function configLeafRows(value: unknown, prefix: string): [string, string][] {
+  // K3: the floored marker list is effective, not one layer's array: no index row a person could take for an editable index.
+  if (prefix === AGENT_ENVIRONMENT_KEY && Array.isArray(value)) return [[prefix, value.length ? value.join(', ') : '[]']];
   if (Array.isArray(value)) return value.length ? value.flatMap((item, index) => configLeafRows(item, `${prefix}.${index}`)) : [[prefix, '[]']];
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);

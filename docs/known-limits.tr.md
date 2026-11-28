@@ -293,7 +293,7 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   ya da kabuk araçları, şablonun kendi v19 ve v20 kurallarını aşan MCP aktörü izinleri ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
   yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
   başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
-  yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
+  yapay zekâ ajanı işaretine değil terminale bakar; ikisine de bakan `init policy --upgrade --apply` komutundan farklıdır. *Geçici çözüm:* ilk kurulumları
   kendiniz çalıştırın; daha geniş verilen bir profili kendi etkileşimli terminalinizde uygulayın.
 - **servis soketi yalıtım alanındaki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** deckent servisi kendi PID, mount ve
   user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü servis soket dizinlerini gizler ve Landlock
@@ -315,9 +315,9 @@ Alpha.57 walk/report host bağlarını, gerçek çalışma kabulü/rezervasyonu,
   kurulum sahibi için kipleri açar ya da kapatır; yapay zekâ araçları, borular ve CI yapamaz. Uygulamadan sonra politika yeni bir `a-…`
   revizyonu alır; bu yüzden `deckent doctor` artık ona `first-run-template-v13` demez ve sonraki `init policy --upgrade` yalnız ekleyen
   yolu izler. Terminal tanığı kontrol eden terminaldir: aynı UID'li bir süreç sahte pty üretebilir (SEC-1 sınırı; bir Enterprise
-  bileşimi daha güçlü tanık verebilir); geçerli işaret listesinden (`cli.agentEnvironment`) bir ad taşıyan yapay zekâ ajanının
+  bileşimi daha güçlü tanık verebilir); ortamı geçerli işaret listesindeki (`cli.agentEnvironment`) bir ada değer (boş, `0` ya da `false` dışında) veren yapay zekâ ajanının
   kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder. İkisi de aynı listeyi okur: kurulumun listesi (kurulum liste
-  vermezse yerleşik liste); proje dosyası bu listeye ad ekleyebilir ama listeden ad çıkaramaz. Kurulum ayarının kendisi yine
+  vermezse yerleşik liste; kurulumun boş listesi de verilmiş sayılır); proje dosyası bu listeye ad ekleyebilir ama listeden ad çıkaramaz. Kurulum ayarının kendisi yine
   kısaltılabilir ve hesabınızdaki bir süreç kendi işaret değişkenini kaldırabilir ya da terminal taklit edebilir (SEC-1 sınırı); bu
   yüzden işaret hiçbir zaman güvenlik sınırı değildir.
   Bir kipi kapatmak kişinin kayıtlı tam otomatik seçimini bağlarda tutar ama geçerli kılmaz: her çağrı izni yeniden denetler.

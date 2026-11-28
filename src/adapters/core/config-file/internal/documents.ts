@@ -1,7 +1,7 @@
 import { ConfigApplicationError, configFieldView, type ConfigLayer, type ConfigSnapshot, type ConfigDocumentPort } from '#engine/index.js';
 import { loadConfig, productResourcePath, resolveProductLayout, resolveGlobalConfigPaths,
   readJsonFile, versionedConfig, withConfigWriteLock, writeJsonAtomic, serializeJsonDocument, type ConfigLoadOptions } from '#platform/index.js';
-import { isRecord, digestText, assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, isRecord, digestText, assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry } from '#platform/index.js';
 /** Filesystem adapter: fixed bootstrap paths, guarded preimages, durable backups and atomic publication. */
 export function createConfigFileDocuments(projectRoot: string, options: ConfigLoadOptions = {}): ConfigDocumentPort {
   const env = options.env ?? process.env;
@@ -28,7 +28,9 @@ export function createConfigFileDocuments(projectRoot: string, options: ConfigLo
       }
       const after = { ...before, document: plan.document, ...(layer === 'project' ? { project: plan.document } : { global: plan.document }) };
       return { keyPath: input.keyPath, layer, beforeDigest: before.digest, afterDigest: digestText(serializeJsonDocument(plan.document)), backupPath,
-        overridden: configFieldView(after, input.keyPath).source === 'env' || layer === 'global' && configFieldView(after, input.keyPath).source === 'project' };
+        // K3: a project only adds to the floored marker list, so it never overrides an installation write of it.
+        overridden: configFieldView(after, input.keyPath).source === 'env' || layer === 'global' && !`${input.keyPath}.`.startsWith(`${AGENT_ENVIRONMENT_KEY}.`)
+          && configFieldView(after, input.keyPath).source === 'project' };
     }, waitingPolicy.writeLockTimeoutMs);
   } };
 }

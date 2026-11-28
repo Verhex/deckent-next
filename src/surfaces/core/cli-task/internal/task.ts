@@ -114,7 +114,7 @@ async function menuIo(context: TaskCommandContext, locale: Locale): Promise<Task
   const ttlMs = (await loadConfig(root, options)).approvals.sessionTtlMs;
   return { locale, root, options, print: text => out.write(`${text}\n`),
     ask: request => askCliCard(request, { locale, env: options.env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
-      ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }),
+      ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment }),
     show: async (view, target) => taskCommand(['task', view, '--scope', target.scopeId, '--run', target.runId, '--task', target.taskId, '--lang', locale], context),
     deliveryPort: terminalDeliveryPort(root, context, options) };
 }

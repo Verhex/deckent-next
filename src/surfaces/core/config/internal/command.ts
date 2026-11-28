@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
-import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
 import { isSensitiveConfigKey, redactSensitive, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
@@ -68,8 +68,11 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     // so the dispatcher's non-healing language/identity probe cannot preempt recovery or inspect project for --global.
     await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
     const display = configDisplayView(config);
+    // K3: an index of the floored marker list is the written layer's own index, the one `set`/`unset` edit.
+    const own = keyPath?.startsWith(`${AGENT_ENVIRONMENT_KEY}.`) && context.configApplication ? { cli: { agentEnvironment: (await context.configApplication(root, { ...options,
+      globalOnly: parsed.global }).inspectValue({ keyPath: AGENT_ENVIRONMENT_KEY, layer: parsed.global ? 'global' : 'project' })).value ?? [] } } : display;
     let value: unknown;
-    try { value = keyPath === undefined ? display : getConfigValue(display, keyPath); }
+    try { value = keyPath === undefined ? display : getConfigValue(own, keyPath); }
     catch (error) {
       // An optional section (inference_serving, operations, ...) the registry declares but this installation leaves out is "not defined", not unknown.
       if (keyPath === undefined || !context.configApplication) throw error;
@@ -136,7 +139,7 @@ async function offerOperationsBaseline(context: ConfigCommandContext, root: stri
   if (!offer) return;
   const ttlMs = (await loadConfig(root, options)).approvals.sessionTtlMs;
   const answer = await askCliCard({ title: offer.title, body: [...offer.lines], options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), role: 'yes' },
-    { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), role: 'no' }] }, { locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
+    { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), role: 'no' }] }, { locale, env: context.env ?? process.env, agentEnvironment: context.agentEnvironment, signal: AbortSignal.timeout(ttlMs) });
   const lines = answer === 'apply' ? await applyOperationsBaseline(root, context.openOwnerBaselineInstallation!, offer, locale) : [offer.later];
   emit(lines.join('\n'), { ...sinks, json: false });
 }

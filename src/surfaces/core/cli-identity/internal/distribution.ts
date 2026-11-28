@@ -28,7 +28,7 @@ async function ask(context: IdentityDistributionContext, locale: Locale, request
   const env = context.env ?? process.env;
   const ttlMs = await loadConfig(context.root ?? process.cwd(), { env, heal: false }).then(config => config.approvals.sessionTtlMs, () => getConfigFieldDefault('approvals').sessionTtlMs);
   return askCliCard(request, { locale, env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
-    ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+    ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment });
 }
 export async function identityDistributionCommand(argv: readonly string[], context: IdentityDistributionContext): Promise<void | ExitCode> {
   const values = new Map<string, string>(); let apply = false, json = false;

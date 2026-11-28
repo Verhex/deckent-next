@@ -45,7 +45,7 @@ async function declareWorkKind(context: SetupCommandContext, root: string, stage
  * caller observes again. The model connection and the project-instruction bridges are onboarding (U3-1a): never a `deckent init` stage.
  */
 export async function runForegroundStage(context: Omit<SetupCommandContext, 'inspectShellRealm'>, root: string, stage: SetupStage, scopeId: string | null, locale: Locale): Promise<SetupApplyResult> {
-  const op = stage.operation!.id, env = context.env ?? process.env, io: CliCardIo = { locale, env, stdin: process.stdin, stdout: process.stdout };
+  const op = stage.operation!.id, env = context.env ?? process.env, io: CliCardIo = { locale, env, stdin: process.stdin, stdout: process.stdout, agentEnvironment: context.agentEnvironment };
   const result = (status: SetupApplyResult['status'], failure?: string): SetupApplyResult => ({ stage: stage.id, operation: op, status, ...(failure ? { code: failure } : {}) });
   const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };
   try {

@@ -293,7 +293,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   installing person; anything wider (edit or shell tools allowed without asking, MCP actor grants beyond the template's own v19 and v20 rules, or grants to everyone) is refused
   with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
   install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
-  supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
+  supplied install unattended; this gate checks the terminal, not the AI-agent marker, unlike `init policy --upgrade --apply`, which checks both.
   *Workaround:* run first installs yourself; apply a wider supplied profile in your own interactive terminal.
 - **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
   peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
@@ -313,9 +313,9 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   opens or closes the modes for the installation owner; AI tools, pipes and CI cannot. After an apply the policy has a new `a-…`
   revision, so `deckent doctor` no longer names it `first-run-template-v13` and a later `init policy --upgrade` takes the add-only path.
   The terminal witness is the controlling terminal: a same-UID process can manufacture a pseudo-terminal (the SEC-1 limit; an
-  Enterprise composition can pass a stronger witness); an AI agent's shell that carries a name of the effective marker list
-  (`cli.agentEnvironment`) is refused by the agent marker and the CLI card gate, not by the witness alone. Both read the same list: the
-  installation's list (the built-in list when the installation sets none), to which a project file can add names but from which it
+  Enterprise composition can pass a stronger witness); an AI agent's shell whose environment gives a name of the effective marker list
+  (`cli.agentEnvironment`) a value (not empty, `0` or `false`) is refused by the agent marker and the CLI card gate, not by the witness alone. Both read the same list: the
+  installation's list (the built-in list when the installation sets none; an empty installation list counts as set), to which a project file can add names but from which it
   cannot remove them. The installation setting itself can still be shortened, and a process of your account can unset its own marker
   variable or imitate a terminal (the SEC-1 limit), so the marker is never a security boundary. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
   the grant.

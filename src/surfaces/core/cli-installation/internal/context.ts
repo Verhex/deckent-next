@@ -14,6 +14,8 @@ export interface InstallationCommandContext {
   addCodingProfile?: (root: string, input: unknown, options: ConfigLoadOptions, dependencies?: { readonly witness?: { attest(): Promise<boolean> } }) => Promise<CodingTemplateResult>;
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
+  /** The host's effective AI-agent marker list (K3): the person check and every card of these commands read the same list. */
+  agentEnvironment?: readonly string[];
   onLocale?: (locale: Locale) => void;
   /** The locale the host resolved once for this call (config language included). */
   locale?: Locale;

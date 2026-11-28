@@ -55,7 +55,7 @@ export async function projectAttachmentCommand(argv: readonly string[], context:
       path: terminalSafeText(root), scope: terminalSafeText(scopeId ?? revoke ?? '') }, locale)],
       options: [{ id: 'yes', label: t('setup.window.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'no' },
     { locale, ...(context.env ? { env: context.env } : {}), ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-      ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
+      agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) });
     if (answer !== 'yes') return;
   }
   const result = await context.projectAttachment(root, parsed.data, options, interaction);

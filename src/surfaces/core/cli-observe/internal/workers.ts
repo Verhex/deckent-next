@@ -92,7 +92,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
   const config = await loadConfig(root, { ...options, heal: false }); let count = 0;
   const mode = cliMode(context, json), configured = (config.terminal as { scopeId?: string } | undefined)?.scopeId;
   const ask = (request: CliCardRequest) => askCliCard(request, { locale, ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-    env: options.env, ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
+    env: options.env, agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) });
   const scope = await resolveCommandScope({ command: 'deckent workers', locale, explicit: values.get('--scope'), configured, mutating: false,
     interactive: mode.mode === 'interactive', listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return;

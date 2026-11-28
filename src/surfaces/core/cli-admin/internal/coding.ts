@@ -149,7 +149,7 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   const config = await loadConfig(root, { env, heal: false }), pins = affectedToolchainProfiles(config);
   const providers = [...new Set(pins.map(pin => pin.provider))];
   const io = { locale, env, ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-    ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) };
+    agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) };
   const person = cliMode(context, flags.has('--json')).mode === 'interactive';
   const ask = async (title: string, options: readonly CliCardOption[]) => options.length === 1 ? options[0]!.id : await askCliCard({ title, options }, io) ?? undefined;
   const sinks = { json: flags.has('--json'), ...sinksOf(context) };

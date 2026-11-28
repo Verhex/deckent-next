@@ -80,7 +80,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     // Display only: the attachment adapter pins and rechecks the directory before changing its mode.
     const mode = await lstat(path).then(info => info.mode & 0o7777, () => null);
     const answer = await askCliCard(directoryPermissionCard(path, mode === null ? null : mode.toString(8).padStart(4, '0'), mode === null ? null : (mode & ~0o022).toString(8).padStart(4, '0'), language),
-      { locale: language, signal, ...(base.agentEnvironment ? { agentEnvironment: base.agentEnvironment } : {}) });
+      { locale: language, signal, agentEnvironment: base.agentEnvironment });
     if (setup && answer !== 'yes') {
       const error = ErrorRegistry.createError('PROJECT_ATTACHMENT_DENIED', { locale: language, params: { reason: 'declined', path: terminalSafeText(path) } });
       emit(error.message); throw error;

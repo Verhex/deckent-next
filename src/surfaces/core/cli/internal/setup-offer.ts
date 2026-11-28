@@ -27,7 +27,7 @@ export async function offerSetup(refusal: unknown, context: CommandContext, loca
     options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },
       ...(target === root ? [] : [{ id: 'here', label: t('setup.offer.here', { path: terminalSafeText(root) }, locale), key: 'h' }]),
       { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'yes' },
-  { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
+  { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment,
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();
   if (answer !== 'yes' && answer !== 'here') throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');

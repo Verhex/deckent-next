@@ -14,6 +14,6 @@ export function cardIo(context: CliBaseContext, locale: Locale, ttlMs: number): 
     const waitMs = expiresAt === undefined ? ttlMs : Math.min(ttlMs, expiresAt - Date.now());
     const timeout = waitMs <= 0 ? AbortSignal.abort() : AbortSignal.timeout(waitMs);
     return askCliCard(request, { locale, env: context.env ?? process.env, signal: AbortSignal.any([timeout, ...(context.signal ? [context.signal] : [])]),
-      ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+      ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), agentEnvironment: context.agentEnvironment });
   } };
 }

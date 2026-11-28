@@ -59,7 +59,7 @@ export async function offerDoctorFixes(input: DoctorFixInput): Promise<void> {
     const answer = await askCliCard({ title: offer.title, body: offer.body, options: [
       { id: 'apply', label: t('doctor.fix.apply', {}, locale), role: 'yes' }, { id: 'skip', label: t('doctor.fix.skip', {}, locale), role: 'no' }] },
     { locale, ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.env ? { env: context.env } : {}),
-      ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}), ...(context.signal ? { signal: context.signal } : {}) });
+      agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) });
     if (answer !== 'apply') { emit(t('doctor.fix.declined', {}, locale), sinks); continue; }
     emit(t('doctor.fix.applying', {}, locale), sinks);
     emit(await offer.apply(), sinks);

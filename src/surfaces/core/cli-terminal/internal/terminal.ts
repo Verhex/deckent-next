@@ -302,7 +302,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     const surface = await import('#surfaces/core/terminal-onboarding/index.js'), openOnboarding = context.openOnboarding;
     const port = lazy(() => openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options));
     // Astra 2834 R1: onboarding cards copy through the record projection, which also masks this config's known secrets.
-    const io = { locale, env, stdin: process.stdin, stdout: process.stdout, known: getConfigKnownSecrets(config), ...(context.signal ? { signal: context.signal } : {}) };
+    const io = { locale, env, stdin: process.stdin, stdout: process.stdout, known: getConfigKnownSecrets(config), agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) };
     const ui = (): import('#surfaces/core/terminal-onboarding/index.js').OnboardingUi => {
       const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
       return { locale, provider: async () => {

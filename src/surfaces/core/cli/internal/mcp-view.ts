@@ -79,7 +79,7 @@ export async function askMcpCard(context: CommandContext, locale: Locale, reques
   const ttlMs = await loadConfig(context.root ?? process.cwd(), { env, heal: false }).then(config => config.approvals.sessionTtlMs, () => getConfigFieldDefault('approvals').sessionTtlMs);
   return askCliCard(request, { locale, env, signal: AbortSignal.any([AbortSignal.timeout(ttlMs), ...(context.signal ? [context.signal] : [])]),
     ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
-    ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+    agentEnvironment: context.agentEnvironment });
 }
 export const mcpConfirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('climodels.card.apply', {}, locale), role: 'yes' },
   { id: 'cancel', label: t('climodels.card.cancel', {}, locale), role: 'no' }];

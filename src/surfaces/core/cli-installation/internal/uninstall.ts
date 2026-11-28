@@ -37,7 +37,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   let plan = await preview(root, query, options);
   if (previewOnly) { emit(plan, { ...sinks, json, render: value => [title, ...uninstallDetailLines(value, locale, seen.has('--verbose')), t('cli.uninstall.previewOnly', {}, locale)].join('\n') }); return 0; }
   const signal = AbortSignal.timeout(getConfigFieldDefault('approvals').sessionTtlMs);
-  const ask = (request: CliCardRequest) => askCliCard(request, { locale, env: options.env, stdout: context.stdout, signal }), cancel = { id: 'cancel', label: t('cli.uninstall.cancel', {}, locale) };
+  const ask = (request: CliCardRequest) => askCliCard(request, { locale, env: options.env, stdout: context.stdout, agentEnvironment: context.agentEnvironment, signal }), cancel = { id: 'cancel', label: t('cli.uninstall.cancel', {}, locale) };
   const cancelled = () => { print([uninstallStatusMessage('cancelled', locale)]); return 1 as ExitCode; };
   // The menu, when the person named no tier: one summary card; a refused tier stays visible with its reason under the card.
   // When every tier is refused for good, there is no choice to offer: the refusal below names its cause and next step.

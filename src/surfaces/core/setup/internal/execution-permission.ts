@@ -32,7 +32,7 @@ export async function offerExecutionPermission(context: SetupCommandContext, roo
       initial: decision.initial, options: [
         { id: 'grant', label: t('setup.aiExecution.grant', {}, locale), role: 'yes' },
         { id: 'not-now', label: t('setup.aiExecution.notNow', {}, locale), role: 'no' }] },
-      { locale, env, stdin, stdout: context.stdout ?? process.stdout, ...(context.signal ? { signal: context.signal } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
+      { locale, env, stdin, stdout: context.stdout ?? process.stdout, ...(context.signal ? { signal: context.signal } : {}), agentEnvironment: context.agentEnvironment });
     if (stdin.readableEnded || stdin.destroyed) return { ...notice('interrupted'), interrupted: true };
     if (context.signal?.aborted) return notice('skipped');
     if (answer !== 'grant') return notice(answer === null ? 'skipped' : 'notAdded');

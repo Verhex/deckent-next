@@ -135,7 +135,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
           hints: t('policy.aiExecution.applyHints', {}, locale), options: [
             { id: 'grant', label: mixed ? t('policy.aiExecution.applyYes', {}, locale) : t('setup.aiExecution.grant', {}, locale), role: 'yes' },
             { id: 'not-now', label: mixed ? t('policy.aiExecution.applyNo', {}, locale) : t('setup.aiExecution.notNow', {}, locale), role: 'no' }] },
-        { ...context, locale, env });
+        { ...context, locale, env, agentEnvironment: context.agentEnvironment });
         if (answer !== 'grant') return { ...preview, status: 'cancelled', rules: [], summary: null, covered: [], conflicts: [] };
       }
       // Bind the write to the ordered additions even when the preview did not need a card.
@@ -149,7 +149,7 @@ async function policyUpgradeCommand(argv: readonly string[], context: ApprovalCo
       const answer = await askCliCard({ title: t('policy.aiExecution.rollbackTitle', {}, locale), body: (preview.summary ?? '').split('\n'),
         initial: 'no', options: [{ id: 'yes', label: t('policy.aiExecution.rollbackYes', {}, locale), role: 'yes' },
           { id: 'no', label: t('policy.aiExecution.rollbackNo', {}, locale), role: 'no' }] },
-      { locale, env, stdin: context.stdin ?? process.stdin, stdout: context.stdout ?? process.stdout, ...(context.signal ? { signal: context.signal } : {}) });
+      { locale, env, stdin: context.stdin ?? process.stdin, stdout: context.stdout ?? process.stdout, agentEnvironment: context.agentEnvironment, ...(context.signal ? { signal: context.signal } : {}) });
       if (answer !== 'yes') return { ...preview, status: 'cancelled', summary: null, rules: [] };
       return context.upgradePolicyTemplate!(root, scopeId, { ...request, mode: 'rollback', expect: preview.revision }, { env });
     }

@@ -1,6 +1,6 @@
 import { configSchemaNode, ProjectedConfigNode, projectConfigSchema, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
-import { CONFIG_FIELDS, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
+import { AGENT_ENVIRONMENT_KEY, CONFIG_FIELDS, agentEnvironmentFloor, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, messageText } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
@@ -124,7 +124,9 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
   const sourcePath = (definition.derivedFrom?.[keyPath] ?? keyPath).split('.');
-  const source = env ? 'env' : atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
+  // K3: the project is the source of the floored marker list only when it adds a name to the floor.
+  const floored = keyPath === AGENT_ENVIRONMENT_KEY && agentEnvironmentFloor(snapshot.global, snapshot.project).length === agentEnvironmentFloor(snapshot.global, {}).length;
+  const source = env ? 'env' : !floored && atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);
