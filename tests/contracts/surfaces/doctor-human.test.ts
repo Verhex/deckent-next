@@ -142,7 +142,7 @@ describe('doctor rows (pure)', () => {
     for (const internal of ['/tmp/dk-', 'core.secret-store', 'terminal.shell.realm', '[deckent]', '(-)', 'ready', 'degraded']) expect(text).not.toContain(internal);
     const en = renderDoctorChecks(doctorChecks(report, facts(), 'en'), 'en');
     expect(en.split('\n')[0]).toMatch(/^Status: needs attention · \d+ warning\(s\) · \d+ not tested$/);
-    expect(renderDoctorChecks(doctorChecks({ ...report, imageRefresh: null }, facts(), 'en'), 'en').split('\n')[0]).toMatch(/^Status: ready · /u);
+    for (const [locale, line] of [['en', /^Status: ready · \d+ warning\(s\) · \d+ not tested$/], ['tr', /^Durum: hazır · \d+ uyarı · \d+ sınanmadı$/]] as const) expect(renderDoctorChecks(doctorChecks({ ...report, imageRefresh: null }, facts(), locale), locale).split('\n')[0]).toMatch(line); // no failure: HEAD's lines
     expect(en).toContain('Installation\n  ok          Node.js v26.10.0 (minimum 24.22.0)');
   });
   it('PRE-34: the Docker row is the setup decision in the setup\'s words; not reachable is an error only when work is configured to run there', () => {

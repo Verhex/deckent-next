@@ -9,10 +9,11 @@ export const dockerLoginClosed = (provider: string) => { try { return nativeDock
 /** Owner 114 option 0: the pins whose kind runs its image, the only ones the refresh builds and re-pins; the report itself keeps every admitted pin. */
 export const imagePins = (config: ToolchainAdmissionSource) => imageToolchainProfiles(config, dockerLoginClosed);
 /** Read-only currency report. Network is used only when `toolchains.currency.mode` is `report`, one bounded request per npm package;
- * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. */
+ * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. `loaded` (owner 114): the update passes the configuration
+ * it already read, so its report and its image pins come from one read. */
 export async function inspectConfiguredToolchainCurrency(projectRoot: string, options: ConfigLoadOptions = {},
-  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion): Promise<ToolchainCurrencyReport> {
-  const config = await loadConfig(projectRoot, options);
+  fetcher: NpmLatestVersionFetcher = fetchNpmLatestVersion, loaded?: Awaited<ReturnType<typeof loadConfig>>): Promise<ToolchainCurrencyReport> {
+  const config = loaded ?? await loadConfig(projectRoot, options);
   const policy = config.toolchains.currency;
   const admitted = admittedToolchains(config);
   const lookups = new Map<string, Promise<LatestLookup>>();

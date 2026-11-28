@@ -37,9 +37,9 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const policy = config.toolchains.update;
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
-  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
+  const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher, config);
   // Owner 114, no consent rule change: HEAD's one report decides (its stale providers are the consent identity); the build and its re-pins keep
-  // only the image pins of those providers, from the same configuration read HEAD's candidates come from, and only where an image pin is behind the
+  // only the image pins of those providers, from the one configuration read the report itself comes from, and only where an image pin is behind the
   // report's published version (a connected pin, never re-pinned, would otherwise keep a fresh image rebuilding).
   const basis = report.providers.filter(entry => entry.status === 'stale' && entry.mechanism === 'npm').map(entry => entry.provider).sort(), image = imagePins(config);
   const latest = (provider: string) => report.providers.find(entry => entry.provider === provider)?.latest?.version;

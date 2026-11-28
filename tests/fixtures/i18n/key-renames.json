@@ -995,7 +995,8 @@
       "terminal.slash.tasks": {"before": "Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)", "after": "Arka plan çalışmaları: işçiler ve çalışmalar tek canlı pencerede (salt okunur)"},
       "cli.help.summary.monitor": {"before": "Kurulumları ve işleri izle", "after": "Kurulumları ve çalışmaları izle"},
       "cli.help.summary.operation": {"before": "Tipli işlemleri yürüt veya incele", "after": "Girdi ve sonuç türleri denetlenen işlemleri yürüt veya incele"},
-      "doctor.check.image.failed": {"before": "Son işçi imajı yenilemesi başarısız; önceki imaj kullanılıyor", "after": "Son işçi imajı yenilemesi başarısız ({reason}); iş türleri sabitledikleri imajı korur"}
+      "doctor.check.image.failed": {"before": "Son işçi imajı yenilemesi başarısız; önceki imaj kullanılıyor", "after": "Son işçi imajı yenilemesi başarısız ({reason}); iş türleri sabitledikleri imajı korur"},
+      "cli.toolchains.update.noChange": {"before": "Her araç güncel; yeni işçi imajı gerekmiyor.", "after": "Yenilenecek işçi imajı yok."}
     }
   }
 }

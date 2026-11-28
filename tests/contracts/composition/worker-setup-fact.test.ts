@@ -49,6 +49,12 @@ it('R8b: a person who had a Docker image consent and rebinds the work kind to a 
   expect(await configuredWorkerKinds(probes as never)).toEqual([{ kind: 'code', reason: null, rebind: false }, { kind: 'missing-code', reason: 'image-missing', rebind: true }, { kind: 'probe', reason: 'image-missing', rebind: true }]);
   expect(await inspectConfiguredWorkerKinds('/unused')).toEqual([{ kind: 'code', reason: null, rebind: false }, { kind: 'missing-code', reason: 'image-missing', rebind: true },
     { kind: 'probe', reason: 'image-missing', rebind: true, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' }]);
+  // An older claude Docker profile (its subscription names the CLI, no version pin) is refused at Run start the same way; the doctor view names it from
+  // that subscription (its image is not probed, as at HEAD), and the planner row stays as it was.
+  const old = { id: 'claude-old', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...limits, argv: ['claude', '--print', 'old-task'], nativeSubscription: { schemaVersion: 1, provider: 'claude' } } };
+  probes.admission.registry.profiles.push(old as never); probes.admission.registry.kinds.push({ kind: 'old', profile: { id: old.id, version: old.version } });
+  expect((await configuredWorkerKinds(probes as never)).at(-1)).toEqual({ kind: 'old', reason: null, rebind: false });
+  expect((await inspectConfiguredWorkerKinds('/unused')).at(-1)).toEqual({ kind: 'old', reason: null, rebind: false, notRunnable: 'NATIVE_DOCKER_SUBSCRIPTION_UNAVAILABLE' });
   // The image refresh's own view (report, plan, receipt check): the connected and the login-closed kinds leave it, the codex Docker kind stays.
   expect(imagePins({ admission: { registry: { profiles: [connected, missing, closed] } } }).map(pin => pin.profile.id)).toEqual([missing.id]);
   state.config = mixed;

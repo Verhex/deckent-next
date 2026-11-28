@@ -7,6 +7,7 @@ import { CodedError, loadConfig, inspectProductDirectory, prepareProductDirector
 import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
+import { imagePins } from './currency.js';
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
   imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>;
@@ -87,7 +88,10 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         const read = await snapshotConfiguredConfig(projectRoot, options, 'project');
         const hold = registryLayerHold(read);
         if (hold) throw new CodedError(hold);
-        const revision = reviseRegistryForProposal((read.document as { admission: { registry: unknown } }).admission.registry, result.proposal);
+        // Owner 114 (ii), at write time: only a profile still as the proposal measured it (an image pin of the same provider with its `from` values) is re-pinned.
+        const document = read.document as { admission: { registry: unknown } }, pins = imagePins(document), proposal = result.proposal;
+        const revision = reviseRegistryForProposal(document.admission.registry, { ...proposal, profiles: proposal.profiles.filter(entry => pins.some(pin => pin.profile.id === entry.profile.id
+          && pin.profile.version === entry.profile.version && pin.provider === entry.provider && pin.cliVersion === entry.changes.cliVersion.from && pin.imageId === entry.changes.imageId.from)) });
         if (!revision) break;
         const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
         if (!scopeId) throw new CodedError('TERMINAL_SCOPE_REQUIRED');

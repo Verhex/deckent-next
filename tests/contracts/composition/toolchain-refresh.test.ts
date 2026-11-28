@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh,
+import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh, updateConfiguredToolchains,
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
@@ -141,6 +142,18 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
       return f.fetcher(request); } };
     expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, racing)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
     expect(raced).toBe(true); expect(f.state.builds).toBe(4);
+    // One configuration read: the report and the image pins come from the same loaded configuration. A stale codex Docker kind added after that
+    // read changes neither view (no-change, the report names only the connected kind); the next read sees it and asks for HEAD's consent.
+    await rm(receiptPath); document.admission.registry.profiles = [bound]; document.admission.registry.kinds = [{ kind: 'connected', profile: { id: bound.id, version: 1 } }]; await write();
+    const docker = nativeProfile('codex-docker', 'codex', 'codex-cli 0.155.1'), added = structuredClone(document);
+    added.admission.registry.profiles.push(docker); added.admission.registry.kinds.push({ kind: 'codex-docker', profile: { id: docker.id, version: docker.version } });
+    let late = false;
+    const after = { ...f.deps, get fetcher() { if (!late) { late = true; writeFileSync(f.path, JSON.stringify(added)); clearConfigCache(); } return f.fetcher; } };
+    const once = await updateConfiguredToolchains(f.root, { apply: true }, f.options, after);
+    expect(late).toBe(true); expect(once.decision).toBe('no-change');
+    expect(once.plan!.report.providers.find(entry => entry.provider === 'codex')!.admitted.map(pin => pin.profile.id)).toEqual([bound.id]);
+    await expect(updateConfiguredToolchains(f.root, { apply: true }, f.options, f.deps)).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONSENT_MISSING' });
+    expect(f.state.builds).toBe(4);
   });
 
   it('a stale install starts the refresh in the background without delaying the caller, then revises only the active profile version', async () => {
@@ -373,6 +386,15 @@ describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
     expect(registry.kinds.map(kind => kind.kind)).toContain('operator-kind'); // the operator's edit survives
     expect(registry.kinds.find(kind => kind.kind === 'codex-pinned')!.profile.version).toBe(2); // and the refresh still applied
     expect((await readToolchainRefreshState(f.root, f.options))).toMatchObject({ phase: 'current', appliedProfiles: 1 });
+    // Owner 114 (ii), at write time: a profile replaced during the codex build under the same id and version (a claude Docker profile, or codex with
+    // other pins) is not the one the proposal measured, so it is left untouched; HEAD would have re-pinned it with the codex receipt's image and CLI.
+    for (const replacement of [nativeProfile('codex-pinned', 'claude', '2.1.278 (Claude Code)'), nativeProfile('codex-pinned', 'codex', 'codex-cli 0.150.0')]) {
+      const g = await fixture();
+      const swap = async () => { const current = JSON.parse(await readFile(g.path, 'utf8'));
+        current.admission.registry.profiles = current.admission.registry.profiles.map((profile: { id: string }) => profile.id === 'codex-pinned' ? replacement : profile); await writeFile(g.path, JSON.stringify(current)); clearConfigCache(); };
+      expect(await refreshConfiguredToolchains(g.root, 'startup', g.options, { ...g.deps, onBuild: swap }, g.observer)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 0 } });
+      expect(g.state.builds).toBe(1); expect((await g.registry()).profiles.filter(profile => profile.id === 'codex-pinned')).toEqual([replacement]);
+    }
   });
   it('P1-2: a registry that keeps changing is never overwritten: typed hold after the bounded retries, nothing of the refresh written, audit kept', async () => {
     const f = await fixture(); let n = 0;
